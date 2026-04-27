@@ -50,7 +50,15 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
   const [isImportantNote, setIsImportantNote] = useState(false);
 
   useEffect(() => {
-    if (!client.id || !machine?.id) return;
+    if (!client.id || !machine?.id) {
+      setLogs([]);
+      setSettingsDetail(null);
+      return;
+    }
+
+    // Clear previous data while loading new machine
+    setLogs([]);
+    setSettingsDetail(null);
 
     // Fetch logs specifically for THIS client AND THIS machine, limited to most recent 6, then ordered asc chronologically
     const qLogs = query(
@@ -64,10 +72,11 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
     const unsubLogs = onSnapshot(qLogs, (snap) => {
       const fetchedLogs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExerciseLog));
       // Filter out empty data (where both reps and staticHoldTime/seconds are 0 or undefined)
+      // Strictly enforce machineId isolation to prevent data bleeding
       const validLogs = fetchedLogs.filter(l => {
         const reps = parseInt(l.reps || '0');
         const hold = parseInt(l.seconds || '0');
-        return reps > 0 || hold > 0;
+        return l.machineId === machine.id && (reps > 0 || hold > 0);
       });
       validLogs.sort((a, b) => {
         const timeA = a.createdAt?.toMillis?.() || 0;
@@ -155,8 +164,8 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
   const totalVolumeStatic = staticHoldLogs.reduce((acc, l) => acc + (parseInt(l.weight || '0') || 0), 0);
   const totalVolume = totalVolumeNormal + totalVolumeStatic;
 
-  // In MSF, trainers enter the duration in seconds into the 'reps' field for static holds
-  const totalStaticHoldTime = staticHoldLogs.reduce((acc, l) => acc + (parseInt(l.reps || '0') || 0), 0);
+  // In MSF, trainers enter the duration in seconds into the 'seconds' field for static holds
+  const totalStaticHoldTime = staticHoldLogs.reduce((acc, l) => acc + (parseInt(l.seconds || '0') || 0), 0);
   
   const sortedNotes = [...(settingsDetail?.machineNotes || [])].sort((a, b) => {
     const timeA = a.timestamp?.toMillis?.() || 0;

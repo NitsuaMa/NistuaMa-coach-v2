@@ -732,14 +732,21 @@ export function ClientProfileView({
                                   {promptIncrease && <span className="text-[8px] text-[#F06C22] shrink-0 font-black ml-0.5 mt-[1px]">▲</span>}
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <span className={`font-extrabold text-[9px] ${isLast ? 'text-[#115E8D]' : 'text-slate-500'}`}>
+                                  <span className={`font-extrabold text-[9px] ${
+                                    isLast ? (
+                                      log.repQuality === 3 ? 'text-emerald-700' :
+                                      log.repQuality === 2 ? 'text-amber-700' :
+                                      log.repQuality === 1 ? 'text-rose-700' :
+                                      'text-[#115E8D]'
+                                    ) : (
+                                      log.repQuality === 3 ? 'text-emerald-700/80' :
+                                      log.repQuality === 2 ? 'text-amber-700/80' :
+                                      log.repQuality === 1 ? 'text-rose-700/80' :
+                                      'text-slate-500'
+                                    )
+                                  }`}>
                                     {log.isStaticHold ? `${log.seconds}s` : log.reps}
                                   </span>
-                                  {/* Quality Dot */}
-                                  {log.repQuality === 3 && <div className="w-[4px] h-[4px] rounded-full bg-emerald-500" />}
-                                  {log.repQuality === 2 && <div className="w-[4px] h-[4px] rounded-full bg-amber-500" />}
-                                  {log.repQuality === 1 && <div className="w-[4px] h-[4px] rounded-full bg-red-500" />}
-                                  {(log.repQuality === 0 || log.repQuality === undefined) && <div className="w-[3px] h-[3px] rounded-full bg-slate-300" />}
                                 </div>
                               </div>
                             ) : (

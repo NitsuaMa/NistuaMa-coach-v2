@@ -288,9 +288,9 @@ export function WorkoutChartGrid({
                               </div>
                               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-950 rounded-xl shadow-md border border-zinc-800">
                                  <span className={`text-xs sm:text-sm font-black tabular-nums ${
-                                    log.repQuality === 3 ? 'text-emerald-400' : 
-                                    log.repQuality === 2 ? 'text-amber-400' : 
-                                    log.repQuality === 1 ? 'text-red-400' : 
+                                    log.repQuality === 3 ? 'text-emerald-700' : 
+                                    log.repQuality === 2 ? 'text-amber-700' : 
+                                    log.repQuality === 1 ? 'text-rose-700' : 
                                     'text-white'
                                  }`}>{log.isStaticHold ? (log.seconds || '--') : (log.reps || '--')}</span>
                                  <span className="text-[8px] font-black uppercase text-zinc-500 italic tracking-tighter">{log.isStaticHold ? 'S' : 'R'}</span>
