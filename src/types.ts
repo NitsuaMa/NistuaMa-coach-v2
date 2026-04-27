@@ -36,11 +36,14 @@ export interface Client {
   isActive: boolean;
   medicalHistory?: string;
   occupation?: string;
+  activity?: string;
+  goals?: string;
   globalNotes?: string;
   isRoutineBActive?: boolean;
   remainingSessions: number;
   legacy_filemaker_id?: string;
   mindbody_name?: string;
+  completedSessions?: number;
   createdAt?: any;
 }
 
@@ -264,4 +267,4 @@ export interface TrainerFocus {
   updatedAt: any;
 }
 
-export type View = 'trainers' | 'clients' | 'machines' | 'workouts' | 'history' | 'calendar' | 'trainer-hub' | 'dashboard' | 'profile' | 'chart' | 'trainer-profile' | 'progress-report';
+export type View = 'trainers' | 'clients' | 'machines' | 'workouts' | 'history' | 'calendar' | 'trainer-hub' | 'dashboard' | 'profile' | 'chart' | 'trainer-profile' | 'progress-report' | 'consultation-wizard';

@@ -508,6 +508,42 @@ export function ClientProfileView({
     </div>
   );
 
+  if (client.completedSessions === 0) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        className="max-w-[1400px] mx-auto space-y-6 pb-8 px-2 sm:px-4"
+      >
+        <div className="bg-gradient-to-br from-[#115E8D] to-slate-900 rounded-[16px] px-6 py-12 shadow-md text-white flex flex-col items-center justify-center text-center mt-6">
+          <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mb-6">
+            <User className="w-12 h-12 text-white/50" />
+          </div>
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter mb-2">New Client Profile</h1>
+          <p className="text-[#38BDF8] uppercase tracking-widest text-sm font-bold mb-8">
+            {client.firstName} {client.lastName}
+          </p>
+          
+          <div className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto w-full">
+            <Button 
+              onClick={() => {}} 
+              variant="outline" 
+              className="flex-1 h-16 rounded-xl font-black uppercase tracking-widest text-[#115E8D] bg-white hover:bg-white/90 border-0"
+            >
+              Import Existing Data
+            </Button>
+            <Button 
+              onClick={() => setView('consultation-wizard')} 
+              className="flex-1 h-16 rounded-xl font-black uppercase tracking-widest bg-[#F06C22] hover:bg-[#d95d18] text-white shadow-[0_10px_40px_rgba(240,108,34,0.4)]"
+            >
+              Start Consult & Demo
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }} 

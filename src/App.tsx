@@ -86,6 +86,9 @@ import { PinLoginView } from './components/PinLoginView';
 import { ProfilesView } from './components/ProfilesView';
 import { TrainerProfileView } from './components/TrainerProfileView';
 import { PreSessionOverview } from './components/PreSessionOverview';
+import { ConsultationSetupWizard } from './components/ConsultationSetupWizard';
+import { ConsultationWizard } from './components/ConsultationWizard';
+import { CreateClientModal } from './components/CreateClientModal';
 import { ClientProgressReportView } from './components/ClientProgressReportView';
 
 import { Button } from '@/components/ui/button';
@@ -134,6 +137,7 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authTrainer, setAuthTrainer] = useState<Trainer | null>(null);
   const [currentView, setCurrentView] = useState<View>('clients');
+  const [newClientOnboardingName, setNewClientOnboardingName] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -824,6 +828,20 @@ export default function App() {
     );
   }
 
+  if (newClientOnboardingName !== null) {
+    return (
+      <CreateClientModal 
+        initialName={newClientOnboardingName}
+        onClientCreated={(clientId) => {
+          setSelectedClientId(clientId);
+          setNewClientOnboardingName(null);
+          setCurrentView('profile');
+        }}
+        onClose={() => setNewClientOnboardingName(null)}
+      />
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="flex flex-col min-h-screen bg-background text-foreground font-sans overflow-x-hidden w-full max-w-full">
@@ -889,6 +907,19 @@ export default function App() {
         {/* Main Content */}
         <main className={`flex-1 overflow-y-auto p-6 pb-24 max-w-full mx-auto w-full ${currentView === 'workouts' ? 'p-2 pb-24' : ''}`}>
           <AnimatePresence mode="wait">
+            {currentView === 'consultation-wizard' && selectedClientId && (
+              <ConsultationWizard 
+                client={clients.find(c => c.id === selectedClientId) as Client}
+                machines={machines}
+                authTrainer={authTrainer}
+                trainers={trainers}
+                onComplete={(id) => {
+                  setSelectedClientId(id);
+                  setCurrentView('workouts');
+                }}
+                onCancel={() => setCurrentView('profile')}
+              />
+            )}
             {currentView === 'trainers' && (
               <ProfilesView 
                 trainers={trainers} 
@@ -916,6 +947,7 @@ export default function App() {
                   setSelectedClientId(id);
                   setCurrentView('workouts');
                 }}
+                onStartNewClientOnboarding={setNewClientOnboardingName}
                 setView={setCurrentView}
                 schedules={schedules}
                 sessions={sessions}
@@ -1037,6 +1069,7 @@ export default function App() {
                 authTrainer={authTrainer}
                 isAdmin={user.email === "jurgensaj@gmail.com"}
                 onSelectClient={setSelectedClientId}
+                onStartNewClientOnboarding={setNewClientOnboardingName}
                 setView={setCurrentView}
                 clients={clients}
               />
@@ -2232,6 +2265,7 @@ function ClientsView({
   isAdding, 
   setIsAdding, 
   onSelectClient, 
+  onStartNewClientOnboarding,
   setView, 
   schedules, 
   sessions,
@@ -2251,6 +2285,7 @@ function ClientsView({
   isAdding: boolean, 
   setIsAdding: (v: boolean) => void, 
   onSelectClient: (id: string) => void, 
+  onStartNewClientOnboarding?: (name: string) => void,
   setView: (v: View) => void, 
   schedules: any[], 
   sessions: WorkoutSession[],
@@ -2403,12 +2438,18 @@ function ClientsView({
             />
           </div>
           <Button 
-            onClick={() => setIsAdding(!isAdding)} 
+            onClick={() => {
+              if (onStartNewClientOnboarding) {
+                onStartNewClientOnboarding("");
+              } else {
+                setIsAdding(!isAdding);
+              }
+            }} 
             size="lg" 
-            className="rounded-xl h-14 px-8 shadow-md bg-primary text-primary-foreground font-bold w-full sm:w-auto"
+            className="rounded-xl h-14 px-8 shadow-md bg-primary text-primary-foreground font-bold w-full sm:w-auto uppercase"
           >
-            {isAdding ? <Plus className="w-5 h-5 rotate-45 mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
-            ADD NEW CLIENT
+            <Plus className="w-5 h-5 mr-2" />
+            Add New Client
           </Button>
         </div>
       </div>
@@ -2787,8 +2828,13 @@ function ClientsView({
                                             onSelectClient(client.id!);
                                             setView('profile');
                                           } else {
-                                            setLinkingSession(session);
-                                            setIsLinking(true);
+                                            const isConsultation = session?.serviceName?.toLowerCase().includes('consult') || session?.serviceName?.toLowerCase().includes('first');
+                                            if (isConsultation && onStartNewClientOnboarding) {
+                                              onStartNewClientOnboarding(session.clientName || '');
+                                            } else {
+                                              setLinkingSession(session);
+                                              setIsLinking(true);
+                                            }
                                           }
                                         }}
                                         className={`p-1 rounded-lg border flex flex-col justify-center cursor-pointer transition-all ${
@@ -2825,8 +2871,14 @@ function ClientsView({
                                           onSelectClient(client.id!);
                                           setView('profile');
                                         } else {
-                                          setLinkingSession(session);
-                                          setIsLinking(true);
+                                          if (isConsultation) {
+                                            if (onStartNewClientOnboarding) {
+                                              onStartNewClientOnboarding(session.clientName || '');
+                                            }
+                                          } else {
+                                            setLinkingSession(session);
+                                            setIsLinking(true);
+                                          }
                                         }
                                       }}
                                       className={`p-1 px-2 rounded-lg border transition-all cursor-pointer flex flex-col justify-center min-h-[32px] ${
@@ -4929,6 +4981,35 @@ function WorkoutTrackerView({
   }
 
   if (clientId && isPreSessionMode && selectedClient && !currentSession) {
+    const completedSessionsCount = sessions.filter(s => s.status === 'Completed').length;
+    
+    if (completedSessionsCount === 0) {
+      return (
+        <ConsultationSetupWizard 
+          clientName={selectedClient.firstName}
+          onComplete={async (setupData) => {
+            // setupData.routine is [{name: 'Leg Press', ...}]
+            const machineNames = setupData.routine.map((r: any) => r.name);
+            const customMachineIds = machineNames.map((name: string) => {
+              const m = machines.find(mac => mac.name === name || mac.fullName === name);
+              return m?.id;
+            }).filter(Boolean) as string[];
+
+            // Optional: update client with gender/age setup
+            if (setupData.gender) {
+              await updateDoc(doc(db, 'clients', selectedClient.id!), { 
+                gender: setupData.gender,
+                updatedAt: serverTimestamp()
+              }).catch(e => console.error(e));
+            }
+
+            startNewSession('A', undefined, customMachineIds, "Consultation Baseline Protocol Generated");
+          }}
+          onCancel={() => setSelectedClientId(null)}
+        />
+      );
+    }
+
     return (
       <PreSessionOverview 
         client={selectedClient}

@@ -32,6 +32,7 @@ export function CalendarView({
   authTrainer,
   isAdmin,
   onSelectClient,
+  onStartNewClientOnboarding,
   setView,
   clients
 }: { 
@@ -40,6 +41,7 @@ export function CalendarView({
   authTrainer: Trainer | null,
   isAdmin: boolean,
   onSelectClient?: (id: string) => void,
+  onStartNewClientOnboarding?: (name: string) => void,
   setView?: (view: any) => void,
   clients?: any[]
 }) {
@@ -139,6 +141,8 @@ export function CalendarView({
       if (client) {
         onSelectClient(client.id!);
         setView('profile');
+      } else if (onStartNewClientOnboarding) {
+        onStartNewClientOnboarding(clientName);
       }
     }
   };
