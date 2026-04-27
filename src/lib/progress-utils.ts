@@ -48,6 +48,7 @@ export async function calculateHighlightedMovements(clientId: string, machineIds
     const isStaticHold = recentData?.isStaticHold;
     const currentReps = isStaticHold ? parseFloat(recentData?.seconds || '0') : parseFloat(recentData?.reps || '0');
     const currentQuality = recentData?.quality || 'N/A';
+    const percentageIncrease = firstWeight > 0 ? Math.round(((currentWeight - firstWeight) / firstWeight) * 100) : 0;
 
     highlightedMovements.push({
       machineId,
@@ -57,7 +58,8 @@ export async function calculateHighlightedMovements(clientId: string, machineIds
       currentReps: currentReps,
       isStaticHold: isStaticHold,
       currentQuality: currentQuality,
-      change: currentWeight - firstWeight
+      change: currentWeight - firstWeight,
+      percentageIncrease
     });
   }
 

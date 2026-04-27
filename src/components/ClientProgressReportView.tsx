@@ -138,8 +138,9 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
 
     strategy: {
       primaryPlan: 'Routine Mastery',
-      focusAreas: ''
+      focusAreas: 'The Next 6 Months: We will transition to Routine B, increasing time-under-tension by 10% to fortify your lumbar spine and ensure your \'Why\' becomes a permanent reality.'
     },
+    trainerNotes: '',
     createdAt: null
   });
 
@@ -199,8 +200,9 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
             label: d.machineName,
             featuredMetric: 'weight' as const,
             startValue: `${d.startingWeight} lbs`,
-            currentValue: `${d.currentWeight} lbs`
-          })).concat(Array(3 - deltas.length).fill({ label: '', startValue: '', currentValue: '', featuredMetric: 'weight' })).slice(0, 3)
+            currentValue: `${d.currentWeight} lbs`,
+            percentageIncrease: d.percentageIncrease
+          })).concat(Array(3 - deltas.length).fill({ label: '', startValue: '', currentValue: '', featuredMetric: 'weight', percentageIncrease: 0 })).slice(0, 3)
         }));
       } catch (err) {
         console.error("Auto data failed:", err);
@@ -277,7 +279,8 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
       label: machine.name,
       featuredMetric: 'weight',
       startValue: d ? `${d.startingWeight} lbs` : '—',
-      currentValue: d ? `${d.currentWeight} lbs` : '—'
+      currentValue: d ? `${d.currentWeight} lbs` : '—',
+      percentageIncrease: d ? d.percentageIncrease : 0
     };
     
     setReport({ ...report, highlights: newHighlights });
@@ -393,23 +396,30 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
       <div className="min-h-screen bg-[#0A2E46] text-[#FAF9F6] selection:bg-[#F06C22]/30 selection:text-white">
         <style>{`
           @media print {
+            @page { size: portrait; margin: 0.5cm; }
             body { background: white !important; color: black !important; }
-            .print-area { padding: 0 !important; max-width: none !important; background: white !important; }
+            .print-area { padding: 0 !important; margin: 0 !important; max-width: none !important; background: white !important; width: 100% !important; }
             .no-print { display: none !important; }
-            .report-card { border: 1px solid #eee !important; box-shadow: none !important; background: white !important; color: black !important; padding: 40px !important; border-radius: 0 !important; }
+            .report-card { border: none !important; box-shadow: none !important; background: white !important; color: black !important; padding: 0 !important; border-radius: 0 !important; space-y: 6 !important; }
             .bg-[#0A2E46] { background: white !important; }
             .text-[#FAF9F6], .text-white { color: #0A2E46 !important; }
             .text-[#68717A] { color: #666 !important; }
-            .bg-white\\/5 { background: #f8f8f8 !important; border: 1px solid #eee !important; }
-            .shadow-2xl, .shadow-xl { box-shadow: none !important; }
+            .bg-white\\/5 { background: #fdfdfd !important; border: 1px solid #eee !important; }
+            .shadow-2xl, .shadow-xl, .shadow-lg { box-shadow: none !important; }
             .border-white\\/10 { border-color: #eee !important; }
             .text-[#F06C22] { color: #D95B16 !important; font-weight: 900 !important; }
+            .bg-[#F06C22] { background: #D95B16 !important; color: white !important; }
+            .rounded-[40px], .rounded-[50px], .rounded-[60px] { border-radius: 1.5rem !important; }
+            h1 { font-size: 2.5rem !important; }
+            h2 { font-size: 1.5rem !important; }
+            h3 { font-size: 1.25rem !important; }
+            p { font-size: 0.875rem !important; }
           }
         `}</style>
 
-        <div className="max-w-4xl mx-auto px-6 py-12 space-y-12 print-area">
+        <div className="max-w-4xl mx-auto px-6 py-6 space-y-6 print-area">
           {/* Controls */}
-          <div className="flex justify-between items-center no-print mb-8">
+          <div className="flex justify-between items-center no-print mb-4">
             <Button variant="ghost" onClick={onBack} className="text-white hover:bg-white/10 rounded-2xl gap-2 font-black uppercase italic tracking-widest px-6">
               <ArrowLeft className="w-5 h-5" /> Back
             </Button>
@@ -426,48 +436,48 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="report-card space-y-12"
+            className="report-card space-y-6"
           >
             {/* 1. HERO HEADER: ATTENDANCE & DEDICATION */}
             <motion.header 
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
-              className="space-y-8"
+              className="space-y-4"
             >
-              <div className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-[#F06C22] pb-8 gap-6">
+              <div className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-[#F06C22] pb-4 gap-4">
                 <div>
-                  <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-none mb-4">
+                  <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter leading-none mb-2 print:text-[#0A2E46]">
                     Performance <br />
                     <span className="text-[#F06C22]">Report Card</span>
                   </h1>
-                  <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-[0.3em] text-[#68717A]">
+                  <div className="flex items-center gap-4 text-[9px] font-black uppercase tracking-[0.3em] text-[#68717A]">
                     <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-[#F06C22]" /> 
+                      <User className="w-3.5 h-3.5 text-[#F06C22]" /> 
                       {client.firstName} {client.lastName}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-[#F06C22]" />
-                      {new Date(report.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      <Calendar className="w-3.5 h-3.5 text-[#F06C22]" />
+                      {new Date(report.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col items-end">
-                  <p className="text-[9px] font-black uppercase tracking-[0.4em] text-[#68717A] mb-2">Authenticated By</p>
-                  <p className="text-lg font-black uppercase italic tracking-tight">{trainer.fullName}</p>
-                  <p className="text-[10px] font-bold text-[#F06C22] uppercase tracking-widest mt-1">Lead Practitioner • MSF Studio</p>
+                <div className="flex flex-col items-end md:text-right">
+                  <p className="text-[8px] font-black uppercase tracking-[0.4em] text-[#68717A] mb-1">Authenticated By</p>
+                  <p className="text-base font-black uppercase italic tracking-tight print:text-[#0A2E46]">{trainer.fullName}</p>
+                  <p className="text-[9px] font-bold text-[#F06C22] uppercase tracking-widest">Lead Practitioner • MSF Studio</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-1 bg-[#F06C22] p-8 rounded-[40px] text-white flex flex-col justify-center items-center text-center shadow-2xl shadow-[#F06C22]/20">
-                  <Award className="w-12 h-12 mb-4 opacity-50" />
-                  <p className="text-5xl font-black italic tracking-tighter mb-1">{report.attendance.totalSessions}</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Sessions Completed</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-1 bg-[#F06C22] p-6 rounded-[30px] text-white flex flex-col justify-center items-center text-center shadow-xl shadow-[#F06C22]/20 print:border print:border-[#F06C22]/20">
+                  <Award className="w-10 h-10 mb-2 opacity-50" />
+                  <p className="text-4xl font-black italic tracking-tighter mb-0.5">{report.attendance.totalSessions}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest opacity-80">Sessions Completed Since Joining</p>
                 </div>
-                <div className="md:col-span-2 bg-white/5 backdrop-blur-md p-8 rounded-[40px] border border-white/10 flex flex-col justify-center">
-                  <Quote className="w-8 h-8 text-[#F06C22] mb-4 opacity-30" />
-                  <p className="text-xl md:text-2xl font-black italic uppercase italic tracking-tight leading-snug">
+                <div className="md:col-span-2 bg-white/5 backdrop-blur-md p-6 rounded-[30px] border border-white/10 flex flex-col justify-center print:bg-slate-50">
+                  <Quote className="w-6 h-6 text-[#F06C22] mb-2 opacity-30" />
+                  <p className="text-lg font-black italic uppercase tracking-tight leading-snug print:text-[#0A2E46]">
                     "{report.attendance.narrative || `Incredible work, ${client.firstName}. Your dedication to this clinical protocol is exactly what drives meaningful biological change.`}"
                   </p>
                 </div>
@@ -480,119 +490,82 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.3 }}
-              className="space-y-6"
+              className="space-y-4"
             >
-              <div className="flex items-center gap-4">
-                <h3 className="text-2xl font-black uppercase italic tracking-tighter shrink-0">Highlighted Movements</h3>
-                <div className="h-px bg-white/10 flex-1"></div>
+              <div className="flex items-center gap-3">
+                <h3 className="text-xl font-black uppercase italic tracking-tighter shrink-0 print:text-[#0A2E46]">Highlighted Movements</h3>
+                <div className="h-px bg-white/10 flex-1 print:bg-slate-200"></div>
               </div>
-              <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex flex-col md:flex-row gap-4">
                 {report.highlights.map((h, i) => (
-                  <div key={i} className="flex-1 bg-white p-8 rounded-[40px] shadow-2xl flex flex-col items-center justify-between min-h-[220px] group hover:scale-[1.02] transition-all">
-                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#0A2E46] opacity-60 group-hover:opacity-100 mb-2">{h.label || 'Movement'}</p>
+                  <div key={i} className="flex-1 bg-white p-6 rounded-[30px] shadow-xl flex flex-col items-center justify-between min-h-[180px] group border border-slate-50 print:border-slate-200">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#0A2E46] opacity-60 mb-2">{h.label || 'Movement'}</p>
                     <div className="flex flex-col items-center">
-                      <p className="text-5xl font-black text-[#F06C22] italic tracking-tighter">{h.currentValue?.replace(' lbs', '') || '—'}</p>
-                      <p className="text-[10px] font-black text-[#0A2E46]/40 uppercase tracking-widest mt-1">Pounds Displaced</p>
+                      <p className="text-4xl font-black text-[#F06C22] italic tracking-tighter">+{h.percentageIncrease || 0}% Strength Increase</p>
+                      <p className="text-[9px] font-black text-[#68717A] uppercase tracking-widest mt-1">Previous: {h.startValue} | Current: {h.currentValue}</p>
                     </div>
-                    <div className="mt-4 px-4 py-1.5 bg-[#0A2E46]/5 rounded-full">
-                      <p className="text-[9px] font-black text-[#0A2E46] uppercase tracking-widest">Personal Performance High</p>
+                    <div className="mt-3 px-3 py-1 bg-[#0A2E46]/5 rounded-full">
+                      <p className="text-[8px] font-black text-[#0A2E46] uppercase tracking-[0.1em]">Superior Growth Velocity</p>
                     </div>
                   </div>
                 ))}
               </div>
             </motion.section>
 
-            {/* 3. THE CLINICAL MATRIX: THE 4 P'S */}
+            {/* 3. THE ROADMAP: THE GOAL & THE PLAN */}
             <motion.section 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.4 }}
-              className="space-y-8"
-            >
-              <div className="flex items-center gap-4">
-                <h3 className="text-2xl font-black uppercase italic tracking-tighter shrink-0">The 4 P's: Technical Proficiency</h3>
-                <div className="h-px bg-white/10 flex-1"></div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-                <PIndicator 
-                  score={report.performanceMatrix.posture.score}
-                  label="Posture"
-                  description="Maintaining ribcage stability and foundational setup throughout the loading phase."
-                  icon={Binary}
-                />
-                <PIndicator 
-                  score={report.performanceMatrix.pace.score}
-                  label="Pace"
-                  description="Controlling the negative and maintaining a constant velocity under accumulated fatigue."
-                  icon={Flame}
-                />
-                <PIndicator 
-                  score={report.performanceMatrix.path.score}
-                  label="Path"
-                  description="Optimizing the line of pull and range of motion to maximize target fiber tension."
-                  icon={MapIcon}
-                />
-                <PIndicator 
-                  score={report.performanceMatrix.purpose.score}
-                  label="Purpose"
-                  description="Intentional execution and motor unit recruitment as you approach the clinical stimulus."
-                  icon={Crosshair}
-                />
-              </div>
-            </motion.section>
-
-            {/* 4. THE ROADMAP: THE GOAL & THE PLAN */}
-            <motion.section 
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.98 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ delay: 0.5 }}
-              className="bg-[#FAF9F6] p-10 rounded-[50px] shadow-2xl relative overflow-hidden group"
+              className="bg-[#FAF9F6] p-8 rounded-[40px] shadow-xl relative overflow-hidden group print:border print:border-slate-200"
             >
-              <div className="absolute top-0 right-0 p-8 opacity-5">
-                <Target className="w-48 h-48 text-[#0A2E46]" />
-              </div>
-              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-12">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Target className="w-4 h-4 text-[#F06C22]" />
-                    </div>
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#0A2E46]">The Milestone</h4>
+              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Quote className="w-4 h-4 text-[#F06C22]" />
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0A2E46]">Your Original Why</h4>
                   </div>
-                  <p className="text-2xl md:text-3xl font-black italic tracking-tighter text-[#0A2E46] leading-tight">
-                    {report.milestones.smartGoal || "Achieve total mastery and load progression across current split."}
+                  <p className="text-xl font-black italic tracking-tighter text-[#0A2E46] leading-tight">
+                    "{report.milestones.originalWhy || "To build enough functional strength to easily keep up with my grandkids without back pain."}"
                   </p>
-                  <div className="h-1 w-12 bg-[#F06C22]"></div>
+                  <div className="h-0.5 w-10 bg-[#F06C22]"></div>
                 </div>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-[#0A2E46]/10 flex items-center justify-center">
-                      <Zap className="w-4 h-4 text-[#0A2E46]" />
-                    </div>
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#0A2E46]">The Strategy</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-[#0A2E46]" />
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0A2E46]">The 6-Month Plan</h4>
                   </div>
-                  <p className="text-sm font-bold text-[#68717A] leading-relaxed uppercase tracking-tight">
-                    {report.strategy.focusAreas || `${trainer.fullName} will implement a clinical load-progression strategy focused on ${report.strategy.primaryPlan}. Expect high-density stimulus in upcoming blocks.`}
+                  <p className="text-xs font-bold text-[#68717A] leading-relaxed uppercase tracking-tight">
+                    {report.strategy.focusAreas || `${trainer.fullName} will implement a clinical load-progression strategy focused on ${report.strategy.primaryPlan}. We will transition to Routine B, increasing time-under-tension by 10% to ensure your 'Why' becomes a reality.`}
                   </p>
-                </div>
-              </div>
-              <div className="mt-12 pt-8 border-t border-[#0A2E46]/10 flex justify-between items-center">
-                <div className="flex items-center gap-6">
-                  <div className="text-[8px] font-black uppercase tracking-[0.3em] text-[#68717A]">
-                    Authorized MSF Document
-                  </div>
-                  <div className="text-[8px] font-black uppercase tracking-[0.3em] text-[#68717A]">
-                    Unit ID: {report.id?.slice(-8).toUpperCase() || 'NEW'}
-                  </div>
-                </div>
-                <div className="text-[10px] font-black italic text-[#F06C22] uppercase tracking-[0.2em]">
-                  Max Strength Fitness
                 </div>
               </div>
             </motion.section>
+
+            {/* 4. TRAINER NOTES */}
+            <motion.section 
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-white/5 backdrop-blur-sm p-6 rounded-[30px] border border-white/10 print:bg-slate-50 print:border-slate-200"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-[#F06C22]" />
+                <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[#FAF9F6] print:text-[#0A2E46]">Closing Practitioner Notes</h4>
+              </div>
+              <p className="text-sm font-medium italic text-[#FAF9F6] opacity-90 leading-relaxed print:text-[#0A2E46]">
+                {report.trainerNotes || "Incredible work this quarter. Your focus on pacing has completely transformed your lower body strength. Keep showing up."}
+              </p>
+            </motion.section>
+
+            <footer className="pt-2 flex justify-between items-center text-[8px] font-black uppercase tracking-[0.3em] text-[#68717A]">
+              <div className="flex items-center gap-4">
+                <span>Authorized MSF Clinical Document</span>
+                <span>Unit ID: {report.id?.slice(-8).toUpperCase() || 'NEW'}</span>
+              </div>
+              <div className="text-[#F06C22]">Max Strength Fitness Studio</div>
+            </footer>
           </motion.div>
         </div>
       </div>
@@ -784,23 +757,41 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">The Primary Milestone</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Your Original Why</Label>
                 <Textarea 
-                  value={report.milestones.smartGoal}
-                  onChange={(e) => setReport({ ...report, milestones: { ...report.milestones, smartGoal: e.target.value }})}
-                  className="min-h-[100px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
-                  placeholder="What is the next tangible target?"
+                  value={report.milestones.originalWhy}
+                  onChange={(e) => setReport({ ...report, milestones: { ...report.milestones, originalWhy: e.target.value }})}
+                  className="min-h-[80px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
+                  placeholder="Emotional anchor..."
                 />
               </div>
               <div className="space-y-4">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">MSF Operational Plan</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">The 6-Month Plan</Label>
                 <Textarea 
                   value={report.strategy.focusAreas}
                   onChange={(e) => setReport({ ...report, strategy: { ...report.strategy, focusAreas: e.target.value }})}
-                  className="min-h-[100px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
-                  placeholder="How will we anchor the results?"
+                  className="min-h-[80px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
+                  placeholder="How will we anchor the results over the next half year?"
                 />
               </div>
+            </div>
+          </section>
+
+          {/* Section 5: Trainer Notes */}
+          <section className="bg-white rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-[#0A2E46]" />
+            <div className="flex items-center gap-3 mb-8">
+              <FileText className="w-6 h-6 text-[#0A2E46]" />
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0A2E46]">Closing Trainer Notes</h2>
+            </div>
+            <div className="space-y-4">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Lead Practitioner Wrap-Up</Label>
+              <Textarea 
+                value={report.trainerNotes}
+                onChange={(e) => setReport({ ...report, trainerNotes: e.target.value })}
+                className="min-h-[120px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
+                placeholder="Incredible work this quarter... Keep showing up."
+              />
             </div>
           </section>
         </div>

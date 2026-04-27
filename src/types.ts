@@ -210,6 +210,7 @@ export interface ProgressReport {
     startValue: string; // e.g., "120 lbs"
     currentValue: string; // e.g., "185 lbs"
     featuredMetric: 'weight' | 'percentile' | 'subjective';
+    percentageIncrease?: number;
     agePercentile?: number; // 0-100
     subjectiveImprovement?: {
       p: 'Posture' | 'Pace' | 'Path' | 'Purpose';
@@ -252,6 +253,7 @@ export interface ProgressReport {
     primaryPlan: string; // "Routine Mastery"
     focusAreas: string; // "Immediate machine focus..."
   };
+  trainerNotes?: string;
 
   createdAt: any;
 }
