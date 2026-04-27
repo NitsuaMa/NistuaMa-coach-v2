@@ -55,12 +55,14 @@ import { ROUTINE_TEMPLATES, RoutineTemplateType } from '../constants';
 import { Client, Machine, WorkoutSession, ExerciseLog, Routine, View, ClientMachineSetting, TrainerFocus, Trainer, ScheduleEntry, ProgressReport } from '../types';
 import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
 import { WorkoutChartGrid } from './WorkoutChartGrid';
+import { ClientHistoryCalendar } from './ClientHistoryCalendar';
 
 export function ClientProfileView({ 
   clientId, 
   clients, 
   machines, 
   authTrainer,
+  trainers,
   onDelete,
   onSelectReport,
   setView 
@@ -69,6 +71,7 @@ export function ClientProfileView({
   clients: Client[], 
   machines: Machine[], 
   authTrainer?: Trainer | null,
+  trainers: Trainer[],
   onDelete: (id: string) => void,
   onSelectReport: (id: string) => void,
   setView: (v: View) => void 
@@ -99,104 +102,8 @@ export function ClientProfileView({
   const [stagedMachineIds, setStagedMachineIds] = useState<Record<string, string[]>>({});
   const [isSavingRoutine, setIsSavingRoutine] = useState<Record<string, boolean>>({});
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editingSession, setEditingSession] = useState<WorkoutSession | null>(null);
-  const [isAddingHistorical, setIsAddingHistorical] = useState(false);
-  const [historicalSessionDate, setHistoricalSessionDate] = useState(new Date().toISOString().split('T')[0]);
-  const [historicalRoutineName, setHistoricalRoutineName] = useState('A');
-  const [isSavingHistory, setIsSavingHistory] = useState(false);
-  const [editingLogs, setEditingLogs] = useState<ExerciseLog[]>([]);
   const [selectedInsightMachine, setSelectedInsightMachine] = useState<Machine | null>(null);
   const SESSIONS_PER_PAGE = 3;
-
-  useEffect(() => {
-    if (editingSession) {
-      const logs = allLogs.filter(l => l.sessionId === editingSession.id);
-      // Ensure we have machine names or something for display
-      setEditingLogs(logs);
-    }
-  }, [editingSession, allLogs]);
-
-  const handleUpdateLog = async (logId: string, data: Partial<ExerciseLog>) => {
-    try {
-      await updateDoc(doc(db, 'exerciseLogs', logId), data);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `exerciseLogs/${logId}`);
-    }
-  };
-
-  const handleAddLogToSession = async (machineId: string) => {
-    if (!editingSession || !clientId) return;
-    try {
-      await addDoc(collection(db, 'exerciseLogs'), {
-        sessionId: editingSession.id,
-        clientId,
-        machineId,
-        weight: '0',
-        reps: 0,
-        createdAt: serverTimestamp()
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'exerciseLogs');
-    }
-  };
-
-  const handleCreateHistoricalSession = async () => {
-    if (!clientId) return;
-    setIsSavingHistory(true);
-    try {
-      // Create a date object that matches the historical date at noon to avoid timezone shifts
-      const dateObj = new Date(historicalSessionDate + 'T12:00:00');
-      const ts = Timestamp.fromDate(dateObj);
-      
-      const sessionRef = await addDoc(collection(db, 'sessions'), {
-        clientId,
-        trainerId: auth.currentUser?.uid || 'manual-entry',
-        trainerInitials: '---',
-        sessionType: 'Standard',
-        sessionNumber: sessions.length + 1,
-        date: historicalSessionDate,
-        routineName: historicalRoutineName,
-        status: 'Completed',
-        createdAt: ts,
-        startTime: ts,
-        endTime: ts,
-      });
-
-      // Automatically add machines from selected routine if it exists
-      const routine = routines.find(r => r.name === historicalRoutineName);
-      if (routine && routine.machineIds.length > 0) {
-        const logPromises = routine.machineIds.map(mId => 
-          addDoc(collection(db, 'exerciseLogs'), {
-            sessionId: sessionRef.id,
-            clientId,
-            machineId: mId,
-            weight: '0',
-            reps: '0',
-            createdAt: ts
-          })
-        );
-        await Promise.all(logPromises);
-      }
-
-      setEditingSession({ 
-        id: sessionRef.id, 
-        clientId, 
-        trainerId: auth.currentUser?.uid || 'manual-entry', 
-        date: historicalSessionDate, 
-        routineName: historicalRoutineName, 
-        status: 'Completed',
-        startTime: ts,
-        endTime: ts,
-        createdAt: ts
-      } as unknown as WorkoutSession);
-      
-      setIsAddingHistorical(false);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'sessions');
-    } finally {
-      setIsSavingHistory(false);
-    }
-  };
 
   const client = clients.find(c => c.id === clientId);
 
@@ -1029,59 +936,14 @@ export function ClientProfileView({
           </div>
         </TabsContent>
 
-        <TabsContent value="history">
-          <Card className="rounded-[40px] border-2 shadow-xl overflow-hidden min-h-[400px]">
-            <CardHeader className="p-8 border-b">
-               <div className="flex justify-between items-center">
-                 <div>
-                   <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Session Archive</CardTitle>
-                   <CardDescription className="text-[10px] font-bold uppercase tracking-widest">Lifetime Workout Logs</CardDescription>
-                 </div>
-                 <Button 
-                   onClick={() => setIsAddingHistorical(true)} 
-                   variant="outline" 
-                   size="sm" 
-                   className="rounded-xl font-black uppercase text-[10px] tracking-widest border-2"
-                 >
-                   <Plus className="w-4 h-4 mr-2" /> Add Manual History
-                 </Button>
-               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-               <div className="divide-y">
-                 {sessions.length > 0 ? sessions.map(session => (
-                   <div key={session.id} className="p-6 hover:bg-muted/30 transition-colors group flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-muted/50 flex flex-col items-center justify-center border group-hover:bg-primary/5 group-hover:border-primary/20 transition-all">
-                           <span className="text-[10px] font-black uppercase text-muted-foreground leading-none">{session.date.split('-')[1]}/{session.date.split('-')[2]}</span>
-                           <span className="text-[8px] font-bold opacity-30 mt-1">{session.date.split('-')[0]}</span>
-                        </div>
-                        <div>
-                          <p className={`text-sm font-black italic uppercase tracking-tight ${session.routineName?.includes('B') ? 'text-amber-600' : 'text-primary'}`}>{session.routineName || 'Free Session'}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="secondary" className="px-1.5 py-0 h-4 text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border-none">Completed</Badge>
-                            <span className="text-[9px] text-muted-foreground font-bold uppercase">{allLogs.filter(l => l.sessionId === session.id).length} Sets Logged</span>
-                          </div>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setEditingSession(session)}
-                        className="rounded-xl font-black uppercase italic text-[10px] tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        Edit Details
-                      </Button>
-                   </div>
-                 )) : (
-                   <div className="p-20 text-center space-y-4">
-                     <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto opacity-20" />
-                     <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs">No entries found in archive</p>
-                   </div>
-                 )}
-               </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="history" className="h-[750px]">
+          {clientId && (
+            <ClientHistoryCalendar 
+              clientId={clientId} 
+              machines={machines} 
+              trainers={trainers} 
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="reports">
@@ -1502,155 +1364,6 @@ export function ClientProfileView({
         </DialogContent>
       </Dialog>
 
-      {/* Manual session creation */}
-      <Dialog open={isAddingHistorical} onOpenChange={setIsAddingHistorical}>
-        <DialogContent className="rounded-[40px] p-8 border-none shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">New Historical Entry</DialogTitle>
-            <DialogDescription className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">Select a date and protocol to backfill history.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 pt-6">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Session Date</Label>
-              <Input 
-                type="date" 
-                value={historicalSessionDate} 
-                onChange={(e) => setHistoricalSessionDate(e.target.value)} 
-                className="h-14 rounded-2xl font-black bg-muted/20 border-none px-6"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Protocol</Label>
-              <div className="flex gap-2">
-                {['A', 'B', 'Other'].map(r => (
-                  <Button
-                    key={r}
-                    variant={historicalRoutineName === r ? 'default' : 'outline'}
-                    onClick={() => setHistoricalRoutineName(r)}
-                    className="flex-1 rounded-xl font-black uppercase italic h-12"
-                  >
-                    Routine {r}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <Button 
-              disabled={isSavingHistory}
-              onClick={handleCreateHistoricalSession}
-              className="w-full h-16 rounded-3xl bg-primary hover:bg-primary/90 font-black uppercase italic text-xs tracking-widest shadow-xl shadow-primary/20"
-            >
-              {isSavingHistory ? 'Creating...' : 'Create & Add Logs'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Session Logger / Editor */}
-      <Dialog open={!!editingSession} onOpenChange={(open) => !open && setEditingSession(null)}>
-        <DialogContent className="rounded-[40px] p-0 border-none shadow-2xl max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
-          <div className="p-8 border-b bg-muted/20 shrink-0">
-             <div className="flex justify-between items-center">
-               <div>
-                 <h2 className="text-2xl font-black uppercase italic tracking-tighter">Edit Session Logs</h2>
-                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">{editingSession?.date} • {editingSession?.routineName}</p>
-               </div>
-               <Badge className="bg-emerald-500/10 text-emerald-500 font-black uppercase tracking-widest border-none">Historical Entry</Badge>
-             </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-8 space-y-6">
-             {editingLogs.length > 0 ? (
-               <div className="space-y-4">
-                 {editingLogs.map((log) => {
-                   const machine = machines.find(m => m.id === log.machineId);
-                   return (
-                     <div key={log.id} className="flex items-center gap-4 p-4 rounded-3xl bg-muted/10 border border-border/50 group">
-                        <div className="shrink-0 w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center">
-                           <Dumbbell className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-black uppercase tracking-tight truncate">{machine?.name || 'Unknown Unit'}</p>
-                          <p className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">ID: {log.id?.slice(-4)}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <div className="space-y-1">
-                              <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground block text-center">Weight</span>
-                              <Input 
-                                value={log.weight} 
-                                type="number" 
-                                pattern="\d*"
-								inputMode="numeric"
-                                onChange={(e) => handleUpdateLog(log.id!, { weight: e.target.value })}
-                                className="w-20 h-10 rounded-xl text-center font-black bg-white border-2 border-primary/10 focus:border-primary transition-all" 
-                              />
-                           </div>
-                           <div className="space-y-1">
-                              <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground block text-center">{log.isStaticHold ? 'Seconds' : 'Reps'}</span>
-                              <Input 
-                                value={log.isStaticHold ? (log.seconds || '0') : (log.reps || '0')} 
-                                type="number" 
-                                inputMode="numeric"
-                                onChange={(e) => {
-                                  if (log.isStaticHold) {
-                                    handleUpdateLog(log.id!, { seconds: e.target.value });
-                                  } else {
-                                    handleUpdateLog(log.id!, { reps: e.target.value });
-                                  }
-                                }}
-                                className="w-20 h-10 rounded-xl text-center font-black bg-white border-2 border-primary/10 focus:border-primary transition-all" 
-                              />
-                           </div>
-                           <div className="space-y-1">
-                              <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground block text-center">Quality</span>
-                              <div className="flex gap-1">
-                                {[1, 2, 3].map((v) => (
-                                  <button
-                                    key={v}
-                                    onClick={() => handleUpdateLog(log.id!, { repQuality: v })}
-                                    className={`w-6 h-6 rounded-full transition-all ${
-                                      log.repQuality === v 
-                                        ? (v === 1 ? 'bg-red-500 ring-2 ring-red-200' : v === 2 ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-emerald-500 ring-2 ring-emerald-200') 
-                                        : 'bg-muted hover:bg-muted-foreground/20'
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-                   );
-                 })}
-               </div>
-             ) : (
-               <div className="text-center py-10 opacity-30">
-                 <History className="w-12 h-12 mx-auto mb-2" />
-                 <p className="text-xs font-black uppercase tracking-widest">No logs recorded yet.</p>
-               </div>
-             )}
-
-             <div className="pt-4 space-y-4">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Add Unit to this session</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                   {machines.filter(m => !editingLogs.find(l => l.machineId === m.id)).map(m => (
-                     <Button 
-                       key={m.id} 
-                       variant="outline" 
-                       size="sm" 
-                       onClick={() => handleAddLogToSession(m.id!)}
-                       className="rounded-xl h-12 text-[9px] font-black uppercase px-3 shadow-none border-dashed hover:border-primary hover:text-primary transition-all"
-                     >
-                       <Plus className="w-3 h-3 mr-1" /> {m.name}
-                     </Button>
-                   ))}
-                </div>
-             </div>
-          </div>
-          <div className="p-8 border-t shrink-0">
-             <Button onClick={() => setEditingSession(null)} className="w-full h-14 rounded-2xl font-black uppercase italic tracking-widest shadow-xl shadow-primary/20">
-               Done Editing
-             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
       <MachineInsightsModal 
         client={client} 
         machine={selectedInsightMachine} 

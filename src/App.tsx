@@ -1012,6 +1012,7 @@ export default function App() {
                 clients={clients}
                 machines={machines}
                 authTrainer={authTrainer}
+                trainers={trainers}
                 onDelete={handleDeleteClient}
                 onSelectReport={(reportId) => {
                   setSelectedReportId(reportId);
@@ -3173,6 +3174,7 @@ function ClientHistoryView({
   const [trainerFilter, setTrainerFilter] = useState<string | null>(null);
 
   const [historyLimit, setHistoryLimit] = useState(12);
+  const [allSessions, setAllSessions] = useState<WorkoutSession[]>([]);
 
   useEffect(() => {
     if (!clientId) return;
@@ -3194,31 +3196,7 @@ function ClientHistoryView({
 
     const unsubscribeSessions = onSnapshot(sessionsQuery, (snapshot) => {
       const sessionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkoutSession));
-      
-      // Calculate trainer stats
-      const stats: Record<string, number> = {};
-      sessionsData.forEach(s => {
-        stats[s.trainerInitials] = (stats[s.trainerInitials] || 0) + 1;
-      });
-      setTrainerStats(stats);
-      
-      // Show more sessions for the grid view (12 by default if possible)
-      let displayData = sessionsData;
-      if (selectedSessionId) {
-        const targetIndex = sessionsData.findIndex(s => s.id === selectedSessionId);
-        if (targetIndex !== -1) {
-          let start = Math.max(0, targetIndex - 5);
-          let end = Math.min(sessionsData.length, start + 12);
-          if (end - start < 12) start = Math.max(0, end - 12);
-          displayData = sessionsData.slice(start, end);
-        } else {
-          displayData = sessionsData.slice(0, 12);
-        }
-      } else {
-        displayData = sessionsData.slice(0, 12);
-      }
-      
-      setSessions(displayData.reverse());
+      setAllSessions(sessionsData);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'sessions');
     });
@@ -3247,12 +3225,44 @@ function ClientHistoryView({
       unsubscribeNotes();
       unsubscribeRoutines();
     };
-  }, [clientId, selectedSessionId]);
+  }, [clientId, historyLimit]);
 
   useEffect(() => {
-    if (sessions.length === 0) return;
+    // Calculate trainer stats
+    const stats: Record<string, number> = {};
+    allSessions.forEach(s => {
+      stats[s.trainerInitials] = (stats[s.trainerInitials] || 0) + 1;
+    });
+    setTrainerStats(stats);
+    
+    // Show more sessions for the grid view (12 by default if possible)
+    let displayData = allSessions;
+    if (selectedSessionId) {
+      const targetIndex = allSessions.findIndex(s => s.id === selectedSessionId);
+      if (targetIndex !== -1) {
+        let start = Math.max(0, targetIndex - 5);
+        let end = Math.min(allSessions.length, start + 12);
+        if (end - start < 12) start = Math.max(0, end - 12);
+        displayData = allSessions.slice(start, end);
+      } else {
+        displayData = allSessions.slice(0, 12);
+      }
+    } else {
+      displayData = allSessions.slice(0, 12);
+    }
+    
+    setSessions(displayData.reverse());
+  }, [allSessions, selectedSessionId]);
 
-    const sessionIds = sessions.map(s => s.id).filter(Boolean) as string[];
+  const sessionIdsStr = sessions.map(s => s.id).filter(Boolean).join(',');
+
+  useEffect(() => {
+    if (!sessionIdsStr) return;
+
+    const sessionIds = sessionIdsStr.split(',');
+    
+    // Firestore 'in' query supports up to 30 items, so chunk if necessary
+    // But since max length is 12, we are safe.
     const logsQuery = query(
       collection(db, 'exerciseLogs'),
       where('sessionId', 'in', sessionIds)
@@ -3270,7 +3280,7 @@ function ClientHistoryView({
     });
 
     return () => unsubscribeLogs();
-  }, [sessions]);
+  }, [sessionIdsStr]);
 
   const updateSessionNote = async (sessionId: string, currentNote: string) => {
     // Deprecated in favor of SessionNotesDetailDialog
@@ -4276,7 +4286,28 @@ function WorkoutTrackerView({
   const [isShowingSessionNotes, setIsShowingSessionNotes] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [pendingAssignSession, setPendingAssignSession] = useState<WorkoutSession | null>(null);
+
+  const handleLogTSC = async (seconds: number) => {
+    if (!currentSession || activeMachineIds.length === 0) return;
+
+    let activeFocusMachineId: string | null = null;
+    for (const mId of activeMachineIds) {
+      const log = logs[`${currentSession.id}_${mId}`];
+      if (!log || !log.weight || (!log.reps && !log.seconds) || !log.repQuality) {
+        activeFocusMachineId = mId;
+        break;
+      }
+    }
+
+    if (activeFocusMachineId) {
+      await updateLog(currentSession.id, activeFocusMachineId, 'seconds', seconds.toString());
+      await updateLog(currentSession.id, activeFocusMachineId, 'reps', '0');
+      await updateLog(currentSession.id, activeFocusMachineId, 'isTSC', true);
+      await updateLog(currentSession.id, activeFocusMachineId, 'isStaticHold', true);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState('');
 
   // Special listener for unassigned sessions when no client is selected
@@ -4307,10 +4338,14 @@ function WorkoutTrackerView({
   }, [clientId]);
 
   useEffect(() => {
-    if (clientId) {
+    if (clientId && clients) {
       const client = clients.find(c => c.id === clientId);
       setSelectedClient(client || null);
+    }
+  }, [clientId, clients]);
 
+  useEffect(() => {
+    if (clientId) {
       // Fetch Client Machine Settings
       const settingsQuery = query(collection(db, 'clientMachineSettings'), where('clientId', '==', clientId));
       const unsubscribeSettings = onSnapshot(settingsQuery, (snapshot) => {
@@ -4389,7 +4424,7 @@ function WorkoutTrackerView({
         unsubscribeNotes();
       };
     }
-  }, [clientId, clients, machines]);
+  }, [clientId]);
 
   useEffect(() => {
     if (sessions.length > 0) {
@@ -4868,17 +4903,19 @@ function WorkoutTrackerView({
       setSelectedClientId(null);
       return;
     }
+    setShowCancelConfirmation(true);
+  };
 
-    if (window.confirm("Are you sure you want to scrap this session? All progress for this session will be lost.")) {
-      try {
-        if (currentSession.id) {
-          await deleteDoc(doc(db, 'sessions', currentSession.id));
-        }
-        setCurrentSession(null);
-        setSelectedClientId(null);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, 'sessions');
+  const confirmScrapSession = async () => {
+    try {
+      if (currentSession?.id) {
+        await deleteDoc(doc(db, 'sessions', currentSession.id));
       }
+      setCurrentSession(null);
+      setSelectedClientId(null);
+      setShowCancelConfirmation(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'sessions');
     }
   };
 
@@ -5089,7 +5126,7 @@ function WorkoutTrackerView({
               variant="outline" 
               size="sm" 
               className="h-8 rounded-xl font-black uppercase text-[9px] border-2 group hover:text-red-600 hover:border-red-200"
-              onClick={cancelActiveSession}
+              onClick={() => setShowCancelConfirmation(true)}
             >
               <Trash2 className="w-3 h-3 mr-1.5 group-hover:animate-pulse" /> {currentSession ? 'Cancel Session' : 'Change Client'}
             </Button>
@@ -5243,7 +5280,37 @@ function WorkoutTrackerView({
           </div>
         </DialogContent>
       </Dialog>
-      {/* Compact Header */}
+
+      {/* Scrap Session Confirmation Dialog */}
+      <Dialog open={showCancelConfirmation} onOpenChange={setShowCancelConfirmation}>
+        <DialogContent className="sm:max-w-[400px] rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-slate-900 p-8 text-white space-y-3">
+            <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center mb-2 shadow-[0_0_20px_rgba(239,68,68,0.4)]">
+              <Trash2 className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-2xl font-black italic uppercase tracking-tight">Scrap Active Session?</h3>
+            <p className="text-slate-400 font-medium text-sm leading-relaxed">
+              Are you sure you want to cancel this session? All data logged so far will be scrapped and will not be recorded in the database.
+            </p>
+          </div>
+          
+          <div className="p-6 grid grid-cols-2 gap-3 bg-white">
+            <Button 
+              variant="outline" 
+              className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs border-2 border-slate-200 hover:bg-slate-50"
+              onClick={() => setShowCancelConfirmation(false)}
+            >
+              Resume Session
+            </Button>
+            <Button 
+              className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200"
+              onClick={confirmScrapSession}
+            >
+              Scrap Session
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-center justify-between bg-white border border-slate-200 p-2 rounded-xl shadow-sm shrink-0 h-[48px]">
         <div className="flex items-center gap-3 pl-2">
           <div 
@@ -5517,6 +5584,12 @@ function WorkoutTrackerView({
           userTrainers={trainers}
           onClose={() => setIsShowingSessionNotes(false)}
         />
+      )}
+
+      {currentSession && (
+        <div className="fixed bottom-20 left-0 right-0 z-50">
+           <Stopwatch onLogTSC={handleLogTSC} />
+        </div>
       )}
 
       {/* Footer Info */}

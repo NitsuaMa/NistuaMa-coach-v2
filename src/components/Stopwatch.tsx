@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 
 export function Stopwatch({ 
   initialValue = 0, 
-  onSave 
+  onLogTSC
 }: { 
   initialValue?: number, 
-  onSave: (seconds: number) => void 
+  onLogTSC?: (seconds: number) => void 
 }) {
   const [time, setTime] = useState(initialValue);
   const [isActive, setIsActive] = useState(false);
@@ -41,41 +41,53 @@ export function Stopwatch({
   };
 
   return (
-    <div className="flex flex-col items-center gap-2 p-3 bg-muted/30 rounded-2xl border-2 border-dashed border-primary/20">
-      <div className="flex items-center gap-3">
-        <div className="flex flex-col items-center">
-             <span className="text-[8px] font-black uppercase text-primary/60 tracking-widest leading-none mb-1">Duration</span>
-             <span className="text-2xl font-black italic tracking-tighter text-primary font-mono tabular-nums">
-                {formatTime(time)}
-             </span>
+    <div className="bg-slate-900 border-t border-slate-800 p-4 shadow-2xl flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] leading-none mb-1">Workout Timer</span>
+          <span className="text-3xl font-black italic tracking-tighter text-white font-mono tabular-nums leading-none">
+            {formatTime(time)}
+          </span>
         </div>
-        <div className="flex gap-1">
+        
+        <div className="h-10 w-[1px] bg-slate-800 mx-2" />
+
+        <div className="flex gap-2">
           <Button 
-            size="icon" 
-            variant={isActive ? "destructive" : "default"} 
-            className="h-10 w-10 rounded-xl"
+            size="sm" 
+            className={`h-10 px-6 rounded-xl font-black uppercase italic tracking-wider transition-all duration-300 ${isActive ? 'bg-slate-700 hover:bg-slate-600' : 'bg-[#F06C22] hover:bg-[#F06C22]/90 shadow-[0_0_15px_rgba(240,108,34,0.3)]'}`}
             onClick={toggle}
           >
-            {isActive ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
+            {isActive ? (
+              <><Pause className="w-4 h-4 mr-2" /> Pause</>
+            ) : (
+              <><Play className="w-4 h-4 mr-2 fill-current" /> Start</>
+            )}
           </Button>
+
           <Button 
             size="icon" 
             variant="outline" 
-            className="h-10 w-10 rounded-xl"
+            className="h-10 w-10 rounded-xl border-slate-700 hover:bg-slate-800 text-slate-400"
             onClick={reset}
           >
             <RotateCcw className="w-4 h-4" />
           </Button>
-          <Button 
-            size="icon" 
-            variant="outline" 
-            className="h-10 w-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white border-none"
-            onClick={() => onSave(time)}
-          >
-            <Timer className="w-4 h-4" />
-          </Button>
         </div>
       </div>
+
+      {onLogTSC && (
+        <Button 
+          onClick={() => {
+            onLogTSC(time);
+            setIsActive(false);
+          }}
+          className="bg-primary text-white font-black uppercase italic tracking-wider px-6 h-10 rounded-xl shadow-[0_0_20px_rgba(var(--primary),0.3)] animate-pulse hover:animate-none"
+        >
+          <Timer className="w-4 h-4 mr-2" />
+          Log as TSC
+        </Button>
+      )}
     </div>
   );
 }

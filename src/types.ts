@@ -133,6 +133,7 @@ export interface ExerciseLog {
   seconds?: string;
   targetWeight?: string;
   isStaticHold?: boolean;
+  isTSC?: boolean;
   repQuality?: number;
   notes?: string;
   machineSettings?: Record<string, string>; // Settings used for this specific set

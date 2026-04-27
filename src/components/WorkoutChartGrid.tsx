@@ -99,13 +99,11 @@ export function WorkoutChartGrid({
     };
   }, [clientId]);
 
-  // Fetch logs for the visible sessions
+  // Fetch logs independently of visible sessions to prevent layout-driven subscription churn
   useEffect(() => {
-    if (sessions.length === 0) return;
+    if (!clientId) return;
 
-    const sessionIds = sessions.map(s => s.id!);
-    // Firestore "in" query limited to 10 elements usually, but for 11 we might need to batch or just filter client-side
-    // For performance and quota, we'll fetch all client logs from last 60 days
+    // For performance and quota, we fetch all client logs from last 60 days exactly once per client mounting
     const now = new Date();
     const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
     
@@ -121,7 +119,7 @@ export function WorkoutChartGrid({
     });
 
     return () => unsubscribeLogs();
-  }, [clientId, sessions]);
+  }, [clientId]);
 
   const handleUpdateSettings = async () => {
     if (!editingSettings || !clientId) return;
