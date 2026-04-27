@@ -123,7 +123,7 @@ export function ClientHistoryCalendar({
       Object.entries(editedLogs).forEach(([logId, data]) => {
         const logRef = doc(db, 'exerciseLogs', logId);
         batch.update(logRef, {
-          ...data,
+          ...(data as object),
           updatedAt: Timestamp.now()
         });
       });

@@ -50,6 +50,7 @@ interface ProfilesViewProps {
   setView: (v: View) => void;
   setSelectedClientId: (id: string | null) => void;
   authTrainer: Trainer | null;
+  onTrainerLogin?: (trainer: Trainer) => void;
   isAdmin: boolean;
 }
 
@@ -64,6 +65,7 @@ export function ProfilesView({
   setView,
   setSelectedClientId,
   authTrainer,
+  onTrainerLogin,
   isAdmin
 }: ProfilesViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -298,6 +300,23 @@ export function ProfilesView({
                   >
                     Go to Trainer Settings
                   </Button>
+
+                  {onTrainerLogin && authTrainer?.id !== trainer.id && (
+                    <Button 
+                      className="w-full h-14 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-200 border-none group relative overflow-hidden"
+                      onClick={() => {
+                        onTrainerLogin(trainer);
+                        setActiveProfile(null);
+                        setView('clients');
+                      }}
+                    >
+                      <motion.div
+                        className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 ease-in-out"
+                      />
+                      <RefreshCcw className="w-4 h-4 mr-2" />
+                      Switch to this Profile
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
 

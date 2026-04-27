@@ -107,6 +107,15 @@ import {
   DialogDescription,
   DialogFooter
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const DEFAULT_MACHINES: Machine[] = [
   { id: "m-neck", name: "CX (4 way neck)", order: 1, settingOptions: ["Gap", "Back Pad", "Seat"] },
@@ -857,18 +866,87 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-4">
-              <div 
-                className="flex items-center gap-3 px-2 py-1.5 bg-[#115E8D]/5 border border-[#115E8D]/10 rounded-full cursor-pointer hover:bg-[#115E8D]/10 transition-colors"
-                onClick={() => setCurrentView('trainer-profile')}
-              >
-                <div className="w-8 h-8 rounded-full bg-[#115E8D] text-white flex items-center justify-center shadow-inner">
-                  <span className="font-black text-xs uppercase tracking-wider">{authTrainer.initials}</span>
-                </div>
-                <div className="flex flex-col pr-3">
-                  <span className="text-[9px] font-black uppercase text-[#68717A] tracking-widest leading-none mb-0.5">Trainer Profile</span>
-                  <span className="text-xs font-black uppercase tracking-tight text-[#115E8D]">{authTrainer.fullName}</span>
-                </div>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="flex items-center gap-3 px-2 py-1.5 bg-[#115E8D]/5 border border-[#115E8D]/10 rounded-full cursor-pointer hover:bg-[#115E8D]/10 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-[#115E8D] text-white flex items-center justify-center shadow-inner">
+                    <span className="font-black text-xs uppercase tracking-wider">{authTrainer.initials}</span>
+                  </div>
+                  <div className="flex flex-col pr-3">
+                    <span className="text-[9px] font-black uppercase text-[#68717A] tracking-widest leading-none mb-0.5">Trainer Profile</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-black uppercase tracking-tight text-[#115E8D]">{authTrainer.fullName}</span>
+                      <ChevronDown className="w-3 h-3 text-[#115E8D]" />
+                    </div>
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-[24px] border-2 p-2 shadow-2xl">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="font-black uppercase text-[10px] tracking-widest px-3 py-2 text-muted-foreground">
+                      Active Profile
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem 
+                      onClick={() => setCurrentView('trainer-profile')}
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer"
+                    >
+                      <UserCircle className="w-4 h-4 text-primary" />
+                      View Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setCurrentView('trainer-hub')}
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Trainer Hub
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  
+                  <DropdownMenuSeparator className="my-2" />
+                  
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="font-black uppercase text-[10px] tracking-widest px-3 py-2 text-muted-foreground">
+                      Switch Trainer
+                    </DropdownMenuLabel>
+                    {trainers
+                      .filter(t => t.id !== authTrainer.id)
+                      .sort((a, b) => (a.order || 0) - (b.order || 0))
+                      .map(t => (
+                        <DropdownMenuItem 
+                          key={t.id}
+                          onClick={() => handleTrainerLogin(t)}
+                          className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer group"
+                        >
+                          <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center font-black group-hover:bg-primary group-hover:text-white transition-colors">
+                            {t.initials}
+                          </div>
+                          {t.fullName}
+                        </DropdownMenuItem>
+                      ))
+                    }
+                  </DropdownMenuGroup>
+                  
+                  <DropdownMenuSeparator className="my-2" />
+                  
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem 
+                      onClick={handleTrainerLock}
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest text-amber-600 hover:bg-amber-50 cursor-pointer"
+                    >
+                      <Lock className="w-4 h-4" />
+                      Switch to Name List
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem 
+                      onClick={handleLogout}
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest text-rose-500 hover:bg-rose-50 cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Logout Facility
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
               
               <Button
                 variant="ghost"
@@ -933,6 +1011,7 @@ export default function App() {
                 setSelectedClientId={setSelectedClientId}
                 setView={setCurrentView}
                 authTrainer={authTrainer}
+                onTrainerLogin={handleTrainerLogin}
                 isAdmin={user.email === "jurgensaj@gmail.com"}
               />
             )}
@@ -4777,8 +4856,12 @@ function WorkoutTrackerView({
       
       if (currentSession?.id === sessionId) {
         setCurrentSession(null);
+        setLogs({});
+        setSelectedClientId(null);
+        setView('clients');
       }
       setShowEndConfirmation(false);
+      setShowCancelConfirmation(false);
       setPendingAssignSession(null);
     } catch (error) {
       console.error("Error deleting session:", error);
@@ -4901,21 +4984,21 @@ function WorkoutTrackerView({
   const cancelActiveSession = async () => {
     if (!currentSession) {
       setSelectedClientId(null);
+      setView('clients');
       return;
     }
     setShowCancelConfirmation(true);
   };
 
   const confirmScrapSession = async () => {
-    try {
-      if (currentSession?.id) {
-        await deleteDoc(doc(db, 'sessions', currentSession.id));
-      }
+    if (currentSession?.id) {
+      await deleteSession(currentSession.id);
+    } else {
       setCurrentSession(null);
+      setLogs({});
       setSelectedClientId(null);
+      setView('clients');
       setShowCancelConfirmation(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'sessions');
     }
   };
 
@@ -5126,7 +5209,7 @@ function WorkoutTrackerView({
               variant="outline" 
               size="sm" 
               className="h-8 rounded-xl font-black uppercase text-[9px] border-2 group hover:text-red-600 hover:border-red-200"
-              onClick={() => setShowCancelConfirmation(true)}
+              onClick={cancelActiveSession}
             >
               <Trash2 className="w-3 h-3 mr-1.5 group-hover:animate-pulse" /> {currentSession ? 'Cancel Session' : 'Change Client'}
             </Button>

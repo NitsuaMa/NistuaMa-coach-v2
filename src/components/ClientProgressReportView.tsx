@@ -2,40 +2,43 @@ import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   CheckCircle2, 
-  AlertCircle, 
-  Save, 
   ArrowLeft,
   Calendar,
   Zap,
   Target,
-  History,
-  Info,
-  Settings,
-  Search,
-  Check,
   Printer,
   Mail,
   ChevronRight,
-  TrendingDown,
   Award,
   ChevronDown,
-  ArrowDown
+  LayoutGrid,
+  FileText,
+  User,
+  Quote,
+  Flame,
+  Binary,
+  Map as MapIcon,
+  Crosshair
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   collection, 
   addDoc, 
-  serverTimestamp 
+  serverTimestamp,
+  doc,
+  getDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
   Client, 
   Trainer, 
   Machine, 
-  ProgressReport 
+  ProgressReport,
+  ExerciseLog
 } from '../types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -46,10 +49,11 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription,
-  DialogFooter
+  DialogDescription
 } from '@/components/ui/dialog';
 import { calculateHighlightedMovements, calculateAttendanceStats } from '../lib/progress-utils';
+import { cn } from '../lib/utils';
+import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
 
 interface ClientProgressReportViewProps {
   client: Client;
@@ -74,7 +78,6 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
     isManual: false,
     status: 'Draft',
     
-    // Step 1: Attendance
     attendance: {
       score: 0,
       totalSessions: 0,
@@ -83,60 +86,56 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
       narrative: ''
     },
 
-    // Step 2: Highlights
     highlights: [
       { label: '', startValue: '', currentValue: '', featuredMetric: 'weight' },
       { label: '', startValue: '', currentValue: '', featuredMetric: 'weight' },
       { label: '', startValue: '', currentValue: '', featuredMetric: 'weight' }
     ],
 
-    // Step 3: Performance Matrix
     performanceMatrix: {
       posture: { 
         score: 80, 
         note: '', 
         talkingPoints: [
-          { id: 'pos-1', text: 'Head Alignment', status: 'black' },
-          { id: 'pos-2', text: 'Shoulder Stabilization', status: 'black' },
-          { id: 'pos-3', text: 'Spinal Neutrality', status: 'black' }
+          { id: 'pos-1', text: 'Ribcage Stability', status: 'black' },
+          { id: 'pos-2', text: 'Setup Integrity', status: 'black' },
+          { id: 'pos-3', text: 'Bracing Quality', status: 'black' }
         ]
       },
       pace: { 
-        score: 75, 
+        score: 80, 
         note: '', 
         talkingPoints: [
-          { id: 'pac-1', text: 'Negative Control', status: 'black' },
-          { id: 'pac-2', text: 'Smooth Turnaround', status: 'black' },
-          { id: 'pac-3', text: 'Constant Tension', status: 'black' }
+          { id: 'pac-1', text: 'Constant Tension', status: 'black' },
+          { id: 'pac-2', text: 'Control Velocity', status: 'black' },
+          { id: 'pac-3', text: 'Resistance Tolerance', status: 'black' }
         ]
       },
       path: { 
-        score: 85, 
+        score: 80, 
         note: '', 
         talkingPoints: [
           { id: 'pat-1', text: 'Active ROM', status: 'black' },
-          { id: 'pat-2', text: 'No Momentum', status: 'black' },
-          { id: 'pat-3', text: 'Leverage optimization', status: 'black' }
+          { id: 'pat-2', text: 'Line of Pull', status: 'black' },
+          { id: 'pat-3', text: 'Leverage Optimization', status: 'black' }
         ]
       },
       purpose: { 
-        score: 90, 
+        score: 80, 
         note: '', 
         talkingPoints: [
-          { id: 'pur-1', text: 'Muscle Recruitment', status: 'black' },
-          { id: 'pur-2', text: 'Reaching Inroad', status: 'black' },
-          { id: 'pur-3', text: 'Mind-Muscle Connection', status: 'black' }
+          { id: 'pur-1', text: 'Motor Unit Recruitment', status: 'black' },
+          { id: 'pur-2', text: 'Internal Focus', status: 'black' },
+          { id: 'pur-3', text: 'Mechanical Edge', status: 'black' }
         ]
       }
     },
 
-    // Step 4: The Past
     milestones: {
       originalWhy: client.globalNotes || '',
       smartGoal: ''
     },
 
-    // Step 5: The Future
     strategy: {
       primaryPlan: 'Routine Mastery',
       focusAreas: ''
@@ -147,35 +146,24 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
   const [selectingHighlightIdx, setSelectingHighlightIdx] = useState<number | null>(null);
   const [machineHistory, setMachineHistory] = useState<Record<string, any>>({});
 
-  // Load existing report if ID provided
+  // Load existing report
   useEffect(() => {
     async function fetchExisting() {
       if (!existingReportId) return;
       setLoading(true);
       try {
-        const { doc, getDoc } = await import('firebase/firestore');
         const snap = await getDoc(doc(db, 'progressReports', existingReportId));
         if (snap.exists()) {
           const data = snap.data() as ProgressReport;
-          
-          setReport(prev => {
-            const mergedPerformanceMatrix = {
-              posture: { ...(prev.performanceMatrix.posture || {}), ...(data.performanceMatrix?.posture || {}) },
-              pace: { ...(prev.performanceMatrix.pace || {}), ...(data.performanceMatrix?.pace || {}) },
-              path: { ...(prev.performanceMatrix.path || {}), ...(data.performanceMatrix?.path || {}) },
-              purpose: { ...(prev.performanceMatrix.purpose || {}), ...(data.performanceMatrix?.purpose || {}) }
-            };
-            return { 
-              ...prev, 
-              ...data,
-              performanceMatrix: (data.performanceMatrix ? mergedPerformanceMatrix : prev.performanceMatrix) as any,
-              id: snap.id 
-            };
-          });
+          setReport(prev => ({ 
+            ...prev, 
+            ...data,
+            id: snap.id 
+          }));
           setMode(data.status === 'Finalized' ? 'view' : 'editing');
         }
       } catch (err) {
-        console.error("Failed to fetch report:", err);
+        handleFirestoreError(err, OperationType.GET, 'progressReports');
       } finally {
         setLoading(false);
       }
@@ -183,7 +171,7 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
     fetchExisting();
   }, [existingReportId]);
 
-  // Load backend data if available, but allow manual overwrite
+  // Load auto data
   useEffect(() => {
     async function loadData() {
       if (mode !== 'editing' || report.isManual || existingReportId) return;
@@ -204,9 +192,7 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
             totalSessions: stats.totalSessionsCompleted,
             avgDuration: stats.avgDuration,
             punctuality: stats.punctualityNarrative,
-            narrative: stats.attendanceScore >= 90 
-              ? `Incredible commitment! ${client.firstName} is showing model consistency.` 
-              : `Showing up regularly. ${stats.punctualityNarrative}`
+            narrative: `Thank you for your consistency, ${client.firstName}. Your commitment to the protocol is driving these results.`
           },
           highlights: deltas.map(d => ({
             machineId: d.machineId,
@@ -217,7 +203,7 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
           })).concat(Array(3 - deltas.length).fill({ label: '', startValue: '', currentValue: '', featuredMetric: 'weight' })).slice(0, 3)
         }));
       } catch (err) {
-        console.error("Historical data fetch failed:", err);
+        console.error("Auto data failed:", err);
       } finally {
         setLoading(false);
       }
@@ -225,9 +211,9 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
     if (mode === 'editing' && !report.isManual) {
       loadData();
     }
-  }, [client, machines, mode, report.isManual]);
+  }, [client, machines, mode, report.isManual, existingReportId]);
 
-  // Load history for selection menu
+  // Load history for selector
   useEffect(() => {
     async function loadAllHistory() {
       if (!client.id || mode !== 'editing') return;
@@ -240,15 +226,48 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
         });
         setMachineHistory(historyMap);
       } catch (err) {
-        console.error("Failed to load machine history for selector:", err);
+        console.error("History selector load failed:", err);
       }
     }
     loadAllHistory();
   }, [client.id, machines, mode]);
 
+  const handleSave = async (status: 'Draft' | 'Finalized' = 'Finalized') => {
+    setSaving(true);
+    try {
+      const sanitizedReport = {
+        ...report,
+        status,
+        updatedAt: serverTimestamp()
+      };
+      
+      let reportId = report.id;
+      if (reportId) {
+        await updateDoc(doc(db, 'progressReports', reportId), sanitizedReport);
+      } else {
+        const docRef = await addDoc(collection(db, 'progressReports'), {
+          ...sanitizedReport,
+          createdAt: serverTimestamp()
+        });
+        reportId = docRef.id;
+        setReport(prev => ({ ...prev, id: docRef.id }));
+      }
+      
+      if (status === 'Finalized') {
+        setShowExportOptions(true);
+        setMode('view');
+      } else {
+        alert("Draft saved.");
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'progressReports');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleMachineSelect = async (machine: Machine) => {
     if (selectingHighlightIdx === null) return;
-    
     const deltas = await calculateHighlightedMovements(client.id!, [machine.id!]);
     const d = deltas[0];
     
@@ -265,451 +284,468 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
     setSelectingHighlightIdx(null);
   };
 
-  const startAuto = () => {
-    setReport(prev => ({ ...prev, isManual: false }));
-    setMode('editing');
-  };
-
-  const startManual = () => {
-    setReport(prev => ({ ...prev, isManual: true }));
-    setMode('editing');
-    setLoading(false);
-  };
-
-  const handleSave = async (status: 'Draft' | 'Finalized' = 'Finalized') => {
-    setSaving(true);
-    try {
-      const { updateDoc, doc } = await import('firebase/firestore');
-      
-      // Deep sanity check for numeric fields to prevent Firestore "undefined" errors
-      const sanitizedReport = JSON.parse(JSON.stringify({
-        ...report,
-        status,
-        updatedAt: serverTimestamp()
-      }));
-      
-      // Sanitization to prevent Firestore "undefined" errors
-      Object.keys(sanitizedReport.performanceMatrix).forEach((key) => {
-        if (sanitizedReport.performanceMatrix[key as keyof typeof sanitizedReport.performanceMatrix].score === undefined) {
-          (sanitizedReport.performanceMatrix[key as keyof typeof sanitizedReport.performanceMatrix] as any).score = 0;
-        }
-      });
-
-      sanitizedReport.highlights.forEach((h: any) => {
-        if (!h.featuredMetric) h.featuredMetric = 'weight';
-        if (h.agePercentile === undefined) delete h.agePercentile;
-        if (!h.subjectiveImprovement) delete h.subjectiveImprovement;
-      });
-
-      if (report.id) {
-        // Update existing
-        await updateDoc(doc(db, 'progressReports', report.id), sanitizedReport);
-      } else {
-        // Create new
-        const docRef = await addDoc(collection(db, 'progressReports'), {
-          ...sanitizedReport,
-          createdAt: serverTimestamp()
-        });
-        setReport(prev => ({ ...prev, id: docRef.id }));
-      }
-      
-      if (status === 'Finalized') {
-        setShowExportOptions(true);
-        setMode('view');
-      } else {
-        alert("Draft saved successfully.");
-      }
-    } catch (err) {
-      console.error("Save failed:", err);
-      alert(`Save Error: ${err instanceof Error ? err.message : 'Unknown Error'}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleEmail = () => {
-    alert(`Report ready! Emailing as PDF to ${client.email || 'the client'}...`);
+  // Helper for 1-5 scale indicators
+  const PIndicator = ({ 
+    score, 
+    label, 
+    description, 
+    icon: Icon 
+  }: { 
+    score: number, 
+    label: string, 
+    description: string,
+    icon: any
+  }) => {
+    const scaleValue = Math.round(score / 20) || 1; // Map 0-100 to 1-5
+    const isHigh = scaleValue >= 4;
+    
+    return (
+      <div className="bg-white/5 backdrop-blur-sm rounded-3xl p-6 border border-white/10 hover:border-white/20 transition-all group">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-2xl flex items-center justify-center transition-colors",
+              isHigh ? "bg-[#F06C22]/10 text-[#F06C22]" : "bg-slate-700/30 text-slate-400"
+            )}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-black uppercase tracking-[0.15em] text-[#FAF9F6]">{label}</h4>
+          </div>
+          <span className={cn(
+            "text-lg font-black italic",
+            isHigh ? "text-[#F06C22]" : "text-[#68717A]"
+          )}>{scaleValue}</span>
+        </div>
+        
+        <div className="flex gap-1.5 mb-4">
+          {[1, 2, 3, 4, 5].map((step) => (
+            <div 
+              key={step} 
+              className={cn(
+                "h-2.5 flex-1 rounded-full transition-all duration-500",
+                step <= scaleValue 
+                  ? (isHigh ? "bg-[#F06C22] shadow-[0_0_15px_rgba(240,108,34,0.4)]" : "bg-[#68717A]") 
+                  : "bg-white/5"
+              )}
+            />
+          ))}
+        </div>
+        
+        <p className="text-[10px] font-bold text-[#68717A] uppercase leading-relaxed tracking-wider group-hover:text-slate-300 transition-colors">
+          {description}
+        </p>
+      </div>
+    );
   };
 
   if (mode === 'selection') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 space-y-8 max-w-2xl mx-auto text-center">
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 space-y-12 max-w-2xl mx-auto text-center bg-[#0A2E46] rounded-[60px] my-12 border border-white/5 shadow-2xl">
         <div className="space-y-4">
-          <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <Award className="w-10 h-10 text-primary" />
-          </div>
-          <h2 className="text-4xl font-black uppercase italic tracking-tighter">Initialize Report</h2>
-          <p className="text-muted-foreground font-medium">Choose your documentation methodology for {client.firstName} {client.lastName}.</p>
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-24 h-24 rounded-[40px] bg-[#F06C22]/10 flex items-center justify-center mx-auto mb-8 border border-[#F06C22]/20 shadow-[0_0_40px_rgba(240,108,34,0.1)]"
+          >
+            <Award className="w-12 h-12 text-[#F06C22]" />
+          </motion.div>
+          <h2 className="text-4xl font-black uppercase italic tracking-tighter text-white">Initialize Report</h2>
+          <p className="text-[#68717A] font-bold uppercase text-xs tracking-widest leading-relaxed">Choose your documentation methodology for <br /> <span className="text-white">{client.firstName} {client.lastName}</span></p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-          <button 
-            onClick={startAuto}
-            className="flex flex-col items-center p-8 bg-card border-2 border-primary/20 rounded-[40px] hover:border-primary transition-all group hover:shadow-2xl hover:shadow-primary/5 text-center"
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => { setReport(prev => ({ ...prev, isManual: false })); setMode('editing'); }}
+            className="flex flex-col items-center p-8 bg-white/5 border-2 border-[#F06C22]/20 rounded-[40px] hover:border-[#F06C22] transition-all group hover:bg-[#F06C22]/[0.02] text-center"
           >
-            <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Zap className="w-6 h-6 text-white" />
+            <div className="w-14 h-14 rounded-2xl bg-[#F06C22] flex items-center justify-center mb-6 shadow-lg shadow-[#F06C22]/20 group-hover:scale-110 transition-transform">
+              <Zap className="w-7 h-7 text-white" />
             </div>
-            <h3 className="text-xl font-black uppercase italic mb-2">Auto-Populate</h3>
-            <p className="text-xs text-muted-foreground font-medium">Scan database for sessions, lift deltas, and punctuality patterns.</p>
-          </button>
+            <h3 className="text-xl font-black uppercase italic mb-2 text-white">Auto-Populate</h3>
+            <p className="text-[10px] text-[#68717A] font-bold uppercase tracking-widest leading-relaxed">Scan database for sessions, lift deltas, and punctuality patterns.</p>
+          </motion.button>
 
-          <button 
-            onClick={startManual}
-            className="flex flex-col items-center p-8 bg-card border-2 border-dashed border-muted rounded-[40px] hover:border-primary transition-all group hover:shadow-2xl text-center"
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => { setReport(prev => ({ ...prev, isManual: true })); setMode('editing'); setLoading(false); }}
+            className="flex flex-col items-center p-8 bg-white/5 border-2 border-dashed border-white/10 rounded-[40px] hover:border-white transition-all group hover:bg-white/5 text-center"
           >
-            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <Settings className="w-6 h-6 text-muted-foreground" />
+            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <FileText className="w-7 h-7 text-white/40" />
             </div>
-            <h3 className="text-xl font-black uppercase italic mb-2">Manual Entry</h3>
-            <p className="text-xs text-muted-foreground font-medium">Start with a blank canvas. Ideal if client data is stored on external platforms.</p>
-          </button>
+            <h3 className="text-xl font-black uppercase italic mb-2 text-white">Manual Entry</h3>
+            <p className="text-[10px] text-[#68717A] font-bold uppercase tracking-widest leading-relaxed">Start with a blank canvas. Ideal for clients with external history.</p>
+          </motion.button>
         </div>
 
-        <Button variant="ghost" onClick={onBack} className="rounded-xl font-bold uppercase text-[10px] tracking-widest no-print">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Cancel
+        <Button variant="ghost" onClick={onBack} className="text-[#68717A] hover:text-white font-black uppercase tracking-[0.3em] text-[10px] h-12 px-8">
+          <ArrowLeft className="w-4 h-4 mr-2" /> Abort Mission
         </Button>
       </div>
     );
   }
 
-  if (loading) {
+  if (mode === 'view') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5 }}>
-          <TrendingUp className="w-16 h-16 text-primary opacity-20" />
-        </motion.div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground animate-pulse">Scanning Bio-Metrics...</p>
+      <div className="min-h-screen bg-[#0A2E46] text-[#FAF9F6] selection:bg-[#F06C22]/30 selection:text-white">
+        <style>{`
+          @media print {
+            body { background: white !important; color: black !important; }
+            .print-area { padding: 0 !important; max-width: none !important; background: white !important; }
+            .no-print { display: none !important; }
+            .report-card { border: 1px solid #eee !important; box-shadow: none !important; background: white !important; color: black !important; padding: 40px !important; border-radius: 0 !important; }
+            .bg-[#0A2E46] { background: white !important; }
+            .text-[#FAF9F6], .text-white { color: #0A2E46 !important; }
+            .text-[#68717A] { color: #666 !important; }
+            .bg-white\\/5 { background: #f8f8f8 !important; border: 1px solid #eee !important; }
+            .shadow-2xl, .shadow-xl { box-shadow: none !important; }
+            .border-white\\/10 { border-color: #eee !important; }
+            .text-[#F06C22] { color: #D95B16 !important; font-weight: 900 !important; }
+          }
+        `}</style>
+
+        <div className="max-w-4xl mx-auto px-6 py-12 space-y-12 print-area">
+          {/* Controls */}
+          <div className="flex justify-between items-center no-print mb-8">
+            <Button variant="ghost" onClick={onBack} className="text-white hover:bg-white/10 rounded-2xl gap-2 font-black uppercase italic tracking-widest px-6">
+              <ArrowLeft className="w-5 h-5" /> Back
+            </Button>
+            <div className="flex gap-3">
+              <Button onClick={() => setMode('editing')} variant="outline" className="text-white border-white/20 hover:bg-white/5 rounded-2xl gap-2 font-black uppercase italic tracking-widest px-6">
+                Edit Data
+              </Button>
+              <Button onClick={() => window.print()} className="bg-[#F06C22] hover:bg-[#D95B16] text-white rounded-2xl gap-2 font-black uppercase italic tracking-widest px-8 shadow-lg shadow-[#F06C22]/20">
+                <Printer className="w-5 h-5" /> Print Report
+              </Button>
+            </div>
+          </div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="report-card space-y-12"
+          >
+            {/* 1. HERO HEADER: ATTENDANCE & DEDICATION */}
+            <motion.header 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-8"
+            >
+              <div className="flex flex-col md:flex-row md:items-end justify-between border-b-4 border-[#F06C22] pb-8 gap-6">
+                <div>
+                  <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-none mb-4">
+                    Performance <br />
+                    <span className="text-[#F06C22]">Report Card</span>
+                  </h1>
+                  <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-[0.3em] text-[#68717A]">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-[#F06C22]" /> 
+                      {client.firstName} {client.lastName}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-[#F06C22]" />
+                      {new Date(report.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end">
+                  <p className="text-[9px] font-black uppercase tracking-[0.4em] text-[#68717A] mb-2">Authenticated By</p>
+                  <p className="text-lg font-black uppercase italic tracking-tight">{trainer.fullName}</p>
+                  <p className="text-[10px] font-bold text-[#F06C22] uppercase tracking-widest mt-1">Lead Practitioner • MSF Studio</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 bg-[#F06C22] p-8 rounded-[40px] text-white flex flex-col justify-center items-center text-center shadow-2xl shadow-[#F06C22]/20">
+                  <Award className="w-12 h-12 mb-4 opacity-50" />
+                  <p className="text-5xl font-black italic tracking-tighter mb-1">{report.attendance.totalSessions}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Sessions Completed</p>
+                </div>
+                <div className="md:col-span-2 bg-white/5 backdrop-blur-md p-8 rounded-[40px] border border-white/10 flex flex-col justify-center">
+                  <Quote className="w-8 h-8 text-[#F06C22] mb-4 opacity-30" />
+                  <p className="text-xl md:text-2xl font-black italic uppercase italic tracking-tight leading-snug">
+                    "{report.attendance.narrative || `Incredible work, ${client.firstName}. Your dedication to this clinical protocol is exactly what drives meaningful biological change.`}"
+                  </p>
+                </div>
+              </div>
+            </motion.header>
+
+            {/* 2. THE TROPHIES: HIGHLIGHTED MOVEMENTS */}
+            <motion.section 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.3 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center gap-4">
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter shrink-0">Highlighted Movements</h3>
+                <div className="h-px bg-white/10 flex-1"></div>
+              </div>
+              <div className="flex flex-col md:flex-row gap-6">
+                {report.highlights.map((h, i) => (
+                  <div key={i} className="flex-1 bg-white p-8 rounded-[40px] shadow-2xl flex flex-col items-center justify-between min-h-[220px] group hover:scale-[1.02] transition-all">
+                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#0A2E46] opacity-60 group-hover:opacity-100 mb-2">{h.label || 'Movement'}</p>
+                    <div className="flex flex-col items-center">
+                      <p className="text-5xl font-black text-[#F06C22] italic tracking-tighter">{h.currentValue?.replace(' lbs', '') || '—'}</p>
+                      <p className="text-[10px] font-black text-[#0A2E46]/40 uppercase tracking-widest mt-1">Pounds Displaced</p>
+                    </div>
+                    <div className="mt-4 px-4 py-1.5 bg-[#0A2E46]/5 rounded-full">
+                      <p className="text-[9px] font-black text-[#0A2E46] uppercase tracking-widest">Personal Performance High</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.section>
+
+            {/* 3. THE CLINICAL MATRIX: THE 4 P'S */}
+            <motion.section 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
+              className="space-y-8"
+            >
+              <div className="flex items-center gap-4">
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter shrink-0">The 4 P's: Technical Proficiency</h3>
+                <div className="h-px bg-white/10 flex-1"></div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                <PIndicator 
+                  score={report.performanceMatrix.posture.score}
+                  label="Posture"
+                  description="Maintaining ribcage stability and foundational setup throughout the loading phase."
+                  icon={Binary}
+                />
+                <PIndicator 
+                  score={report.performanceMatrix.pace.score}
+                  label="Pace"
+                  description="Controlling the negative and maintaining a constant velocity under accumulated fatigue."
+                  icon={Flame}
+                />
+                <PIndicator 
+                  score={report.performanceMatrix.path.score}
+                  label="Path"
+                  description="Optimizing the line of pull and range of motion to maximize target fiber tension."
+                  icon={MapIcon}
+                />
+                <PIndicator 
+                  score={report.performanceMatrix.purpose.score}
+                  label="Purpose"
+                  description="Intentional execution and motor unit recruitment as you approach the clinical stimulus."
+                  icon={Crosshair}
+                />
+              </div>
+            </motion.section>
+
+            {/* 4. THE ROADMAP: THE GOAL & THE PLAN */}
+            <motion.section 
+              initial={{ opacity: 0, scale: 0.95 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.5 }}
+              className="bg-[#FAF9F6] p-10 rounded-[50px] shadow-2xl relative overflow-hidden group"
+            >
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <Target className="w-48 h-48 text-[#0A2E46]" />
+              </div>
+              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Target className="w-4 h-4 text-[#F06C22]" />
+                    </div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#0A2E46]">The Milestone</h4>
+                  </div>
+                  <p className="text-2xl md:text-3xl font-black italic tracking-tighter text-[#0A2E46] leading-tight">
+                    {report.milestones.smartGoal || "Achieve total mastery and load progression across current split."}
+                  </p>
+                  <div className="h-1 w-12 bg-[#F06C22]"></div>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#0A2E46]/10 flex items-center justify-center">
+                      <Zap className="w-4 h-4 text-[#0A2E46]" />
+                    </div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#0A2E46]">The Strategy</h4>
+                  </div>
+                  <p className="text-sm font-bold text-[#68717A] leading-relaxed uppercase tracking-tight">
+                    {report.strategy.focusAreas || `${trainer.fullName} will implement a clinical load-progression strategy focused on ${report.strategy.primaryPlan}. Expect high-density stimulus in upcoming blocks.`}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-12 pt-8 border-t border-[#0A2E46]/10 flex justify-between items-center">
+                <div className="flex items-center gap-6">
+                  <div className="text-[8px] font-black uppercase tracking-[0.3em] text-[#68717A]">
+                    Authorized MSF Document
+                  </div>
+                  <div className="text-[8px] font-black uppercase tracking-[0.3em] text-[#68717A]">
+                    Unit ID: {report.id?.slice(-8).toUpperCase() || 'NEW'}
+                  </div>
+                </div>
+                <div className="text-[10px] font-black italic text-[#F06C22] uppercase tracking-[0.2em]">
+                  Max Strength Fitness
+                </div>
+              </div>
+            </motion.section>
+          </motion.div>
+        </div>
       </div>
     );
   }
 
+  // Selection view handled at start
+
+  // Editing view (Standard form-based UI but matching themes)
   return (
-    <div className="min-h-screen bg-[#0A2E46] w-full relative sm:py-8 lg:py-12 -m-4 p-4 sm:m-0 sm:p-0">
-      {/* Dynamic Print Styles */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
-          .print-area { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100%; 
-            padding: 40px;
-            background: white !important;
-            color: black !important;
-          }
-          .no-print { display: none !important; }
-          .rounded-[40px] { border-radius: 12px !important; }
-          .shadow-xl, .shadow-2xl { box-shadow: none !important; }
-          .bg-muted/20, .bg-primary/5 { background-color: #f9f9f9 !important; border: 1px solid #eee; }
-          .text-primary { color: #000 !important; }
-          button { display: none !important; }
-        }
-      `}</style>
-
-      <div className="max-w-4xl mx-auto space-y-6 pb-32">
-        {/* Navigation & Actions */}
-        <div className="flex justify-between items-center no-print bg-[#FAF9F6]/95 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-slate-200/50 shadow-lg shadow-black/10 shrink-0 sticky top-4 z-50">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={onBack} className="rounded-full w-8 h-8 text-[#68717A] hover:bg-slate-200/50">
-              <ArrowLeft className="w-5 h-5" />
+    <div className="min-h-screen bg-[#0A2E46] p-4 sm:p-8 lg:p-12 overflow-y-auto">
+      <div className="max-w-4xl mx-auto space-y-8 pb-32">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 no-print sticky top-4 z-50">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-white/10 rounded-2xl w-10 h-10">
+              <ArrowLeft className="w-6 h-6" />
             </Button>
             <div>
-              <h1 className="text-base font-black uppercase tracking-tight text-[#115E8D] leading-none">Report Creator</h1>
-              <p className="text-[10px] font-bold text-[#68717A] uppercase tracking-widest mt-1 leading-none">Phase: Documentation</p>
+              <h1 className="text-xl font-black uppercase italic tracking-tighter text-white">Refining Report</h1>
+              <p className="text-[10px] font-bold text-[#68717A] uppercase tracking-widest mt-0.5">{client.firstName}'s Performance Data</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {mode === 'editing' && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => handleSave('Draft')} 
-                disabled={saving}
-                className="h-8 md:h-9 text-[10px] font-bold uppercase tracking-wider border-slate-300 text-slate-600 hover:bg-slate-100 bg-transparent"
-              >
-                Save Draft
-              </Button>
-            )}
-            {mode === 'view' && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setMode('editing')} 
-                className="h-8 md:h-9 text-[10px] font-bold uppercase tracking-wider border-slate-300 text-slate-600 hover:bg-slate-100 bg-transparent"
-              >
-                Resume Editing
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={handlePrint} className="h-8 md:h-9 text-[10px] font-bold uppercase tracking-wider border-slate-300 text-slate-600 hover:bg-slate-100 bg-transparent">
-               Print Preview
+          <div className="flex gap-3 w-full sm:w-auto">
+            <Button 
+              variant="outline" 
+              onClick={() => handleSave('Draft')} 
+              disabled={saving}
+              className="flex-1 sm:flex-none text-white border-white/20 hover:bg-white/5 rounded-2xl font-black uppercase tracking-widest h-12"
+            >
+              Save Draft
             </Button>
-            {mode === 'editing' && (
-              <Button 
-                disabled={saving} 
-                onClick={() => handleSave('Finalized')}
-                className="h-8 md:h-9 px-4 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-b from-[#F06C22] to-[#D95B16] hover:from-[#F27E3B] hover:to-[#F06C22] text-white shadow-[0_4px_15px_rgba(240,108,34,0.4)] border border-[#F06C22]/50 transition-all"
-              >
-                {saving ? 'Saving...' : 'Finalize & Present'}
-              </Button>
-            )}
+            <Button 
+              onClick={() => handleSave('Finalized')}
+              disabled={saving}
+              className="flex-1 sm:flex-none bg-[#F06C22] hover:bg-[#D95B16] text-white rounded-2xl font-black uppercase tracking-widest h-12 shadow-lg shadow-[#F06C22]/20"
+            >
+              Finalize Report
+            </Button>
           </div>
-        </div>
+        </header>
 
-        {/* --- PHYSICAL REPORT START --- */}
-        <div className={`print-area space-y-5 ${mode === 'view' ? 'pointer-events-none' : ''}`}>
-          
-          {/* Header Card */}
-          <div className="bg-[#FAF9F6] p-4 rounded-xl border border-white/40 shadow-xl shadow-black/20 flex flex-col md:flex-row md:items-baseline justify-between gap-2">
-            <div>
-              <h2 className="text-2xl font-black uppercase tracking-tight text-[#115E8D]">CLIENT PROGRESS REPORT</h2>
-              <div className="flex items-baseline gap-4 mt-2">
-                <p className="text-[11px] font-bold uppercase text-[#115E8D]"><span className="text-[#68717A] text-[9px] tracking-widest mr-1">TRAINER:</span> {trainer.fullName}</p>
-                <p className="text-[11px] font-bold uppercase text-[#115E8D]"><span className="text-[#68717A] text-[9px] tracking-widest mr-1">CLIENT:</span> {client.firstName} {client.lastName}</p>
-              </div>
+        <div className="space-y-8">
+          {/* Section 1: Attendance */}
+          <section className="bg-white rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-[#F06C22]" />
+            <div className="flex items-center gap-3 mb-8">
+              <Calendar className="w-6 h-6 text-[#F06C22]" />
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0A2E46]">Attendance & Dedication</h2>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-black uppercase text-[#68717A]">
-                {new Date(report.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' })}
-              </p>
-            </div>
-          </div>
-
-          {/* STEP 1: Attendance & Consistency */}
-          <div className="bg-[#FAF9F6] p-5 md:p-6 rounded-2xl border border-white/60 shadow-xl shadow-black/20 relative">
-            <h3 className="text-lg font-black uppercase tracking-tight text-[#115E8D] mb-4">Attendance & Dedication</h3>
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-1 bg-slate-200/40 rounded-xl p-3 border border-slate-300/60 flex flex-col justify-center">
-                  <span className="text-[9px] font-black uppercase text-[#68717A] tracking-wider mb-1 block">TOTAL SESSIONS</span>
-                  <Input 
-                    type="number" 
-                    className="h-9 text-sm font-medium border-slate-300/80 bg-slate-100/80 placeholder:text-slate-400 focus-visible:ring-[#115E8D]" 
-                    value={report.attendance.totalSessions} 
-                    onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, totalSessions: parseInt(e.target.value) || 0 }})} 
-                  />
-                </div>
-                <div className="flex-1 bg-slate-200/40 rounded-xl p-3 border border-slate-300/60 flex flex-col justify-center">
-                  <span className="text-[9px] font-black uppercase text-[#68717A] tracking-wider mb-1 block">CONSISTENCY %</span>
-                  <Input 
-                    type="number" 
-                    className="h-9 text-sm font-medium border-slate-300/80 bg-slate-100/80 placeholder:text-slate-400 focus-visible:ring-[#115E8D]" 
-                    value={report.attendance.score} 
-                    onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, score: parseInt(e.target.value) || 0 }})} 
-                  />
-                </div>
-                <div className="flex-1 bg-slate-200/40 rounded-xl p-3 border border-slate-300/60 flex flex-col justify-center">
-                  <span className="text-[9px] font-black uppercase text-[#68717A] tracking-wider mb-1 block">AVG DURATION</span>
-                  <Input 
-                    type="number" 
-                    className="h-9 text-sm font-medium border-slate-300/80 bg-slate-100/80 placeholder:text-slate-400 focus-visible:ring-[#115E8D]" 
-                    value={report.attendance.avgDuration} 
-                    onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, avgDuration: parseInt(e.target.value) || 0 }})} 
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                   <Label className="text-[9px] font-black uppercase text-[#68717A] tracking-wider ml-1 block">Punctuality Pattern (e.g., consistently 5 mins early)</Label>
-                   <Input 
-                     className="h-9 text-sm font-medium border-slate-300/80 bg-slate-200/60 placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]" 
-                     placeholder="Consistently early..."
-                     value={report.attendance.punctuality} 
-                     onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, punctuality: e.target.value }})} 
-                   />
-                </div>
-                <div className="space-y-1">
-                   <Label className="text-[9px] font-black uppercase text-[#68717A] tracking-wider ml-1 block">Trainer Narrative (Overall dedication notes)</Label>
-                   <Input 
-                     className="h-9 text-sm font-medium border-slate-300/80 bg-slate-200/60 placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]" 
-                     placeholder="Overall notes on dedication..."
-                     value={report.attendance.narrative} 
-                     onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, narrative: e.target.value }})} 
-                   />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* STEP 2: Highlighted Movements */}
-          <div className="bg-[#FAF9F6] p-5 md:p-6 rounded-2xl border border-white/60 shadow-xl shadow-black/20 relative">
-            <h3 className="text-lg font-black uppercase tracking-tight text-[#115E8D] mb-4">HIGHLIGHTED MOVEMENTS</h3>
-            <div className="space-y-3">
-               {report.highlights.map((highlight, idx) => (
-                 <div key={idx} className="flex flex-col md:flex-row items-center gap-3 bg-slate-200/30 border border-slate-300/40 rounded-xl p-3">
-                    <div className="w-full md:w-[220px] shrink-0 relative">
-                       <Label className="text-[9px] font-black uppercase tracking-wider text-[#68717A] block ml-1 mb-1">Target Machine</Label>
-                       <div className="relative">
-                         <select 
-                           className="w-full h-9 text-xs font-black uppercase bg-slate-200/80 border border-slate-300/80 rounded-lg pl-3 pr-8 text-[#68717A] appearance-none focus:outline-none focus:ring-1 focus:ring-[#115E8D]" 
-                           value={highlight.machineId || ""} 
-                           onChange={(e) => {
-                             const m = machines.find(x => x.id === e.target.value);
-                             if (m) {
-                                const newH = [...report.highlights];
-                                newH[idx] = { ...newH[idx], machineId: m.id, label: m.name };
-                                setReport({ ...report, highlights: newH });
-                             }
-                           }}
-                         >
-                            <option value="" disabled className="text-slate-400">Select Machine...</option>
-                            {machines.map(m => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                         </select>
-                         <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-[#115E8D]" />
-                       </div>
-                    </div>
-                    <div className="w-full md:w-[180px] shrink-0 relative">
-                       <Label className="text-[9px] font-black uppercase tracking-wider text-[#68717A] block ml-1 mb-1">Metric Type</Label>
-                       <div className="relative">
-                         <select 
-                           className="w-full h-9 text-xs font-bold uppercase bg-slate-200/80 border border-slate-300/80 rounded-lg pl-3 pr-8 text-[#68717A] appearance-none focus:outline-none focus:ring-1 focus:ring-[#115E8D]" 
-                           value={highlight.featuredMetric} 
-                           onChange={(e) => {
-                               const newH = [...report.highlights];
-                               newH[idx].featuredMetric = e.target.value as any;
-                               setReport({ ...report, highlights: newH });
-                           }}
-                         >
-                           <option value="weight">Strength/Weight Stats</option>
-                           <option value="percentile">Age Group Comparison</option>
-                           <option value="subjective">Subjective Technique</option>
-                         </select>
-                         <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-[#68717A]" />
-                       </div>
-                    </div>
-                    
-                    <div className="flex-1 w-full relative self-end">
-                       {highlight.featuredMetric === 'weight' && (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                               <span className="text-[9px] font-black uppercase tracking-wider text-[#68717A] block ml-1">Starting Weight</span>
-                               <Input 
-                                 className="h-9 text-sm font-medium border-slate-300/80 bg-slate-200/60 placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]" 
-                                 placeholder="e.g. 100 lbs" 
-                                 value={highlight.startValue} 
-                                 onChange={(e) => {
-                                    const newH = [...report.highlights];
-                                    newH[idx].startValue = e.target.value;
-                                    setReport({ ...report, highlights: newH });
-                                 }} 
-                               />
-                            </div>
-                            <div className="space-y-1">
-                               <span className="text-[9px] font-black uppercase tracking-wider text-[#68717A] block ml-1">Current Weight</span>
-                               <Input 
-                                 className="h-9 text-sm font-bold border-slate-300/80 bg-slate-200/60 text-[#68717A] placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]" 
-                                 placeholder="e.g. 120 lbs" 
-                                 value={highlight.currentValue} 
-                                 onChange={(e) => {
-                                    const newH = [...report.highlights];
-                                    newH[idx].currentValue = e.target.value;
-                                    setReport({ ...report, highlights: newH });
-                                 }} 
-                               />
-                            </div>
-                          </div>
-                       )}
-                       {highlight.featuredMetric === 'percentile' && (
-                          <div className="flex items-center gap-3 w-full border border-slate-300/60 bg-slate-200/40 rounded-lg p-2 px-3 mt-4">
-                             <Label className="text-[9px] font-black uppercase text-[#68717A] whitespace-nowrap">Percentile Rank</Label>
-                             <Slider 
-                               value={[highlight.agePercentile || 0]} 
-                               max={100} 
-                               onValueChange={(v) => {
-                                 const newH = [...report.highlights];
-                                 newH[idx].agePercentile = v[0];
-                                 setReport({ ...report, highlights: newH });
-                               }}
-                               className="flex-1 cursor-pointer"
-                             />
-                             <span className="text-[10px] font-black text-[#115E8D] w-8 text-right bg-white px-1 py-0.5 rounded shadow-sm">{highlight.agePercentile || 0}%</span>
-                          </div>
-                       )}
-                       {highlight.featuredMetric === 'subjective' && (
-                          <div className="flex gap-2 w-full pt-4">
-                            <div className="relative w-1/3">
-                              <select 
-                                 className="w-full h-9 text-[#68717A] text-xs font-bold uppercase bg-slate-200/80 border border-slate-300/80 rounded-lg pl-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-[#115E8D]"
-                                 value={highlight.subjectiveImprovement?.p || ''}
-                                 onChange={(e) => {
-                                    const newH = [...report.highlights];
-                                    newH[idx].subjectiveImprovement = { 
-                                      p: e.target.value as any, 
-                                      note: newH[idx].subjectiveImprovement?.note || '' 
-                                    };
-                                    setReport({ ...report, highlights: newH });
-                                 }}
-                              >
-                                 <option value="" disabled>Select Pillar...</option>
-                                 <option value="Posture">Posture</option>
-                                 <option value="Pace">Pace</option>
-                                 <option value="Path">Path</option>
-                                 <option value="Purpose">Purpose</option>
-                              </select>
-                              <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-[#115E8D]" />
-                            </div>
-                            <Input 
-                               placeholder="Observation notes..." 
-                               className="h-9 flex-1 text-sm font-medium border-slate-300/80 bg-slate-200/60 placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]"
-                               value={highlight.subjectiveImprovement?.note || ''}
-                               onChange={(e) => {
-                                  const newH = [...report.highlights];
-                                  if (!newH[idx].subjectiveImprovement) {
-                                     newH[idx].subjectiveImprovement = { p: 'Posture', note: '' };
-                                  }
-                                  newH[idx].subjectiveImprovement!.note = e.target.value;
-                                  setReport({ ...report, highlights: newH });
-                               }}
-                            />
-                          </div>
-                       )}
-                    </div>
-                 </div>
-               ))}
-            </div>
-          </div>
-
-          {/* STEP 3: The 4 P's */}
-          <div className="bg-[#FAF9F6] p-5 md:p-6 rounded-2xl border border-white/60 shadow-xl shadow-black/20 relative">
-            <h3 className="text-lg font-black uppercase tracking-tight text-[#115E8D] mb-4">THE 4 P'S: TECHNICAL PROFICIENCY</h3>
-            <div className="flex flex-col divide-y divide-slate-200">
-              {(['posture', 'pace', 'path', 'purpose'] as const).map((p, idx) => (
-                <div key={p} className={`py-4 ${idx === 0 ? 'pt-0' : ''} ${idx === 3 ? 'pb-0' : ''} flex flex-col gap-2 relative`}>
-                  <h4 className="text-[10px] font-black uppercase text-[#115E8D] tracking-widest flex justify-between items-center mb-1">
-                    {p}
-                    <span className="text-[10px] text-[#F06C22] bg-[#F06C22]/10 px-1.5 py-0.5 rounded">{report.performanceMatrix[p].score}%</span>
-                  </h4>
-                  <div className="px-1 py-1">
-                    <Slider 
-                      value={[report.performanceMatrix[p].score]} 
-                      max={100} 
-                      onValueChange={(v) => {
-                        const val = Array.isArray(v) ? v[0] : v;
-                        const newScore = typeof val === 'number' ? val : 0;
-                        setReport(prev => ({
-                          ...prev,
-                          performanceMatrix: {
-                            ...prev.performanceMatrix,
-                            [p]: { ...prev.performanceMatrix[p], score: newScore }
-                          }
-                        }));
-                      }}
-                      className="cursor-pointer mb-2" 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Total Sessions</Label>
+                    <Input 
+                      type="number"
+                      value={report.attendance.totalSessions}
+                      onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, totalSessions: parseInt(e.target.value) || 0 }})}
+                      className="h-12 rounded-xl font-black text-lg border-2 border-slate-100 focus:border-[#F06C22] transition-all"
                     />
                   </div>
-                  
-                  <div className="flex flex-wrap gap-2 mt-1">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Scale (0-100)</Label>
+                    <Input 
+                      type="number"
+                      value={report.attendance.score}
+                      onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, score: parseInt(e.target.value) || 0 }})}
+                      className="h-12 rounded-xl font-black text-lg border-2 border-slate-100 focus:border-[#F06C22] transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Punctuality Pattern</Label>
+                  <Input 
+                    value={report.attendance.punctuality}
+                    onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, punctuality: e.target.value }})}
+                    className="h-12 rounded-xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all"
+                    placeholder="e.g. Consistently 5 mins early"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Trainer Narrative (The Vibe)</Label>
+                <Textarea 
+                  value={report.attendance.narrative}
+                  onChange={(e) => setReport({ ...report, attendance: { ...report.attendance, narrative: e.target.value }})}
+                  className="min-h-[140px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
+                  placeholder="Celebrate their wins and consistency here..."
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Section 2: Highlights */}
+          <section className="bg-white rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-[#0A2E46]" />
+            <div className="flex items-center gap-3 mb-8">
+              <Award className="w-6 h-6 text-[#0A2E46]" />
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0A2E46]">Highlighted Movements</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {report.highlights.map((h, i) => (
+                <button 
+                  key={i} 
+                  onClick={() => setSelectingHighlightIdx(i)}
+                  className="flex flex-col p-6 rounded-3xl border-2 border-slate-100 hover:border-[#F06C22] hover:bg-[#F06C22]/[0.02] transition-all text-left group"
+                >
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#68717A] mb-4">Slot #{i+1}</p>
+                  <h4 className="text-lg font-black uppercase italic tracking-tighter text-[#0A2E46] truncate group-hover:text-[#F06C22] transition-colors">
+                    {h.label || 'Select Machine'}
+                  </h4>
+                  <p className="text-3xl font-black text-[#68717A] mt-2 italic group-hover:text-[#F06C22]">
+                    {h.currentValue || '0'}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Section 3: Performance Matrix */}
+          <section className="bg-white rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-[#68717A]" />
+            <div className="flex items-center gap-3 mb-8">
+              <LayoutGrid className="w-6 h-6 text-[#68717A]" />
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0A2E46]">Clinical Performance Matrix</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {(['posture', 'pace', 'path', 'purpose'] as const).map((p) => (
+                <div key={p} className="space-y-4">
+                  <div className="flex justify-between items-end">
+                    <Label className="text-[12px] font-black uppercase tracking-widest text-[#0A2E46]">{p}</Label>
+                    <span className="text-xs font-black text-[#F06C22]">{Math.round(report.performanceMatrix[p].score / 20) || 1}/5</span>
+                  </div>
+                  <Slider 
+                    value={[report.performanceMatrix[p].score]} 
+                    max={100} 
+                    onValueChange={(v) => {
+                      const val = Array.isArray(v) ? v[0] : v;
+                      setReport(prev => ({
+                        ...prev,
+                        performanceMatrix: {
+                          ...prev.performanceMatrix,
+                          [p]: { ...prev.performanceMatrix[p], score: val }
+                        }
+                      }));
+                    }}
+                    className="cursor-pointer"
+                  />
+                  <div className="flex flex-wrap gap-2">
                     {report.performanceMatrix[p].talkingPoints.map((tp, tpIdx) => (
-                      <button 
+                      <Badge 
                         key={tp.id} 
+                        variant="outline"
                         onClick={() => {
                           const statuses: ('red' | 'black' | 'green')[] = ['black', 'green', 'red'];
                           const nextStatus = statuses[(statuses.indexOf(tp.status) + 1) % 3];
@@ -723,172 +759,79 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
                             }
                           });
                         }}
-                        className={`px-3 py-1.5 text-[9px] font-black uppercase rounded-lg border transition-colors ${
-                          tp.status === 'green' 
-                            ? 'bg-[#115E8D] text-white border-[#115E8D] shadow-sm'
-                            : tp.status === 'red'
-                            ? 'bg-red-50 text-red-600 border-red-200'
-                            : 'bg-slate-200/50 text-slate-500 border-slate-300 hover:border-slate-400 focus:outline-[#115E8D]'
-                        }`}
+                        className={cn(
+                          "cursor-pointer px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.05em] transition-all",
+                          tp.status === 'green' ? "bg-emerald-500 text-white border-emerald-500" :
+                          tp.status === 'red' ? "bg-red-500 text-white border-red-500" :
+                          "bg-slate-100 text-slate-500 border-slate-200"
+                        )}
                       >
                         {tp.text}
-                      </button>
+                      </Badge>
                     ))}
                   </div>
-                  <Input 
-                    placeholder="Additional technical notes..." 
-                    className="h-9 text-[11px] mt-2 bg-slate-200/60 border-slate-300/80 placeholder:text-[#68717A]/60 text-[#68717A] font-medium focus-visible:ring-[#115E8D]" 
-                    value={report.performanceMatrix[p].note} 
-                    onChange={(e) => setReport({
-                      ...report,
-                      performanceMatrix: {
-                        ...report.performanceMatrix,
-                        [p]: { ...report.performanceMatrix[p], note: e.target.value }
-                      }
-                    })}
-                  />
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          {/* STEP 4 & 5: FUTURE STRATEGY WRAPPER */}
-          <div className="bg-[#031525]/30 p-5 md:p-6 rounded-3xl border border-white/5 relative flex flex-col items-center shadow-inner">
-            
-            {/* Section 4 Card (THE GOAL) */}
-            <div className="bg-[#FAF9F6] p-5 md:p-6 rounded-2xl border border-white/60 shadow-xl shadow-black/20 w-full relative z-10">
-              <h3 className="text-lg font-black uppercase tracking-tight text-[#115E8D] mb-4">THE GOAL</h3>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-[#68717A] ml-1 block">Original Reason for Training</Label>
-                  <Textarea 
-                    className="min-h-[60px] text-sm font-medium border-slate-300/80 bg-slate-200/60 placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]" 
-                    placeholder="Auto-populated or typed here..."
-                    value={report.milestones.originalWhy} 
-                    onChange={(e) => setReport({ ...report, milestones: { ...report.milestones, originalWhy: e.target.value }})}
-                  />
-                </div>
-                <div className="space-y-0.5">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-[#68717A] ml-1 block">Next Live-Event Milestone (SMART Goal)</Label>
-                  <Input 
-                    className="h-10 text-sm font-black border-[#F06C22] bg-orange-50/50 text-[#F06C22] placeholder:text-orange-300/80 focus-visible:ring-[#F06C22] focus-visible:ring-offset-0 focus-visible:border-[#F06C22]" 
-                    placeholder="e.g. Ski trip ready"
-                    value={report.milestones.smartGoal} 
-                    onChange={(e) => setReport({ ...report, milestones: { ...report.milestones, smartGoal: e.target.value }})}
-                  />
-                  <p className="text-[7.5px] font-bold uppercase tracking-widest text-[#68717A]/70 ml-1 pt-1">Specific • Measurable • Achievable • Relevant • Time-Bound</p>
-                </div>
+          {/* Section 4: Roadmap */}
+          <section className="bg-white rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-[#F06C22]" />
+            <div className="flex items-center gap-3 mb-8">
+              <MapIcon className="w-6 h-6 text-[#F06C22]" />
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0A2E46]">Strategic Roadmap</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">The Primary Milestone</Label>
+                <Textarea 
+                  value={report.milestones.smartGoal}
+                  onChange={(e) => setReport({ ...report, milestones: { ...report.milestones, smartGoal: e.target.value }})}
+                  className="min-h-[100px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
+                  placeholder="What is the next tangible target?"
+                />
+              </div>
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">MSF Operational Plan</Label>
+                <Textarea 
+                  value={report.strategy.focusAreas}
+                  onChange={(e) => setReport({ ...report, strategy: { ...report.strategy, focusAreas: e.target.value }})}
+                  className="min-h-[100px] rounded-3xl font-medium border-2 border-slate-100 focus:border-[#F06C22] transition-all p-4"
+                  placeholder="How will we anchor the results?"
+                />
               </div>
             </div>
-
-            {/* Visual Connector */}
-            <div className="flex flex-col items-center justify-center my-3 relative z-0">
-               <div className="w-[2px] h-4 bg-white/20"></div>
-               <ArrowDown className="text-white/40 w-5 h-5 -mt-1" strokeWidth={3} />
-            </div>
-
-            {/* Section 5 Card (THE PLAN) */}
-            <div className="bg-[#FAF9F6] p-5 md:p-6 rounded-2xl border border-white/60 shadow-xl shadow-black/20 w-full relative z-10">
-              <h3 className="text-lg font-black uppercase tracking-tight text-[#115E8D] mb-4">THE PLAN</h3>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-1 relative">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-[#68717A] ml-1 block">Next Operational Plan</Label>
-                  <div className="relative">
-                    <select 
-                      className="w-full h-10 text-xs font-black uppercase bg-slate-200/80 border border-slate-300/80 rounded-lg pl-3 pr-8 text-[#68717A] appearance-none focus:outline-none focus:ring-1 focus:ring-[#115E8D]" 
-                      value={report.strategy.primaryPlan}
-                      onChange={(e) => setReport({ ...report, strategy: { ...report.strategy, primaryPlan: e.target.value }})}
-                    >
-                        <option value="Routine Mastery">Routine Mastery</option>
-                        <option value="Advanced Load Optimization">Advanced Load Optimization</option>
-                        <option value="Hyper-Frequency Mode">Hyper-Frequency Mode</option>
-                        <option value="Protocol Reset / Onboarding">Protocol Reset / Onboarding</option>
-                    </select>
-                    <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-[#115E8D]/60 pointer-events-none" />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-[#68717A] ml-1 block">Immediate Focus Areas (Next 12 Sessions)</Label>
-                  <Textarea 
-                    className="min-h-[80px] text-sm font-medium border-slate-300/80 bg-slate-200/60 placeholder:text-[#68717A]/60 focus-visible:ring-[#115E8D]" 
-                    placeholder="List focus areas..."
-                    value={report.strategy.focusAreas} 
-                    onChange={(e) => setReport({ ...report, strategy: { ...report.strategy, focusAreas: e.target.value }})}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          </section>
         </div>
-        {/* --- PHYSICAL REPORT END --- */}
       </div>
 
-      {/* Success Dialog */}
-      <Dialog open={showExportOptions} onOpenChange={setShowExportOptions}>
-        <DialogContent className="max-w-md rounded-[40px] p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-zinc-950 p-10 text-center text-white space-y-6">
-            <div className="w-20 h-20 rounded-full bg-emerald-500 mx-auto flex items-center justify-center shadow-[0_0_40px_rgba(16,185,129,0.3)]">
-              <CheckCircle2 className="w-10 h-10 stroke-[3px]" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter">Report Finalized</h2>
-              <p className="text-zinc-400 font-bold uppercase text-[10px] tracking-widest leading-relaxed">
-                Progress evaluation for {client.firstName} has been stored securely in their digital profile.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 pt-4">
-              <Button onClick={handlePrint} className="h-14 rounded-2xl font-black uppercase italic tracking-widest gap-2 bg-white text-zinc-950 hover:bg-zinc-200">
-                <Printer className="w-5 h-5" /> Print Physical Copy
-              </Button>
-              {client.email && (
-                <Button onClick={handleEmail} variant="outline" className="h-14 rounded-2xl font-black uppercase italic tracking-widest gap-2 bg-transparent border-2 border-white/20 text-white hover:bg-white/5">
-                  <Mail className="w-5 h-5" /> Email Digital PDF
-                </Button>
-              )}
-              <Button variant="ghost" onClick={onBack} className="h-12 rounded-2xl font-black uppercase text-[10px] tracking-[0.3em] text-zinc-500 hover:text-white">
-                Back to Profile
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      {/* Machine Selection Dialog */}
+      {/* Machine Selection Overlay */}
       <Dialog open={selectingHighlightIdx !== null} onOpenChange={() => setSelectingHighlightIdx(null)}>
-        <DialogContent className="max-w-md rounded-[40px] p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[80vh]">
-          <DialogHeader className="bg-primary p-8 text-white shrink-0">
-            <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Select Highlighted Movement</DialogTitle>
-            <DialogDescription className="text-white/60 font-bold uppercase text-[10px] tracking-widest">
-              Choose the machine to display in slot #{selectingHighlightIdx !== null ? selectingHighlightIdx + 1 : ''}
-            </DialogDescription>
+        <DialogContent className="max-w-2xl rounded-[40px] p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[85vh]">
+          <DialogHeader className="bg-[#0A2E46] p-8 text-white shrink-0">
+            <DialogTitle className="text-3xl font-black uppercase italic tracking-tighter">Select Highlight Unit</DialogTitle>
+            <DialogDescription className="text-white/40 font-bold uppercase text-[10px] tracking-widest"> Choose a machine to feature in slot #{selectingHighlightIdx !== null ? selectingHighlightIdx + 1 : ''} </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50">
             {machines.map((m) => {
               const history = machineHistory[m.id!];
-              
               return (
                 <button
                   key={m.id}
                   onClick={() => handleMachineSelect(m)}
-                  className="w-full flex items-center justify-between p-4 rounded-3xl hover:bg-muted transition-all text-left border-2 border-transparent hover:border-primary/20 group"
+                  className="flex items-center justify-between p- aggregation-4 p-5 rounded-[30px] bg-white border-2 border-transparent hover:border-[#F06C22] transition-all text-left shadow-sm hover:shadow-md group"
                 >
                   <div>
-                    <p className="font-black uppercase italic tracking-tight">{m.name}</p>
-                    <p className="text-[9px] font-bold text-muted-foreground uppercase">{m.order} • Standard Protocol</p>
+                    <p className="font-black uppercase italic tracking-tight text-[#0A2E46] group-hover:text-[#F06C22] transition-colors">{m.name}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{m.order} • Standard Protocol</p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    {history && (
-                      <div className="text-right">
-                        <div className="flex items-center gap-1 justify-end">
-                          <Zap className="w-3 h-3 text-primary" />
-                          <p className="text-xs font-black italic">{history.currentWeight} lbs</p>
-                        </div>
-                        <p className="text-[9px] font-bold text-muted-foreground uppercase">
-                          {history.currentReps} reps • Q{history.currentQuality}
-                        </p>
-                      </div>
-                    )}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </div>
+                  {history && (
+                    <div className="text-right">
+                      <p className="text-[14px] font-black italic text-[#0A2E46] leading-none mb-1">{history.currentWeight} lbs</p>
+                      <p className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Current Max</p>
+                    </div>
+                  )}
                 </button>
               );
             })}
