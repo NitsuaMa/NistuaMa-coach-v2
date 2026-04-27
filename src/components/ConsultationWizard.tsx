@@ -137,6 +137,10 @@ export function ConsultationWizard({ client, machines, authTrainer, trainers, on
     setRoutine(newRoutine);
   };
 
+  if (!client) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col bg-[#0A2E46] min-h-screen text-white">
       {/* Header */}
