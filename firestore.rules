@@ -81,6 +81,12 @@ service cloud.firestore {
              data.height is string &&
              data.isActive is bool &&
              data.remainingSessions is number && data.remainingSessions >= 0 &&
+             (!('age' in data) || data.age is number) &&
+             (!('occupation' in data) || data.occupation is string) &&
+             (!('medicalHistory' in data) || data.medicalHistory is string) &&
+             (!('activity' in data) || data.activity is string) &&
+             (!('goals' in data) || data.goals is string) &&
+             (!('completedSessions' in data) || data.completedSessions is number) &&
              (!('globalNotes' in data) || (data.globalNotes is string && data.globalNotes.size() < 2000));
     }
 

@@ -1,51 +1,67 @@
 export type Gender = 'Male' | 'Female';
-export type AgeGroup = '<40' | '40-60' | '60+';
 export type SkillLevel = 'Novice' | 'Intermediate' | 'Advanced';
 export type MachineSelection = 'Leg Press' | 'Chest Press' | 'Seated Dip' | 'Lumbar';
+
+// Exercise categories based on the Exercise Selection Template
+export type ExerciseCategory = 
+  | 'Upper Body - Push'
+  | 'Upper Body - Pull'
+  | 'Lower Body'
+  | 'Trunk/Spine/Core'
+  | 'Hips';
+
+export interface MachineData {
+  category: ExerciseCategory;
+  baseMale: number;
+  baseFemale: number;
+}
+
+export const MACHINE_DICTIONARY: Record<string, MachineData> = {
+  "CX (4 way neck)": { category: "Trunk/Spine/Core", baseMale: 30, baseFemale: 20 },
+  "Hip Adduction": { category: "Hips", baseMale: 60, baseFemale: 50 },
+  "Hip Abduction": { category: "Hips", baseMale: 60, baseFemale: 50 },
+  "Leg Curl": { category: "Lower Body", baseMale: 60, baseFemale: 40 },
+  "Leg Extension": { category: "Lower Body", baseMale: 60, baseFemale: 40 },
+  "Leg Press": { category: "Lower Body", baseMale: 100, baseFemale: 60 },
+  "Pulldown": { category: "Upper Body - Pull", baseMale: 70, baseFemale: 50 },
+  "Chest Press": { category: "Upper Body - Push", baseMale: 50, baseFemale: 30 },
+  "Compound Row": { category: "Upper Body - Pull", baseMale: 60, baseFemale: 40 },
+  "Simple Row": { category: "Upper Body - Pull", baseMale: 60, baseFemale: 40 },
+  "Overhead Press": { category: "Upper Body - Push", baseMale: 40, baseFemale: 20 },
+  "Seated Pullover": { category: "Upper Body - Pull", baseMale: 60, baseFemale: 40 },
+  "Seated Dip": { category: "Upper Body - Push", baseMale: 60, baseFemale: 40 },
+  "Tricep Extension": { category: "Upper Body - Push", baseMale: 40, baseFemale: 25 },
+  "Bicep": { category: "Upper Body - Pull", baseMale: 40, baseFemale: 25 },
+  "Chest/Pec Fly": { category: "Upper Body - Push", baseMale: 50, baseFemale: 30 },
+  "Lateral Raise": { category: "Upper Body - Push", baseMale: 30, baseFemale: 15 },
+  "Lumbar": { category: "Trunk/Spine/Core", baseMale: 40, baseFemale: 30 },
+  "Seated Abdominals": { category: "Trunk/Spine/Core", baseMale: 50, baseFemale: 30 },
+  "Torso Rotation": { category: "Trunk/Spine/Core", baseMale: 40, baseFemale: 30 },
+};
 
 /**
  * Calculates the suggested starting weight for a client based on MSF baseline metrics.
  * 
- * Base Weights (Male): Leg Press (100 lbs), Chest Press (50 lbs), Lumbar (40 lbs).
- * Base Weights (Female): Leg Press (60 lbs), Seated Dip (40 lbs), Lumbar (30 lbs).
  * Age Multipliers: Under 40 (x1.2), 40-60 (x1.0), Over 60 (x0.8).
  * Skill Multipliers: Advanced (x1.3), Intermediate (x1.0), Novice (x0.8).
  * 
  * @returns The calculated weight rounded to the nearest 2 lbs (even number)
  */
 export function calculateStartingWeight(
-  machine: string,
+  machineName: string,
   gender: Gender,
-  ageGroup: AgeGroup,
+  age: number,
   skillLevel: SkillLevel
 ): number {
-  let baseWeight = 0;
+  const data = MACHINE_DICTIONARY[machineName];
+  if (!data) return 0; // fallback if machine not found
 
-  if (gender === 'Male') {
-    switch (machine) {
-      case 'Leg Press': baseWeight = 100; break;
-      case 'Chest Press': baseWeight = 50; break;
-      case 'Lumbar': baseWeight = 40; break;
-      case 'Seated Dip': baseWeight = 0; break; // Not typically in Male baseline
-    }
-  } else {
-    switch (machine) {
-      case 'Leg Press': baseWeight = 60; break;
-      case 'Seated Dip': baseWeight = 40; break;
-      case 'Lumbar': baseWeight = 30; break;
-      case 'Chest Press': baseWeight = 0; break; // Not typically in Female baseline
-    }
-  }
-
-  if (baseWeight === 0) return 0;
+  let baseWeight = gender === 'Female' ? data.baseFemale : data.baseMale;
 
   let ageMultiplier = 1.0;
-  switch (ageGroup) {
-    case '<40': ageMultiplier = 1.2; break;
-    case '40-60': ageMultiplier = 1.0; break;
-    case '60+': ageMultiplier = 0.8; break;
-  }
-
+  if (age < 40) ageMultiplier = 1.2;
+  else if (age > 60) ageMultiplier = 0.8;
+  
   let skillMultiplier = 1.0;
   switch (skillLevel) {
     case 'Novice': skillMultiplier = 0.8; break;

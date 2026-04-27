@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { calculateStartingWeight, Gender, AgeGroup, SkillLevel, MachineSelection } from '../lib/consultation-utils';
+import { calculateStartingWeight, Gender, SkillLevel, MachineSelection } from '../lib/consultation-utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Info, Play, FileText, ChevronRight, User, Stethoscope, Mail, Phone, X } from 'lucide-react';
@@ -26,7 +26,7 @@ export function NewClientOnboardingFlow({ initialName = '', onComplete, onCancel
 
   // Step 2: Clinical Intake
   const [gender, setGender] = useState<Gender>('Male');
-  const [ageGroup, setAgeGroup] = useState<AgeGroup>('40-60');
+  const [age, setAge] = useState<number>(40);
   const [skillLevel, setSkillLevel] = useState<SkillLevel>('Novice');
   const [concerns, setConcerns] = useState('');
 
@@ -65,7 +65,7 @@ export function NewClientOnboardingFlow({ initialName = '', onComplete, onCancel
     
     const routineData = {
       gender,
-      ageGroup,
+      age,
       skillLevel,
       routine
     };
@@ -164,21 +164,15 @@ export function NewClientOnboardingFlow({ initialName = '', onComplete, onCancel
             </div>
 
             <div className="space-y-4">
-              <label className="text-[11px] font-bold uppercase tracking-widest text-[#94A3B8]">Age Group</label>
-              <div className="flex gap-3">
-                {(['<40', '40-60', '60+'] as AgeGroup[]).map(a => (
-                  <button
-                    key={a}
-                    onClick={() => setAgeGroup(a)}
-                    className={`flex-1 py-5 px-3 rounded-2xl font-black uppercase tracking-tight transition-all duration-200 border-2 ${
-                      ageGroup === a 
-                        ? 'bg-[#115E8D] text-white border-[#115E8D] shadow-[0_0_20px_rgba(17,94,141,0.4)] scale-105' 
-                        : 'bg-transparent text-[#94A3B8] border-white/10 hover:border-white/30 hover:bg-white/5'
-                    }`}
-                  >
-                    {a}
-                  </button>
-                ))}
+              <label className="text-[11px] font-bold uppercase tracking-widest text-[#94A3B8]">How old are you?</label>
+              <div className="flex bg-black/20 border-2 border-white/10 rounded-2xl items-center focus-within:border-[#38BDF8] transition-colors relative h-[68px]">
+                <input 
+                  type="number" 
+                  value={age || ''} 
+                  onChange={e => setAge(parseInt(e.target.value) || 0)} 
+                  className="bg-transparent w-full h-full text-white text-2xl font-black px-6 outline-none"
+                  placeholder="e.g. 45"
+                />
               </div>
             </div>
 
@@ -222,7 +216,7 @@ export function NewClientOnboardingFlow({ initialName = '', onComplete, onCancel
 
           <div className="space-y-4">
             {routine.map((machine, idx) => {
-              const weight = calculateStartingWeight(machine.name, gender, ageGroup, skillLevel);
+              const weight = calculateStartingWeight(machine.name, gender, age, skillLevel);
               
               return (
                 <Card key={idx} className="bg-[#F8FAFC] border-none shadow-2xl overflow-hidden rounded-[24px]">
