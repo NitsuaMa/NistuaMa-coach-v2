@@ -90,6 +90,7 @@ import { ConsultationSetupWizard } from './components/ConsultationSetupWizard';
 import { ConsultationWizard } from './components/ConsultationWizard';
 import { CreateClientModal } from './components/CreateClientModal';
 import { ClientProgressReportView } from './components/ClientProgressReportView';
+import { MachineKnowledgeDashboard } from './components/MachineKnowledgeDashboard';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -961,6 +962,9 @@ export default function App() {
                 setSelectedSessionId={setSelectedSessionId}
               />
             )}
+            {currentView === 'machine-knowledge' && (
+              <MachineKnowledgeDashboard />
+            )}
             {currentView === 'machines' && (
               <MachinesView 
                 machines={machines} 
@@ -1107,10 +1111,10 @@ export default function App() {
             activeIndicator={currentSession ? 'bg-[#F06C22]' : undefined}
           />
           <NavButton 
-            active={currentView === 'machines'} 
-            onClick={() => setCurrentView('machines')}
+            active={currentView === 'machine-knowledge'} 
+            onClick={() => setCurrentView('machine-knowledge')}
             icon={<Dumbbell className="w-6 h-6" />}
-            label="Machines"
+            label="Catalog"
           />
           <NavButton 
             active={currentView === 'calendar'} 

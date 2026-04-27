@@ -109,8 +109,8 @@ export function ConsultationWizard({ client, machines, authTrainer, trainers, on
         sessionId: sessionRef.id,
         clientId: client.id,
         trainerId: authTrainer?.id || '',
-        date: new Date().toLocaleDateString(),
-        note: `Demo Consultation. Age: ${age}, Skill: ${skillLevel}. Goals: ${goals}`,
+        trainerInitials: trainerInitials,
+        content: `Demo Consultation. Age: ${age}, Skill: ${skillLevel}. Goals: ${goals}`,
         createdAt: serverTimestamp()
       });
 
