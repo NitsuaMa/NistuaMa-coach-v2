@@ -79,41 +79,38 @@ export function MachineKnowledgeDashboard() {
                   </div>
                 </div>
 
-                {/* Metadata Section */}
-                <div className="p-6 flex flex-col flex-1 z-20 bg-gradient-to-b from-[#0e171e] to-[#0A2E46]/80">
-                  <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-white mb-4 group-hover:text-[#38BDF8] transition-colors line-clamp-2">
+                {/* Metadata Section (Expert Focus) */}
+                <div className="p-6 flex flex-col flex-1 z-20 bg-gradient-to-b from-[#0e171e] to-[#0A2E46]/80 text-[#F8F9FA]">
+                  <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter mb-1 transition-colors line-clamp-1">
                     {machine.name}
                   </h3>
                   
-                  <div className="space-y-3 mb-6 flex-1">
-                    <div className="flex items-start justify-between border-b border-white/5 pb-2">
-                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#68717A] shrink-0 mt-0.5">Target</span>
-                       <span className="text-xs font-semibold text-white/80 text-right line-clamp-1" title={machine.targetMuscles ? machine.targetMuscles.join(', ') : machine.target}>
-                         {machine.targetMuscles ? machine.targetMuscles.join(', ') : machine.target || 'General Base'}
+                  {/* Highlighted Target Muscles */}
+                  <p className="text-[#F06C22] text-sm font-black uppercase tracking-widest mb-5 line-clamp-1">
+                    {machine.target || 'General Base'}
+                  </p>
+                  
+                  {/* Quick-Cue Data Grid */}
+                  <div className="grid grid-cols-1 gap-2 mb-6 flex-1">
+                    <div className="bg-white/5 border border-white/10 rounded-md p-3">
+                       <span className="block text-[9px] font-black uppercase tracking-widest text-[#68717A] mb-1">Setup</span>
+                       <span className="block text-xs font-semibold text-[#F8F9FA] line-clamp-2 leading-snug">
+                         {machine.setup}
                        </span>
                     </div>
-                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#68717A]">Mechanics</span>
-                       <span className="text-xs font-semibold text-white/80">
-                         {machine.category.includes('Push') ? 'Push' : machine.category.includes('Pull') ? 'Pull' : machine.category.includes('Lower') ? 'Press' : 'Isolation'}
-                       </span>
-                    </div>
-                    <div className="flex items-center justify-between pb-2">
-                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#68717A]">Protocol</span>
-                       <span className="text-[9px] font-black uppercase tracking-widest text-[#F06C22] bg-[#F06C22]/10 px-2 py-0.5 rounded border border-[#F06C22]/20">
-                         SuperSlow / HIT
+                    <div className="bg-white/5 border border-white/10 rounded-md p-3">
+                       <span className="block text-[9px] font-black uppercase tracking-widest text-[#68717A] mb-1">Turnarounds & Execution</span>
+                       <span className="block text-xs font-semibold text-[#F8F9FA] line-clamp-2 leading-snug">
+                         {machine.execution}
                        </span>
                     </div>
                   </div>
                   
-                  {/* Interactive Button Area */}
-                  <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between text-[#94A3B8] group-hover:text-white transition-colors">
-                     <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest">
-                        View Biomechanical Details
-                     </span>
-                     <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-[#38BDF8] group-hover:text-[#0A2E46] transition-colors border border-white/10 group-hover:border-[#38BDF8]">
-                        <ChevronRight className="w-4 h-4" />
-                     </div>
+                  {/* Sleek Interaction Button */}
+                  <div className="mt-auto">
+                     <Button variant="ghost" className="w-full bg-white/5 hover:bg-white/10 text-[#CBD5E1] hover:text-white border border-white/10 hover:border-white/20 transition-all text-[10px] font-black uppercase tracking-widest h-10 rounded-lg">
+                        Detailed Insights
+                     </Button>
                   </div>
                 </div>
               </div>

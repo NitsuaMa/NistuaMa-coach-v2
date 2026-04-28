@@ -5276,14 +5276,7 @@ function WorkoutTrackerView({
     const totalSessionsCount = sessions.length;
     const hasRoutines = routines.length > 0;
     
-    // Explicit opt-in via requiresConsultation
-    const requiresConsultation = selectedClient.requiresConsultation === true;
-    
-    // Safety Net zero-history detection (only if consultationCompleted is explicitly false)
-    const zeroHistoryAndNotCompleted = completedSessionsCount === 0 && totalSessionsCount === 0 && selectedClient.consultationCompleted === false;
-
-    // Trigger wizard if explicitly required or (zero history and not specifically marked completed)
-    const shouldShowWizard = requiresConsultation || zeroHistoryAndNotCompleted;
+    const shouldShowWizard = selectedClient.requiresConsultation === true && selectedClient.consultationCompleted === false;
 
     if (shouldShowWizard) {
       return (
