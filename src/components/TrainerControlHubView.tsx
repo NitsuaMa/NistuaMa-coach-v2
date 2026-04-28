@@ -277,6 +277,7 @@ export function TrainerControlHubView({
                 height: row['Height'] || 'N/A',
                 isActive: true,
                 remainingSessions: 0,
+                consultationCompleted: true,
                 globalNotes: row['Client Notes'] || '',
                 createdAt: serverTimestamp()
               });

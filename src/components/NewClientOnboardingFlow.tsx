@@ -60,6 +60,7 @@ export function NewClientOnboardingFlow({ initialName = '', onComplete, onCancel
       isActive: true,
       remainingSessions: 0,
       completedSessions: 0,
+      consultationCompleted: true,
       medicalHistory: concerns,
     };
     

@@ -44,6 +44,7 @@ export interface Client {
   legacy_filemaker_id?: string;
   mindbody_name?: string;
   completedSessions?: number;
+  consultationCompleted?: boolean;
   createdAt?: any;
 }
 

@@ -148,16 +148,26 @@ export function ConsultationSetupWizard({ clientName, onComplete, onCancel }: Co
       </div>
       
       {/* Bottom Fixed Action */}
-      <div className="fixed bottom-0 left-0 right-0 p-8 pt-16 bg-gradient-to-t from-[#0A2E46] via-[#0A2E46] to-transparent pointer-events-none flex justify-between items-end">
-        {onCancel ? (
+      <div className="fixed bottom-0 left-0 right-0 p-8 pt-16 bg-gradient-to-t from-[#0A2E46] via-[#0A2E46] to-transparent pointer-events-none flex justify-between items-end gap-4">
+        <div className="flex gap-4 pointer-events-auto">
+          {onCancel && (
+            <Button 
+              variant="ghost" 
+              onClick={onCancel}
+              className="text-[#94A3B8] hover:text-white hover:bg-white/10 font-bold uppercase tracking-widest text-sm"
+            >
+              Cancel
+            </Button>
+          )}
           <Button 
-            variant="ghost" 
-            onClick={onCancel}
-            className="text-[#94A3B8] hover:text-white hover:bg-white/10 font-bold uppercase tracking-widest text-sm pointer-events-auto"
+            variant="ghost"
+            onClick={() => onComplete({ gender, age, skillLevel, routine: [] })}
+            className="text-[#F06C22] hover:bg-[#F06C22]/10 font-black uppercase tracking-widest text-sm px-6 rounded-xl border-2 border-[#F06C22]/30 flex flex-col items-center py-2 h-auto"
           >
-            Cancel
+            <span className="leading-none">Skip Setup</span>
+            <span className="text-[8px] opacity-60 font-bold">Manual Profile</span>
           </Button>
-        ) : <div />}
+        </div>
         <Button 
           onClick={() => onComplete({ gender, age, skillLevel, routine })}
           className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase tracking-widest text-lg h-20 px-12 rounded-2xl shadow-[0_10px_40px_rgba(240,108,34,0.4)] pointer-events-auto items-center flex gap-3"

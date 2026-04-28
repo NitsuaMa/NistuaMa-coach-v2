@@ -122,7 +122,8 @@ export function ClientProfileView({
         emergencyContactPhone: client.emergencyContactPhone || '',
         globalNotes: client.globalNotes || '',
         isActive: client.isActive ?? true,
-        isRoutineBActive: client.isRoutineBActive ?? false
+        isRoutineBActive: client.isRoutineBActive ?? false,
+        consultationCompleted: client.consultationCompleted ?? false
       });
     }
   }, [client]);
@@ -1288,6 +1289,13 @@ export function ClientProfileView({
                       <div className="flex items-center justify-between">
                          <Label className="text-[10px] font-black uppercase tracking-widest">Enable Routine B</Label>
                          <Switch checked={infoForm.isRoutineBActive} onCheckedChange={v => setInfoForm(f => ({ ...f, isRoutineBActive: v }))} className="data-[state=checked]:bg-amber-500" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                         <div>
+                           <Label className="text-[10px] font-black uppercase tracking-widest">Initial Consult</Label>
+                           <p className="text-[8px] font-bold opacity-40 uppercase tracking-tighter mt-0.5">Bypass Demo Screen</p>
+                         </div>
+                         <Switch checked={infoForm.consultationCompleted} onCheckedChange={v => setInfoForm(f => ({ ...f, consultationCompleted: v }))} className="data-[state=checked]:bg-[#F06C22]" />
                       </div>
                       <div className="pt-6 border-t border-white/10 mt-6 pb-2">
                          <Button 

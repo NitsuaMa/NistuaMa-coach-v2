@@ -10,6 +10,8 @@ import { auth, googleProvider, signInWithPopup } from '../firebase';
 import { signOut } from 'firebase/auth';
 import axios from 'axios';
 
+import { MaxStrengthLogo } from './MaxStrengthLogo';
+
 interface PinLoginViewProps {
   trainers: Trainer[];
   user: any;
@@ -50,12 +52,9 @@ export function PinLoginView({ trainers, user, onLogin, isLoading: initialLoadin
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-md"
       >
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary/10 mb-6 relative">
-            <Users className="w-10 h-10 text-primary" />
-          </div>
-          <h1 className="text-4xl font-black tracking-tighter uppercase italic">Training Hub</h1>
-          <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs mt-2">
+        <div className="text-center mb-12 flex flex-col items-center">
+          <MaxStrengthLogo size="xl" className="mb-8" />
+          <p className="text-muted-foreground font-bold uppercase tracking-widest text-[10px] mt-2 opacity-50">
             Select your name to start training
           </p>
         </div>

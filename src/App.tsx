@@ -91,6 +91,7 @@ import { ConsultationWizard } from './components/ConsultationWizard';
 import { CreateClientModal } from './components/CreateClientModal';
 import { ClientProgressReportView } from './components/ClientProgressReportView';
 import { MachineKnowledgeDashboard } from './components/MachineKnowledgeDashboard';
+import { MaxStrengthLogo } from './components/MaxStrengthLogo';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -151,6 +152,7 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [selectedProfileTrainerId, setSelectedProfileTrainerId] = useState<string | null>(null);
   const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [machines, setMachines] = useState<Machine[]>(DEFAULT_MACHINES);
@@ -442,6 +444,7 @@ export default function App() {
         isActive: true,
         isRoutineBActive: true,
         remainingSessions: 12,
+        consultationCompleted: true,
         email: `john.demo.${Date.now()}@example.com`,
         createdAt: serverTimestamp()
       });
@@ -742,8 +745,13 @@ export default function App() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        // Ignore this error, it's normal if the user closes the popup
+        return;
+      }
       console.error("Login failed:", error);
+      alert(`Login failed: ${error.message}`);
     }
   };
 
@@ -800,29 +808,60 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background p-6">
-        <Card className="w-full max-w-md border-none shadow-2xl bg-card/50 backdrop-blur-sm">
-          <CardHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-2">
-              <ShieldCheck className="w-10 h-10 text-primary" />
-            </div>
-            <CardTitle className="text-3xl font-bold tracking-tight">Max Strength Facility</CardTitle>
-            <CardDescription className="text-base">
-              Authorized personnel only. Please sign in to activate this station.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              onClick={handleLogin} 
-              className="w-full h-14 text-lg font-semibold shadow-lg hover:shadow-primary/20 transition-all"
+      <div className="min-h-screen bg-[#1c1d1f] flex flex-col items-center justify-center p-6 focus:outline-none relative overflow-hidden">
+        {/* Background Radial Glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#40382d] via-[#1c1d1f] to-[#121212] opacity-80"></div>
+        {/* Pattern Overlay */}
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/hexellence.png')] opacity-10 mix-blend-overlay"></div>
+        {/* Edge Shadow */}
+        <div className="absolute inset-0 shadow-[inset_0_0_120px_rgba(0,0,0,0.8)] pointer-events-none"></div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="w-full max-w-lg z-10 flex flex-col items-center justify-center min-h-[60vh]"
+        >
+          <div className="flex flex-col items-center text-center">
+            <MaxStrengthLogo size="xl" theme="dark" className="drop-shadow-2xl" />
+            
+            <h2 className="text-[#a6a6a6] font-medium tracking-[0.2em] text-lg mt-8 uppercase drop-shadow">
+              Solon Studio
+            </h2>
+          </div>
+
+          <div className="mt-24 w-full flex justify-center">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleLogin}
+              className="relative overflow-hidden group w-full max-w-[320px] rounded-[40px] p-[2px] shadow-[0_15px_30px_rgba(0,0,0,0.5)]"
             >
-              Sign in with Google
-            </Button>
-          </CardContent>
-          <CardFooter className="justify-center">
-            <p className="text-xs text-muted-foreground">Master/Admin login required</p>
-          </CardFooter>
-        </Card>
+              {/* Outer Metallic Ring */}
+              <div className="absolute inset-0 bg-gradient-to-b from-[#8b9bb4] via-[#33465e] to-[#1a2b41] rounded-[40px]"></div>
+              {/* Inner highlight */}
+              <div className="absolute inset-[1px] bg-gradient-to-b from-white/30 to-transparent rounded-[39px]"></div>
+              
+              <div className="relative bg-[#1d2736]/90 px-8 py-5 rounded-[38px] flex flex-col items-center justify-center gap-2 w-full h-full shadow-[inset_0_2px_15px_rgba(0,0,0,0.8)] backdrop-blur-md">
+                <span className="font-bold text-white/90 text-sm tracking-widest uppercase">
+                  Sign in with Google
+                </span>
+                <svg className="w-7 h-7 text-white/90" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+              </div>
+            </motion.button>
+          </div>
+        </motion.div>
+
+        <div className="absolute bottom-6 w-full text-center z-10 px-6">
+          <p className="text-white/30 text-xs tracking-wider uppercase font-medium">
+            Master/Admin Credentials Required for Administrative Portal Access
+          </p>
+        </div>
       </div>
     );
   }
@@ -858,11 +897,12 @@ export default function App() {
         {/* Header */}
         {currentView !== 'workouts' && (
           <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md px-6 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-primary-foreground" />
+            <div className="flex items-center -ml-2">
+              <MaxStrengthLogo size="sm" showText={false} className="scale-[0.8] origin-left" />
+              <div className="flex flex-col ml-1.5 leading-none">
+                <span className="text-[10px] font-black uppercase text-[#68717A] tracking-[0.2em]">Strength</span>
+                <span className="text-[12px] font-bold text-[#004D8C] uppercase tracking-[0.3em]">Fitness</span>
               </div>
-              <h1 className="font-bold text-xl tracking-tight hidden sm:block">Max Strength</h1>
             </div>
             
             <div className="flex items-center gap-4">
@@ -887,7 +927,10 @@ export default function App() {
                       Active Profile
                     </DropdownMenuLabel>
                     <DropdownMenuItem 
-                      onClick={() => setCurrentView('trainer-profile')}
+                      onClick={() => {
+                        setSelectedProfileTrainerId(null);
+                        setCurrentView('trainer-profile');
+                      }}
                       className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer"
                     >
                       <UserCircle className="w-4 h-4 text-primary" />
@@ -1039,6 +1082,10 @@ export default function App() {
                 startEdit={startEditClient}
                 updateSessions={updateClientSessions}
                 setSelectedSessionId={setSelectedSessionId}
+                onSelectTrainer={(id) => {
+                  setSelectedProfileTrainerId(id);
+                  setCurrentView('trainer-profile');
+                }}
               />
             )}
             {currentView === 'machine-knowledge' && (
@@ -1112,9 +1159,9 @@ export default function App() {
                 }}
               />
             )}
-            {currentView === 'trainer-profile' && authTrainer && (
+            {currentView === 'trainer-profile' && (selectedProfileTrainerId ? trainers.find(t => t.id === selectedProfileTrainerId) : authTrainer) && (
               <TrainerProfileView 
-                trainer={authTrainer}
+                trainer={(selectedProfileTrainerId ? trainers.find(t => t.id === selectedProfileTrainerId) : authTrainer)!}
                 schedules={schedules}
                 sessions={sessions}
                 clients={clients}
@@ -2360,7 +2407,8 @@ function ClientsView({
   onSubmit,
   startEdit,
   updateSessions,
-  setSelectedSessionId
+  setSelectedSessionId,
+  onSelectTrainer
 }: { 
   clients: Client[], 
   trainers: Trainer[],
@@ -2380,15 +2428,24 @@ function ClientsView({
   onSubmit: (e: React.FormEvent) => void,
   startEdit: (c: Client) => void,
   updateSessions: (id: string, current: number, delta: number) => void,
-  setSelectedSessionId: (id: string | null) => void
+  setSelectedSessionId: (id: string | null) => void,
+  onSelectTrainer?: (id: string) => void
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [trainerFilter, setTrainerFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'morning' | 'afternoon'>('morning');
+  const [activeTab, setActiveTab] = useState<'morning' | 'afternoon'>(() => {
+    return new Date().getHours() >= 12 ? 'afternoon' : 'morning';
+  });
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [linkingSession, setLinkingSession] = useState<any | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [searchTermLink, setSearchTermLink] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const filteredClients = clients.filter(c => 
     `${c.firstName} ${c.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
@@ -2503,20 +2560,13 @@ function ClientsView({
       exit={{ opacity: 0, y: -20 }}
       className="space-y-8"
     >
-      <div className="flex flex-col gap-6 sticky top-0 bg-background/95 backdrop-blur-md pt-2 pb-4 z-30">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight uppercase text-secondary">Dashboard</h2>
-            <p className="text-xs text-secondary/80 font-medium uppercase tracking-widest">Active Session Management</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sticky top-0 bg-background/95 backdrop-blur-md pt-2 pb-3 z-30">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input 
               placeholder="Search clients..." 
-              className="pl-12 h-14 rounded-2xl bg-muted/50 border-none font-bold text-lg"
+              className="pl-12 h-12 rounded-2xl bg-muted/50 border-none font-bold text-base"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -2530,9 +2580,9 @@ function ClientsView({
               }
             }} 
             size="lg" 
-            className="rounded-xl h-14 px-8 shadow-md bg-primary text-primary-foreground font-bold w-full sm:w-auto uppercase"
+            className="rounded-xl h-12 px-8 shadow-md bg-primary text-primary-foreground font-bold w-full sm:w-auto uppercase text-sm"
           >
-            <Plus className="w-5 h-5 mr-2" />
+            <Plus className="w-4 h-4 mr-2" />
             Add New Client
           </Button>
         </div>
@@ -2837,14 +2887,20 @@ function ClientsView({
                      const sessionCount = todaysSchedules.filter(s => s.trainerName === trainer.fullName).length;
                      if (sessionCount === 0) return null;
                      return (
-                       <div key={trainer.id} className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-full pl-1 pr-4 py-1 hover:bg-primary/10 transition-colors">
+                       <button 
+                         key={trainer.id} 
+                         onClick={() => {
+                           if (onSelectTrainer) onSelectTrainer(trainer.id!);
+                         }}
+                         className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-full pl-1 pr-4 py-1 hover:bg-primary/10 transition-colors cursor-pointer"
+                       >
                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-black text-primary">
                            {trainer.initials}
                          </div>
                          <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">
                            {trainer.fullName.split(' ')[0]} <span className="text-primary/60 ml-0.5">- {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}</span>
                          </span>
-                       </div>
+                       </button>
                      );
                    })}
                    {todaysSchedules.filter(s => s.trainerName === '' || !s.trainerName || s.trainerName.toLowerCase().includes('select')).length > 0 && (
@@ -2861,140 +2917,193 @@ function ClientsView({
               </div>
 
               {/* Team Comparison Grid */}
-              <div className="bg-card border-2 rounded-3xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse table-fixed min-w-[600px]">
-                    <thead>
-                      <tr className="bg-muted/30 border-b">
-                        <th className="p-1.5 pl-4 text-[9px] font-black uppercase tracking-widest text-muted-foreground w-16">Time</th>
-                        {hasUnassignedAnywhereInGrid && (
-                          <th className="p-1.5 text-[9px] font-black uppercase tracking-widest text-center w-36 border-l border-red-500/10 bg-red-500/5 text-red-600">
-                            Unassigned
-                          </th>
-                        )}
-                        {allTrainerNames.map(name => (
-                          <th key={name} className="p-1.5 text-[9px] font-black uppercase tracking-widest text-center w-36 border-l border-border/10">
+              <div className="bg-card border-2 rounded-3xl overflow-hidden shadow-sm flex flex-col relative w-full h-[65vh]">
+                {/* Header Row (Sticky) */}
+                <div className="flex bg-muted/30 border-b border-border/20 z-20 shrink-0 shadow-sm sticky top-0">
+                  <div className="w-16 shrink-0 border-r border-border/10 flex items-center justify-center p-2 bg-muted/50">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Time</span>
+                  </div>
+                  <div className="flex-1 overflow-hidden" id="grid-header-scroll">
+                    <div className="flex min-w-max">
+                      {hasUnassignedAnywhereInGrid && (
+                        <div className="w-40 shrink-0 p-3 border-r border-red-500/10 bg-red-500/5 text-center flex items-center justify-center">
+                          <span className="text-[11px] font-black uppercase tracking-widest text-red-600 opacity-90">Unassigned</span>
+                        </div>
+                      )}
+                      {allTrainerNames.map(name => (
+                        <div key={name} className="w-40 shrink-0 p-3 border-r border-border/10 text-center flex items-center justify-center">
+                          <span className="text-[11px] font-black uppercase tracking-widest text-foreground text-ellipsis overflow-hidden whitespace-nowrap opacity-90">
                             {name.split(' ')[0]}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/20">
-                      {currentSlots.map((slot) => {
-                        const slotSessions = getSlotSessions(slot);
-                        const isNow = slot === now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                        
-                        const unassigned = slotSessions.filter(s => 
-                          !s.trainerName || 
-                          s.trainerName.toLowerCase().includes('select') || 
-                          s.trainerName === ''
-                        );
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-                        return (
-                          <tr key={slot} className={`group ${isNow ? 'bg-primary/5' : ''}`}>
-                            <td className="p-1.5 pl-4 border-r border-border/10">
-                              <span className={`text-[10px] font-black italic tracking-tighter ${isNow ? 'text-primary animate-pulse' : 'text-muted-foreground'}`}>
-                                {slot}
-                              </span>
-                            </td>
-                            
-                            {hasUnassignedAnywhereInGrid && (
-                              <td className="p-1 border-l border-red-500/5 bg-red-500/[0.01]">
-                                <div className="space-y-0.5">
-                                  {unassigned.map(session => {
-                                    const client = findClientForSession(session);
-                                    return (
-                                      <motion.div
-                                        key={session.id}
-                                        whileHover={{ scale: 1.01 }}
-                                        onClick={() => {
-                                          if (client) {
-                                            onSelectClient(client.id!);
-                                            setView('profile');
-                                          } else {
-                                            const isConsultation = session?.serviceName?.toLowerCase().includes('consult') || session?.serviceName?.toLowerCase().includes('first');
-                                            if (isConsultation && onStartNewClientOnboarding) {
-                                              onStartNewClientOnboarding(session.clientName || '');
-                                            } else {
-                                              setLinkingSession(session);
-                                              setIsLinking(true);
-                                            }
-                                          }
-                                        }}
-                                        className={`p-1 rounded-lg border flex flex-col justify-center cursor-pointer transition-all ${
-                                          client ? 'bg-red-500/5 border-red-500/20' : 'bg-red-500/10 border-red-500/40 shadow-sm'
-                                        }`}
-                                      >
-                                        <p className="text-[10px] font-semibold text-secondary truncate leading-tight">{session.clientName}</p>
-                                        {!client && <p className="text-[7px] font-bold text-red-600 uppercase">UNLINKED</p>}
-                                      </motion.div>
-                                    );
-                                  })}
-                                  {unassigned.length === 0 && <div className="h-4" />}
-                                </div>
-                              </td>
-                            )}
+                {/* Body (Scrollable Y and X) */}
+                <div 
+                  className="flex-1 overflow-auto relative flex"
+                  onScroll={(e) => {
+                    const target = e.target as HTMLDivElement;
+                    const header = document.getElementById('grid-header-scroll');
+                    if (header) header.scrollLeft = target.scrollLeft;
+                  }}
+                >
+                  <div className="flex min-w-max relative" style={{ height: `${currentSlots.length * 5}rem` }}>
+                    {/* Time Column (Sticky Left) */}
+                    <div className="w-16 shrink-0 border-r border-border/10 bg-card sticky left-0 z-20 flex flex-col relative">
+                      <div className="h-4 w-full border-b border-transparent" /> {/* Spacer to align with pt-4 */}
+                      {currentSlots.map(slot => (
+                        <div key={slot} className="relative w-full border-b border-border/10" style={{ height: '5rem' }}>
+                          <div className="absolute top-[-0.65rem] right-2 bg-card px-1 rounded">
+                            <span className="text-[11px] font-black italic tracking-tighter text-foreground/80 drop-shadow-sm">
+                              {slot}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
-                            {allTrainerNames.map(trainerName => {
-                              const session = slotSessions.find(s => 
-                                s.trainerName === trainerName && 
-                                s.trainerName && 
-                                !s.trainerName.toLowerCase().includes('select')
-                              );
-                              const isCompleted = session?.status === 'Completed' || (session && session.startTime.toDate() < now);
-                              const isConsultation = session?.serviceName?.toLowerCase().includes('consult') || session?.serviceName?.toLowerCase().includes('first');
-                              const client = findClientForSession(session);
+                    {/* Trainers Columns Wrapper */}
+                    <div className="flex-1 flex relative min-w-max">
+                       <div className="h-4 w-full absolute top-0 left-0 border-b border-transparent pointer-events-none" /> {/* Spacer */}
+                       
+                       {/* Background horizontal lines for time slots */}
+                       <div className="absolute inset-0 top-4 flex flex-col pointer-events-none z-0">
+                         {currentSlots.map((slot, idx) => (
+                           <div key={`bg-${slot}`} className={`w-full border-b border-border/10 border-dashed ${idx % 2 !== 0 ? 'bg-muted/10' : ''}`} style={{ height: '5rem' }} />
+                         ))}
+                       </div>
 
-                              return (
-                                <td key={trainerName} className="p-1 border-l border-border/5">
-                                  {session ? (
-                                    <motion.div
-                                      whileHover={{ y: -0.5 }}
-                                      onClick={() => {
-                                        if (client) {
-                                          onSelectClient(client.id!);
-                                          setView('profile');
+                       {/* Current Time Indicator logic */}
+                       {(() => {
+                         const startHour = activeTab === 'morning' ? 7 : 15;
+                         const dHour = currentTime.getHours();
+                         const endHour = activeTab === 'morning' ? 12.5 : 18.5;
+                         
+                         const totalMins = dHour * 60 + currentTime.getMinutes();
+                         const startMins = startHour * 60;
+                         const endMins = endHour * 60 + 30; // buffer
+                         
+                         if (totalMins >= startMins && totalMins <= endMins) {
+                           const offsetMin = totalMins - startMins;
+                           // 5rem = 80px. 80px per 30 mins means 80/30 = 2.666px per min
+                           const pxOffset = ((offsetMin / 30) * 80) + 16; // Add 16px for the top padding offset
+                           return (
+                             <div 
+                               className="absolute left-0 right-0 h-0.5 bg-[#ff4e00] z-30 pointer-events-none flex items-center drop-shadow-[0_0_8px_rgba(255,78,0,0.8)]"
+                               style={{ top: `${pxOffset}px` }}
+                             >
+                               <div className="absolute -left-14 bg-[#ff4e00] text-white text-[11px] font-black px-2 py-0.5 rounded shadow-[0_0_10px_rgba(255,78,0,0.5)]">
+                                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                               </div>
+                               <div className="w-2.5 h-2.5 rounded-full bg-[#ff4e00] absolute -left-1.5 shadow-[0_0_10px_rgba(255,78,0,0.8)]" />
+                             </div>
+                           );
+                         }
+                         return null;
+                       })()}
+
+                       {hasUnassignedAnywhereInGrid && (
+                          <div className="w-40 shrink-0 border-r border-red-500/10 bg-red-500/[0.01] relative pointer-events-auto">
+                            {todaysSchedules.filter(s => !s.trainerName || s.trainerName.toLowerCase().includes('select') || s.trainerName === '').map(session => {
+                               const offsetMin = (session.startTime.toDate().getHours() * 60 + session.startTime.toDate().getMinutes()) - ((activeTab === 'morning' ? 7 : 15) * 60);
+                               const topPx = ((offsetMin / 30) * 80) + 16; 
+                               const isConsultation = session.serviceName?.toLowerCase().includes('consult') || session.serviceName?.toLowerCase().includes('first');
+                               const heightPx = isConsultation ? 120 : 80; 
+                               const client = findClientForSession(session);
+                               
+                               return (
+                                  <motion.div
+                                    key={session.id}
+                                    whileHover={{ scale: 1.02 }}
+                                    onClick={() => {
+                                      if (client) {
+                                        onSelectClient(client.id!);
+                                        setView('profile');
+                                      } else {
+                                        if (isConsultation && onStartNewClientOnboarding) {
+                                          onStartNewClientOnboarding(session.clientName || '');
                                         } else {
-                                          if (isConsultation) {
-                                            if (onStartNewClientOnboarding) {
-                                              onStartNewClientOnboarding(session.clientName || '');
-                                            }
-                                          } else {
-                                            setLinkingSession(session);
-                                            setIsLinking(true);
-                                          }
+                                          setLinkingSession(session);
+                                          setIsLinking(true);
                                         }
-                                      }}
-                                      className={`p-1 px-2 rounded-lg border transition-all cursor-pointer flex flex-col justify-center min-h-[32px] ${
-                                        isCompleted 
-                                          ? 'bg-muted/20 border-transparent grayscale opacity-40' 
-                                          : isConsultation
-                                            ? 'bg-amber-500/20 border-amber-500/40'
-                                            : client 
-                                              ? 'bg-primary/5 border-primary/10 hover:border-primary/30'
-                                              : 'bg-amber-100/50 border-amber-400/50 shadow-sm animate-pulse'
-                                      }`}
-                                    >
-                                      <div className="flex justify-between items-center gap-1">
-                                        <span className={`text-[10px] font-semibold truncate leading-tight ${!client ? 'text-amber-700' : 'text-secondary'}`}>
+                                      }
+                                    }}
+                                    className={`absolute left-1 right-1 rounded-xl border p-3 flex flex-col justify-center cursor-pointer overflow-hidden transition-all shadow-md z-10 ${
+                                      client ? 'bg-red-950/40 border-l-4 border-l-red-500 hover:brightness-110 border-red-500/20' : 'bg-red-900/60 border-l-4 border-l-red-600 border-red-500/40 opacity-80'
+                                    }`}
+                                    style={{ top: `${topPx}px`, height: `${heightPx - 4}px` }}
+                                  >
+                                    <p className="text-[11px] font-black tracking-wide text-white truncate leading-tight drop-shadow-sm">{session.clientName}</p>
+                                    {!client && <p className="text-[8px] font-bold text-red-200 uppercase mt-1 tracking-widest">UNLINKED</p>}
+                                  </motion.div>
+                               );
+                            })}
+                          </div>
+                       )}
+
+                       {/* Trainer Columns */}
+                       {allTrainerNames.map(trainerName => (
+                          <div key={trainerName} className="w-40 shrink-0 border-r border-border/5 relative z-10 pointer-events-auto">
+                            {todaysSchedules.filter(s => s.trainerName === trainerName).map(session => {
+                               const offsetMin = (session.startTime.toDate().getHours() * 60 + session.startTime.toDate().getMinutes()) - ((activeTab === 'morning' ? 7 : 15) * 60);
+                               const topPx = ((offsetMin / 30) * 80) + 16; 
+                               const isConsultation = session.serviceName?.toLowerCase().includes('consult') || session.serviceName?.toLowerCase().includes('first');
+                               const heightPx = isConsultation ? 120 : 80; 
+                               const client = findClientForSession(session);
+                               const isCompleted = session.status === 'Completed' || session.startTime.toDate() < now;
+
+                               return (
+                                 <motion.div
+                                   key={session.id}
+                                   whileHover={{ y: -1, scale: 1.01 }}
+                                   onClick={() => {
+                                      if (client) {
+                                        onSelectClient(client.id!);
+                                        setView('profile');
+                                      } else {
+                                        if (isConsultation && onStartNewClientOnboarding) {
+                                          onStartNewClientOnboarding(session.clientName || '');
+                                        } else {
+                                          setLinkingSession(session);
+                                          setIsLinking(true);
+                                        }
+                                      }
+                                   }}
+                                   className={`absolute left-1 right-1 rounded-xl border p-3 flex flex-col cursor-pointer overflow-hidden transition-all shadow-md ${
+                                      isCompleted 
+                                        ? 'bg-muted/20 border-transparent grayscale opacity-50 justify-center' 
+                                        : isConsultation
+                                          ? 'bg-amber-950/40 border-l-4 border-l-amber-500 border-amber-500/20 hover:brightness-110 justify-between'
+                                          : client 
+                                            ? 'bg-slate-800 border-l-4 border-l-blue-500 border-blue-500/20 shadow-[inset_0_1px_3px_rgba(255,255,255,0.05)] hover:brightness-110 justify-center'
+                                            : 'bg-amber-900 border-l-4 border-l-amber-600 border-amber-600/40 opacity-80 justify-center'
+                                   }`}
+                                   style={{ top: `${topPx}px`, height: `${heightPx - 4}px` }}
+                                 >
+                                   <div className="flex flex-col gap-1">
+                                      <div className="flex justify-between items-start gap-1 w-full">
+                                        <span className={`text-[11px] font-black uppercase tracking-widest truncate leading-tight drop-shadow-sm ${isCompleted ? 'text-muted-foreground' : 'text-white'}`}>
                                           {session.clientName}
                                         </span>
-                                        {!client && <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />}
-                                        {isConsultation && client && <Sparkles className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
+                                        {!client && !isCompleted && <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />}
                                       </div>
-                                      {!client && <p className="text-[6px] font-black text-amber-600 uppercase tracking-widest leading-none">Not Profiled</p>}
-                                    </motion.div>
-                                  ) : (
-                                    <div className="h-6 rounded-lg opacity-10 group-hover:opacity-20 transition-opacity" />
-                                  )}
-                                </td>
-                              );
+                                      {isConsultation && !isCompleted && (
+                                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-[0.2em] line-clamp-1">Consultation</span>
+                                      )}
+                                      {!client && !isConsultation && !isCompleted && (
+                                        <span className="text-[8px] font-bold text-amber-200 uppercase tracking-widest bg-amber-950/50 w-fit px-1.5 py-0.5 rounded truncate">Not Profiled</span>
+                                      )}
+                                   </div>
+                                 </motion.div>
+                               );
                             })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                          </div>
+                       ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -4343,6 +4452,9 @@ function WorkoutTrackerView({
   const [activeMachineIds, setActiveMachineIds] = useState<string[]>([]);
   const [clientMachineSettings, setClientMachineSettings] = useState<Record<string, ClientMachineSetting>>({});
   const [sessionNotes, setSessionNotes] = useState<SessionNote[]>([]);
+  const lastMachineLoggedAt = React.useRef<number>(Date.now());
+  const [executionSequenceIndex, setExecutionSequenceIndex] = useState(1);
+  const [confirmedMachineIds, setConfirmedMachineIds] = useState<string[]>([]);
   const [isEditingRoutine, setIsEditingRoutine] = useState(false);
   const [showRoutinePicker, setShowRoutinePicker] = useState(false);
   const [editingSettingsMachineId, setEditingSettingsMachineId] = useState<string | null>(null);
@@ -4757,6 +4869,10 @@ function WorkoutTrackerView({
         trainerInitials: trainer,
         status: 'In-Progress'
       };
+      
+      lastMachineLoggedAt.current = Date.now();
+      setExecutionSequenceIndex(1);
+      setConfirmedMachineIds([]);
       setCurrentSession(newSession as WorkoutSession);
       setShowRoutinePicker(false);
       setIsPreSessionMode(false);
@@ -4857,6 +4973,8 @@ function WorkoutTrackerView({
       if (currentSession?.id === sessionId) {
         setCurrentSession(null);
         setLogs({});
+        setExecutionSequenceIndex(1);
+        setConfirmedMachineIds([]);
         setSelectedClientId(null);
         setView('clients');
       }
@@ -4882,7 +5000,18 @@ function WorkoutTrackerView({
           status: 'Completed',
           endTime: serverTimestamp()
         });
+
+        // Mark consultation as completed if it wasn't already
+        if (selectedClient && !selectedClient.consultationCompleted) {
+          await updateDoc(doc(db, 'clients', selectedClient.id!), {
+            consultationCompleted: true,
+            updatedAt: serverTimestamp()
+          });
+        }
+
         setCurrentSession(null);
+        setExecutionSequenceIndex(1);
+        setConfirmedMachineIds([]);
         setShowEndConfirmation(false);
         setView('profile');
       } catch (error) {
@@ -4924,6 +5053,40 @@ function WorkoutTrackerView({
     }
   };
 
+  const handleConfirmMachine = async (machineId: string) => {
+    if (!currentSession?.id) return;
+    
+    const duration = Math.floor((Date.now() - lastMachineLoggedAt.current) / 1000);
+    const key = `${currentSession.id}_${machineId}`;
+    const log = logs[key];
+    
+    try {
+      const updates: any = {
+        actualDuration: duration,
+        actualOrder: executionSequenceIndex,
+        updatedAt: serverTimestamp()
+      };
+
+      if (log?.id) {
+        await updateDoc(doc(db, 'exerciseLogs', log.id), updates);
+      } else {
+        await addDoc(collection(db, 'exerciseLogs'), {
+          ...updates,
+          sessionId: currentSession.id,
+          clientId,
+          machineId,
+          createdAt: serverTimestamp()
+        });
+      }
+      
+      setExecutionSequenceIndex(prev => prev + 1);
+      lastMachineLoggedAt.current = Date.now();
+      setConfirmedMachineIds(prev => [...prev, machineId]);
+    } catch (error) {
+      console.error("Error confirming machine:", error);
+    }
+  };
+
   const saveMachineSettings = async (machineId: string, newSettings: Record<string, string>, reason: string) => {
     if (!clientId || !user) return;
     const current = clientMachineSettings[machineId];
@@ -4961,6 +5124,8 @@ function WorkoutTrackerView({
   };
 
   const toggleMachine = async (machineId: string) => {
+    if (currentSession) return; // Disable during active session
+    
     const newActiveIds = activeMachineIds.includes(machineId) 
       ? activeMachineIds.filter(id => id !== machineId) 
       : [...activeMachineIds, machineId];
@@ -4996,6 +5161,8 @@ function WorkoutTrackerView({
     } else {
       setCurrentSession(null);
       setLogs({});
+      setExecutionSequenceIndex(1);
+      setConfirmedMachineIds([]);
       setSelectedClientId(null);
       setView('clients');
       setShowCancelConfirmation(false);
@@ -5106,8 +5273,14 @@ function WorkoutTrackerView({
 
   if (clientId && isPreSessionMode && selectedClient && !currentSession) {
     const completedSessionsCount = sessions.filter(s => s.status === 'Completed').length;
+    const totalSessionsCount = sessions.length;
+    const hasRoutines = routines.length > 0;
+    const isConsultCompleted = selectedClient.consultationCompleted === true;
     
-    if (completedSessionsCount === 0) {
+    // Very strict condition for showing the wizard: 
+    // Must have ZERO completed sessions AND ZERO routines AND consultation is NOT marked completed.
+    // If they have ANY session at all (even started/cancelled) OR any routines, we skip the baseline.
+    if (completedSessionsCount === 0 && totalSessionsCount === 0 && !hasRoutines && !isConsultCompleted) {
       return (
         <ConsultationSetupWizard 
           clientName={selectedClient.firstName}
@@ -5120,14 +5293,21 @@ function WorkoutTrackerView({
             }).filter(Boolean) as string[];
 
             // Optional: update client with gender/age setup
-            if (setupData.gender) {
-              await updateDoc(doc(db, 'clients', selectedClient.id!), { 
-                gender: setupData.gender,
-                updatedAt: serverTimestamp()
-              }).catch(e => console.error(e));
-            }
+            await updateDoc(doc(db, 'clients', selectedClient.id!), { 
+              gender: setupData.gender || selectedClient.gender,
+              consultationCompleted: true,
+              updatedAt: serverTimestamp()
+            }).catch(e => console.error(e));
 
-            startNewSession('A', undefined, customMachineIds, "Consultation Baseline Protocol Generated");
+            if (setupData.routine && setupData.routine.length > 0) {
+              const machineNames = setupData.routine.map((r: any) => r.name);
+              const customMachineIds = machines.filter(m => machineNames.includes(m.name)).map(m => m.id as string);
+              startNewSession('A', undefined, customMachineIds, "Consultation Baseline Protocol Generated");
+            } else {
+              // If skipped, we don't start a session, just let the state refresh
+              // which will cause the wizard to disappear because consultationCompleted is now true
+              setIsPreSessionMode(true); // Land them on the PreSessionOverview instead of hiding it
+            }
           }}
           onCancel={() => setSelectedClientId(null)}
         />
@@ -5472,7 +5652,8 @@ function WorkoutTrackerView({
                 <th className="p-1.5 text-center w-[50px] shrink-0 border-r border-[#115E8D]/20">Prev</th>
                 <th className="p-1.5 text-center w-[60px] shrink-0 border-r border-[#115E8D]/20">Weight</th>
                 <th className="p-1.5 text-center w-[60px] shrink-0 border-r border-[#115E8D]/20">Reps</th>
-                <th className="p-1.5 text-center w-[60px] shrink-0">Quality</th>
+                <th className="p-1.5 text-center w-[60px] shrink-0 border-r border-[#115E8D]/20">Quality</th>
+                <th className="p-1.5 text-center w-[60px] shrink-0">Log</th>
               </tr>
             </thead>
 
@@ -5521,6 +5702,7 @@ function WorkoutTrackerView({
                         const prevSession = historySessions[0];
                         const prevLog = prevSession ? logs[`${prevSession.id}_${machine.id}`] : null;
                         const isFocusMachine = activeFocusMachineId === machine.id;
+                        const isConfirmed = confirmedMachineIds.includes(machine.id!);
 
                         // Parse Settings
                         const settingsStr = clientMachineSettings[machine.id!]?.settings;
@@ -5556,7 +5738,8 @@ function WorkoutTrackerView({
                         return (
                           <tr 
                             key={machine.id} 
-                            className={`flex w-full group transition-colors h-[34px] sm:h-[36px] items-center border-b border-slate-100 last:border-b-0 border-l-[3px]
+                            className={`flex w-full group transition-all h-[34px] sm:h-[36px] items-center border-b border-slate-100 last:border-b-0 border-l-[3px]
+                              ${isConfirmed ? 'opacity-40 grayscale pointer-events-none' : ''}
                               ${(!isActive && !showAllMachines) ? 'opacity-30 grayscale hover:grayscale-0' : ''}
                               ${isFocusMachine ? 'bg-[#F06C22]/[0.05] border-l-[#F06C22]' : isActive ? 'bg-[#115E8D]/[0.02] border-l-transparent' : 'even:bg-slate-50 odd:bg-white border-l-transparent'} 
                               hover:bg-[#115E8D]/5`}
@@ -5564,7 +5747,8 @@ function WorkoutTrackerView({
                             <td className="w-[40px] shrink-0 flex items-center justify-center p-0 border-r border-slate-200/60 h-full">
                               <button
                                 className={`flex items-center justify-center transition-all rounded-full ${isFocusMachine ? 'w-5 h-5 bg-[#F06C22] text-white shadow-sm' : isActive ? 'w-5 h-5 bg-[#115E8D] text-white shadow-sm opacity-80' : 'w-4 h-4 border border-slate-300 text-slate-300 hover:text-[#115E8D] hover:border-[#115E8D]'}`}
-                                onClick={() => toggleMachine(machine.id!)}
+                                onClick={() => !currentSession && toggleMachine(machine.id!)}
+                                disabled={!!currentSession}
                               >
                                 {isActive ? (
                                   <span className="font-black text-[9px] leading-none text-white">{seqPosition}</span>
@@ -5626,7 +5810,7 @@ function WorkoutTrackerView({
                               </button>
                             </td>
 
-                            <td className={`w-[60px] shrink-0 px-1 flex items-center justify-center h-full transition-colors ${isFocusMachine ? 'bg-white shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]' : 'group-hover:bg-[#115E8D]/5'}`}>
+                            <td className={`w-[60px] shrink-0 px-1 border-r border-slate-200/60 flex items-center justify-center h-full transition-colors ${isFocusMachine ? 'bg-white shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]' : 'group-hover:bg-[#115E8D]/5'}`}>
                               <div className={`flex rounded-full p-[2px] gap-[2px] ${isFocusMachine ? 'bg-slate-100/80 border border-slate-200' : 'bg-slate-200/50'}`}>
                                 {[1, 2, 3].map((v) => {
                                    const isSelected = currentLog.repQuality === v;
@@ -5639,6 +5823,7 @@ function WorkoutTrackerView({
                                    return (
                                      <button
                                        key={v}
+                                       disabled={isConfirmed}
                                        onClick={() => {
                                          if (currentSession?.id) {
                                            updateLog(currentSession.id, machine.id!, 'repQuality', v);
@@ -5649,6 +5834,22 @@ function WorkoutTrackerView({
                                    );
                                 })}
                               </div>
+                            </td>
+
+                            <td className={`w-[60px] shrink-0 p-1 flex items-center justify-center h-full transition-colors ${isFocusMachine ? 'bg-white' : 'group-hover:bg-[#115E8D]/5'}`}>
+                               <button
+                                 disabled={isConfirmed || !currentSession || !isActive}
+                                 onClick={() => handleConfirmMachine(machine.id!)}
+                                 className={`w-full h-7 rounded-lg flex items-center justify-center transition-all ${
+                                   isConfirmed 
+                                     ? 'bg-emerald-500 text-white' 
+                                     : isActive
+                                       ? 'bg-[#F06C22] hover:bg-[#D95B16] text-white shadow-sm'
+                                       : 'bg-slate-100 text-slate-300'
+                                 }`}
+                               >
+                                 <Check className={`w-3.5 h-3.5 ${isConfirmed ? 'animate-in zoom-in' : ''}`} />
+                               </button>
                             </td>
                           </tr>
                         );
