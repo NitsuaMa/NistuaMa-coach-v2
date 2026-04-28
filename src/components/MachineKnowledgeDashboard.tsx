@@ -68,7 +68,13 @@ export function MachineKnowledgeDashboard() {
                 <div className="relative h-48 w-full overflow-hidden bg-slate-800 shrink-0">
                   <div className="absolute inset-0 bg-[#0A2E46]/60 group-hover:bg-[#0A2E46]/20 transition-colors duration-500 z-10 pointer-events-none mix-blend-multiply" />
                   <img 
-                    src={`https://picsum.photos/seed/${machine.name.replace(/\s+/g, '-')}/400/250`} 
+                    src={
+                      machine.id === 'leg_press' ? '/regenerated_image_1777418510296.png' :
+                      machine.id === 'leg_extension' ? '/regenerated_image_1777418524469.png' :
+                      machine.id === 'chest_press' ? '/regenerated_image_1777418504308.png' : 
+                      machine.id === 'compound_row' ? '/regenerated_image_1777418531749.png' :
+                      `https://picsum.photos/seed/${machine.name.replace(/\s+/g, '-')}/400/250`
+                    } 
                     alt={machine.name}
                     className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-105"
                   />
