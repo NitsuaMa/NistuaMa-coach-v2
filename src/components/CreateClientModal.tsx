@@ -20,7 +20,7 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
   const [lastName, setLastName] = useState(nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [isExistingClient, setIsExistingClient] = useState(false);
+  const [isFirstTimeConsult, setIsFirstTimeConsult] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Mock schedule
@@ -54,7 +54,8 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
         remainingSessions: 10,
         gender: "Male",
         height: "5'10\"",
-        consultationCompleted: isExistingClient
+        consultationCompleted: !isFirstTimeConsult,
+        requiresConsultation: isFirstTimeConsult
       };
       
       const docRef = await addDoc(collection(db, 'clients'), {
@@ -153,13 +154,13 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
             </div>
           </div>
           <div className="grid grid-cols-1 gap-6">
-            <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 hover:border-[#115E8D]/20 transition-all cursor-pointer" onClick={() => setIsExistingClient(!isExistingClient)}>
-              <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isExistingClient ? 'bg-[#115E8D] border-[#115E8D]' : 'border-slate-300'}`}>
-                {isExistingClient && <div className="w-2 h-2 bg-white rounded-full" />}
+            <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 hover:border-[#115E8D]/20 transition-all cursor-pointer" onClick={() => setIsFirstTimeConsult(!isFirstTimeConsult)}>
+              <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${isFirstTimeConsult ? 'bg-[#115E8D] border-[#115E8D]' : 'border-slate-300'}`}>
+                {isFirstTimeConsult && <div className="w-2 h-2 bg-white rounded-full" />}
               </div>
               <div>
-                <p className="text-sm font-bold text-[#0F172A]">Existing Client (Bypass Consult/Demo)</p>
-                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tight">Skips the first-time setup protocol & baseline generation.</p>
+                <p className="text-sm font-bold text-[#0F172A]">First-Time Consult Client</p>
+                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tight">Initiates the onboarding wizard and baseline generation.</p>
               </div>
             </div>
           </div>

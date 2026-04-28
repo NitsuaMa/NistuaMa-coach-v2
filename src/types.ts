@@ -45,6 +45,7 @@ export interface Client {
   mindbody_name?: string;
   completedSessions?: number;
   consultationCompleted?: boolean;
+  requiresConsultation?: boolean;
   createdAt?: any;
 }
 

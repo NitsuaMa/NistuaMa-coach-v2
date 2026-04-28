@@ -5275,12 +5275,17 @@ function WorkoutTrackerView({
     const completedSessionsCount = sessions.filter(s => s.status === 'Completed').length;
     const totalSessionsCount = sessions.length;
     const hasRoutines = routines.length > 0;
-    const isConsultCompleted = selectedClient.consultationCompleted === true;
     
-    // Very strict condition for showing the wizard: 
-    // Must have ZERO completed sessions AND ZERO routines AND consultation is NOT marked completed.
-    // If they have ANY session at all (even started/cancelled) OR any routines, we skip the baseline.
-    if (completedSessionsCount === 0 && totalSessionsCount === 0 && !hasRoutines && !isConsultCompleted) {
+    // Explicit opt-in via requiresConsultation
+    const requiresConsultation = selectedClient.requiresConsultation === true;
+    
+    // Safety Net zero-history detection (only if consultationCompleted is explicitly false)
+    const zeroHistoryAndNotCompleted = completedSessionsCount === 0 && totalSessionsCount === 0 && selectedClient.consultationCompleted === false;
+
+    // Trigger wizard if explicitly required or (zero history and not specifically marked completed)
+    const shouldShowWizard = requiresConsultation || zeroHistoryAndNotCompleted;
+
+    if (shouldShowWizard) {
       return (
         <ConsultationSetupWizard 
           clientName={selectedClient.firstName}
@@ -5296,6 +5301,7 @@ function WorkoutTrackerView({
             await updateDoc(doc(db, 'clients', selectedClient.id!), { 
               gender: setupData.gender || selectedClient.gender,
               consultationCompleted: true,
+              requiresConsultation: false,
               updatedAt: serverTimestamp()
             }).catch(e => console.error(e));
 
