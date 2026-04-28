@@ -106,7 +106,7 @@ export function TrainerProfileView({
                       onClick={() => {
                         if (s.clientId) {
                           onSelectClient(s.clientId);
-                          setView('workouts');
+                          setView('profile');
                         }
                       }}
                     >

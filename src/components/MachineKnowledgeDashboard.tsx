@@ -54,7 +54,7 @@ export function MachineKnowledgeDashboard() {
 
       {/* Grid Content Area */}
       <div className="flex-1 overflow-y-auto p-8 lg:p-12 pb-32">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-[1600px] mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 xl:gap-10 max-w-[1800px] mx-auto">
           {filteredMachines.map((machine, idx) => {
             const indexNumber = (MACHINE_LIST.findIndex(m => m.id === machine.id) + 1).toString().padStart(2, '0');
             
@@ -62,26 +62,58 @@ export function MachineKnowledgeDashboard() {
               <div 
                 key={machine.id}
                 onClick={() => setActiveMachineId(machine.id)}
-                className="group relative bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 cursor-pointer hover:border-[#F06C22]/50 hover:bg-white/10 transition-all duration-300 flex flex-col justify-between aspect-square overflow-hidden"
+                className="group relative bg-[#0e171e] border border-slate-700/50 rounded-2xl cursor-pointer hover:border-[#38BDF8]/50 hover:shadow-[0_8px_30px_rgba(56,189,248,0.15)] hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden"
               >
-                {/* Subtle Glow Effect on Hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-[#F06C22]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-                <div className="text-4xl md:text-5xl font-light text-white/20 group-hover:text-white/40 transition-colors pointer-events-none z-10">
-                  {indexNumber}
+                {/* Image Section */}
+                <div className="relative h-48 w-full overflow-hidden bg-slate-800 shrink-0">
+                  <div className="absolute inset-0 bg-[#0A2E46]/60 group-hover:bg-[#0A2E46]/20 transition-colors duration-500 z-10 pointer-events-none mix-blend-multiply" />
+                  <img 
+                    src={`https://picsum.photos/seed/${machine.name.replace(/\s+/g, '-')}/400/250`} 
+                    alt={machine.name}
+                    className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-105"
+                  />
+                  <div className="absolute top-4 left-4 z-20">
+                    <span className="text-[10px] font-black tracking-widest text-[#38BDF8] uppercase bg-[#0A2E46]/80 backdrop-blur-sm px-2 py-1 rounded shadow-sm border border-[#38BDF8]/20">
+                      Index {indexNumber}
+                    </span>
+                  </div>
                 </div>
-                
-                <div className="mt-auto space-y-4 z-10">
-                  <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tighter text-white group-hover:translate-x-1 transition-transform">
+
+                {/* Metadata Section */}
+                <div className="p-6 flex flex-col flex-1 z-20 bg-gradient-to-b from-[#0e171e] to-[#0A2E46]/80">
+                  <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-white mb-4 group-hover:text-[#38BDF8] transition-colors line-clamp-2">
                     {machine.name}
                   </h3>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <span className="bg-[#115E8D] text-white text-[10px] md:text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded-md shadow-sm">
-                      {machine.category.replace('Upper Body - ', 'UB ')}
-                    </span>
-                    <span className="text-[#94A3B8] text-[9px] font-bold uppercase tracking-widest bg-black/20 px-2 py-1 rounded-sm border border-white/5">
-                      {machine.category.includes('Push') ? 'Push' : machine.category.includes('Pull') ? 'Pull' : machine.category.includes('Lower') ? 'Press' : 'Isolation'}
-                    </span>
+                  
+                  <div className="space-y-3 mb-6 flex-1">
+                    <div className="flex items-start justify-between border-b border-white/5 pb-2">
+                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#68717A] shrink-0 mt-0.5">Target</span>
+                       <span className="text-xs font-semibold text-white/80 text-right line-clamp-1" title={machine.targetMuscles ? machine.targetMuscles.join(', ') : machine.target}>
+                         {machine.targetMuscles ? machine.targetMuscles.join(', ') : machine.target || 'General Base'}
+                       </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#68717A]">Mechanics</span>
+                       <span className="text-xs font-semibold text-white/80">
+                         {machine.category.includes('Push') ? 'Push' : machine.category.includes('Pull') ? 'Pull' : machine.category.includes('Lower') ? 'Press' : 'Isolation'}
+                       </span>
+                    </div>
+                    <div className="flex items-center justify-between pb-2">
+                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#68717A]">Protocol</span>
+                       <span className="text-[9px] font-black uppercase tracking-widest text-[#F06C22] bg-[#F06C22]/10 px-2 py-0.5 rounded border border-[#F06C22]/20">
+                         SuperSlow / HIT
+                       </span>
+                    </div>
+                  </div>
+                  
+                  {/* Interactive Button Area */}
+                  <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between text-[#94A3B8] group-hover:text-white transition-colors">
+                     <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest">
+                        View Biomechanical Details
+                     </span>
+                     <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-[#38BDF8] group-hover:text-[#0A2E46] transition-colors border border-white/10 group-hover:border-[#38BDF8]">
+                        <ChevronRight className="w-4 h-4" />
+                     </div>
                   </div>
                 </div>
               </div>

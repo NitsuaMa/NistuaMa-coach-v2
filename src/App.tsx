@@ -1068,7 +1068,7 @@ export default function App() {
                 setIsAdding={setIsAddingClient} 
                 onSelectClient={(id) => {
                   setSelectedClientId(id);
-                  setCurrentView('workouts');
+                  setCurrentView('profile');
                 }}
                 onStartNewClientOnboarding={setNewClientOnboardingName}
                 setView={setCurrentView}
