@@ -29,32 +29,32 @@ export function MachineKnowledgeDashboard() {
     <div className="flex flex-col bg-[#0A2E46] h-full overflow-hidden text-white w-full relative">
       
       {/* Header & Filters */}
-      <div className="pt-12 px-8 pb-6 bg-[#0A2E46] border-b border-white/10 shrink-0 z-10 w-full relative">
-        <h1 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter text-white mb-8 bg-clip-text text-transparent bg-gradient-to-r from-white to-[#68717A]">
+      <div className="pt-8 px-6 pb-6 bg-[#0A2E46] border-b border-white/10 shrink-0 z-10 w-full relative">
+        <h1 className="text-3xl lg:text-4xl font-black uppercase tracking-tighter text-white mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-[#68717A]">
           Equipment Arsenal
         </h1>
         
-        {/* Segmented Filter Bar */}
-        <div className="flex overflow-x-auto pb-4 -mb-4 hide-scrollbar gap-2">
+        {/* Stationary Filter Tabs */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full max-w-5xl">
           {CATEGORIES.map(cat => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`whitespace-nowrap px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+              className={`w-full text-center px-2 py-2 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest transition-all border ${
                 activeCategory === cat
-                  ? 'bg-[#F06C22] text-white shadow-[0_0_15px_rgba(240,108,34,0.4)]'
-                  : 'bg-white/5 text-[#68717A] hover:bg-white/10 hover:text-white'
+                  ? 'bg-[#F06C22] text-white border-[#F06C22] shadow-[0_4px_15px_rgba(240,108,34,0.3)]'
+                  : 'bg-white/5 text-[#94A3B8] border-white/10 hover:bg-white/10 hover:text-white'
               }`}
             >
-              {cat}
+              <span className="line-clamp-1">{cat}</span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Grid Content Area */}
-      <div className="flex-1 overflow-y-auto p-8 lg:p-12 pb-32">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 xl:gap-10 max-w-[1800px] mx-auto">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-32">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6 max-w-[1800px] mx-auto">
           {filteredMachines.map((machine, idx) => {
             const indexNumber = (MACHINE_LIST.findIndex(m => m.id === machine.id) + 1).toString().padStart(2, '0');
             
@@ -62,10 +62,10 @@ export function MachineKnowledgeDashboard() {
               <div 
                 key={machine.id}
                 onClick={() => setActiveMachineId(machine.id)}
-                className="group relative bg-[#0e171e] border border-slate-700/50 rounded-2xl cursor-pointer hover:border-[#38BDF8]/50 hover:shadow-[0_8px_30px_rgba(56,189,248,0.15)] hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden"
+                className="group relative bg-[#0e171e] border border-slate-700/50 rounded-xl cursor-pointer hover:border-[#38BDF8]/50 hover:shadow-[0_8px_30px_rgba(56,189,248,0.15)] hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden"
               >
-                {/* Image Section */}
-                <div className="relative h-48 w-full overflow-hidden bg-slate-800 shrink-0">
+                {/* Image Section (16:9 Aspect Ratio) */}
+                <div className="relative aspect-video w-full overflow-hidden bg-slate-800 shrink-0">
                   <div className="absolute inset-0 bg-[#0A2E46]/60 group-hover:bg-[#0A2E46]/20 transition-colors duration-500 z-10 pointer-events-none mix-blend-multiply" />
                   <img 
                     src={
@@ -78,35 +78,35 @@ export function MachineKnowledgeDashboard() {
                     alt={machine.name}
                     className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-105"
                   />
-                  <div className="absolute top-4 left-4 z-20">
-                    <span className="text-[10px] font-black tracking-widest text-[#38BDF8] uppercase bg-[#0A2E46]/80 backdrop-blur-sm px-2 py-1 rounded shadow-sm border border-[#38BDF8]/20">
-                      Index {indexNumber}
+                  <div className="absolute top-2 left-2 z-20">
+                    <span className="text-[9px] font-black tracking-widest text-[#38BDF8] uppercase bg-[#0A2E46]/80 backdrop-blur-sm px-1.5 py-0.5 rounded shadow-sm border border-[#38BDF8]/20">
+                      Idx {indexNumber}
                     </span>
                   </div>
                 </div>
 
                 {/* Metadata Section (Expert Focus) */}
-                <div className="p-6 flex flex-col flex-1 z-20 bg-gradient-to-b from-[#0e171e] to-[#0A2E46]/80 text-[#F8F9FA]">
-                  <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter mb-1 transition-colors line-clamp-1">
+                <div className="p-4 flex flex-col flex-1 z-20 bg-gradient-to-b from-[#0e171e] to-[#0A2E46]/80 text-[#F8F9FA]">
+                  <h3 className="text-lg font-black uppercase tracking-tighter mb-0.5 transition-colors line-clamp-1">
                     {machine.name}
                   </h3>
                   
                   {/* Highlighted Target Muscles */}
-                  <p className="text-[#F06C22] text-sm font-black uppercase tracking-widest mb-5 line-clamp-1">
+                  <p className="text-[#F06C22] text-[10px] sm:text-xs font-black uppercase tracking-widest mb-3 line-clamp-1">
                     {machine.target || 'General Base'}
                   </p>
                   
                   {/* Quick-Cue Data Grid */}
-                  <div className="grid grid-cols-1 gap-2 mb-6 flex-1">
-                    <div className="bg-white/5 border border-white/10 rounded-md p-3">
-                       <span className="block text-[9px] font-black uppercase tracking-widest text-[#68717A] mb-1">Setup</span>
-                       <span className="block text-xs font-semibold text-[#F8F9FA] line-clamp-2 leading-snug">
+                  <div className="grid grid-cols-1 gap-1.5 mb-4 flex-1">
+                    <div className="bg-white/5 border border-white/10 rounded-md p-2">
+                       <span className="block text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-[#68717A] mb-0.5">Setup</span>
+                       <span className="block text-[10px] sm:text-xs font-semibold text-[#F8F9FA] line-clamp-2 leading-tight">
                          {machine.setup}
                        </span>
                     </div>
-                    <div className="bg-white/5 border border-white/10 rounded-md p-3">
-                       <span className="block text-[9px] font-black uppercase tracking-widest text-[#68717A] mb-1">Turnarounds & Execution</span>
-                       <span className="block text-xs font-semibold text-[#F8F9FA] line-clamp-2 leading-snug">
+                    <div className="bg-white/5 border border-white/10 rounded-md p-2">
+                       <span className="block text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-[#68717A] mb-0.5">Turnarounds</span>
+                       <span className="block text-[10px] sm:text-xs font-semibold text-[#F8F9FA] line-clamp-2 leading-tight">
                          {machine.execution}
                        </span>
                     </div>
@@ -114,8 +114,8 @@ export function MachineKnowledgeDashboard() {
                   
                   {/* Sleek Interaction Button */}
                   <div className="mt-auto">
-                     <Button variant="ghost" className="w-full bg-white/5 hover:bg-white/10 text-[#CBD5E1] hover:text-white border border-white/10 hover:border-white/20 transition-all text-[10px] font-black uppercase tracking-widest h-10 rounded-lg">
-                        Detailed Insights
+                     <Button variant="ghost" className="w-full bg-white/5 hover:bg-white/10 text-[#CBD5E1] hover:text-white border border-white/10 hover:border-white/20 transition-all text-[9px] sm:text-[10px] font-black uppercase tracking-widest h-8 rounded-md">
+                        Insights
                      </Button>
                   </div>
                 </div>
