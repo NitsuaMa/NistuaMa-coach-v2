@@ -46,6 +46,7 @@ export function CalendarView({
   clients?: any[]
 }) {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+  const [shiftMode, setShiftMode] = useState<'AM' | 'PM'>('AM');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTrainerId, setSelectedTrainerId] = useState<string>(
     isAdmin ? 'all' : (authTrainer?.id || 'all')
@@ -85,9 +86,12 @@ export function CalendarView({
   };
 
   const getSlotHeader = (date: Date) => {
-    const h = date.getHours().toString().padStart(2, '0');
+    let h = date.getHours();
     const m = date.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12; // the hour '0' should be '12'
+    return `${h}:${m} ${ampm}`;
   };
 
   const handlePrev = () => {
@@ -119,8 +123,19 @@ export function CalendarView({
       d1.getFullYear() === d2.getFullYear();
   };
 
-  const AM_SLOTS = ['07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30'];
-  const PM_SLOTS = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
+  const AM_SLOTS = [
+    '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', 
+    '7:00 AM', '7:30 AM', '8:00 AM', '8:30 AM', 
+    '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', 
+    '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+    '1:00 PM'
+  ];
+  const PM_SLOTS = [
+    '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', 
+    '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM', 
+    '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', 
+    '7:00 PM', '7:30 PM', '8:00 PM'
+  ];
 
   const TRAINER_COLORS = [
     { border: 'border-[#38BDF8]', bg: 'bg-[#38BDF8]/10', text: 'text-[#38BDF8]' },
@@ -450,92 +465,161 @@ export function CalendarView({
   };
 
   const renderDay = () => {
-    const allSlots = [...AM_SLOTS, ...PM_SLOTS];
+    const slots = shiftMode === 'AM' ? AM_SLOTS : PM_SLOTS;
     const filteredTrainers = selectedTrainerId === 'all' 
       ? visibleCalendarTrainers 
       : visibleCalendarTrainers.filter(t => t.id === selectedTrainerId);
 
+    // Calculate current time indicator position
+    const now = new Date();
+    const isTodaySelected = isToday(selectedDate);
+    const timeToPosition = (date: Date) => {
+        if (!isTodaySelected) return null;
+        
+        const h = date.getHours();
+        const m = date.getMinutes();
+        const totalMins = h * 60 + m;
+        
+        const shiftStartMins = shiftMode === 'AM' ? 5 * 60 : 12 * 60;
+        const shiftEndMins = shiftMode === 'AM' ? 12 * 60 : 20 * 60;
+        
+        if (totalMins < shiftStartMins || totalMins > shiftEndMins) return null;
+        
+        const minsFromStart = totalMins - shiftStartMins;
+        const totalShiftMins = shiftEndMins - shiftStartMins;
+        
+        // Return percentage from top for the time indicator
+        return (minsFromStart / totalShiftMins) * 100;
+    };
+    const currentTimePos = timeToPosition(now);
+
+    const getPackageTierColor = (tier: string) => {
+        switch (tier) {
+            case "6-Month": return "bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/50 shadow-[0_0_15px_rgba(56,189,248,0.15)]";
+            case "12-Month": return "bg-[#F06C22]/20 text-[#F06C22] border-[#F06C22]/50 shadow-[0_0_10px_rgba(240,108,34,0.3)]";
+            case "18-Month": return "bg-gray-400/20 text-gray-200 border-gray-400/60 shadow-[0_0_15px_rgba(156,163,175,0.4)]";
+            default: return "bg-slate-700/20 text-slate-400 border-slate-700/50";
+        }
+    };
+
+    const getPackageTierText = (tier: string) => {
+        switch (tier) {
+            case "18-Month": return "18-Month VIP";
+            case "12-Month": return "12-Month Tier";
+            case "6-Month": return "6-Month Tier";
+            default: return "Prospect";
+        }
+    };
+
+    const recentlyProfiled = clients?.slice(0, 4) || [];
+
     return (
-      <div className="bg-[#0A2E46] border border-slate-700 rounded-[32px] overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse min-w-[800px] table-fixed">
-            <thead>
-              <tr className="bg-slate-900 border-b border-slate-700">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-700 w-24 sticky left-0 bg-slate-900 z-10">Time</th>
-                {filteredTrainers.map((trainer) => (
-                  <th key={trainer.id} className="p-4 border-r border-slate-700 last:border-r-0 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                        <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-slate-300 font-black text-sm">
-                          {trainer.initials}
+      <div className="flex flex-col h-[80vh]">
+        {/* Schedule Grid */}
+        <div className="flex-grow flex flex-col bg-[#0A2E46] border border-slate-700 rounded-[32px] overflow-hidden shadow-2xl relative">
+            <div className="flex items-center justify-center p-4 border-b border-slate-700 bg-slate-900/50">
+                <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 shadow-sm">
+                    <button
+                        onClick={() => setShiftMode('AM')}
+                        className={cn(
+                            "px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                            shiftMode === 'AM' ? "bg-white text-[#0A2E46] shadow-sm" : "text-slate-400 hover:text-white"
+                        )}
+                    >
+                        AM Shift
+                    </button>
+                    <button
+                        onClick={() => setShiftMode('PM')}
+                        className={cn(
+                            "px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                            shiftMode === 'PM' ? "bg-white text-[#0A2E46] shadow-sm" : "text-slate-400 hover:text-white"
+                        )}
+                    >
+                        PM Shift
+                    </button>
+                </div>
+            </div>
+            
+            <div className="overflow-x-auto flex-grow relative">
+                <div className="min-w-[800px] h-full relative">
+                {currentTimePos !== null && (
+                    <div 
+                        className="absolute left-0 right-0 border-t-2 border-[#F06C22] z-20 pointer-events-none shadow-[0_0_15px_#F06C22]"
+                        style={{ top: `calc(80px + (100% - 80px) * ${currentTimePos} / 100)` }}
+                    >
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 bg-[#F06C22] text-white text-[9px] font-black uppercase px-2 py-1 rounded-r-md tracking-widest flex items-center shadow-[0_0_10px_#F06C22]">
+                            <span className="w-2 h-2 rounded-full bg-white mr-1 animate-pulse"></span>
+                            Current Time
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-white mt-1">{trainer.fullName}</span>
                     </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {allSlots.map((slot, sIdx) => {
-                const isGap = slot === '15:00' && sIdx > 0;
-                return (
-                  <React.Fragment key={slot}>
-                    {isGap && (
-                      <tr className="bg-slate-900/50 h-8 border-y border-slate-700">
-                        <td colSpan={filteredTrainers.length + 1} className="text-center">
-                            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-500">Midday Gap</span>
+                )}
+                <table className="w-full border-collapse table-fixed h-full">
+                <thead>
+                <tr className="bg-slate-900 border-b border-slate-700 h-20">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-700 w-24 sticky left-0 bg-slate-900 z-30">Time</th>
+                    {filteredTrainers.map((trainer) => (
+                    <th key={trainer.id} className="p-4 border-r border-slate-700 last:border-r-0 text-center z-20 sticky top-0 bg-slate-900">
+                        <div className="flex flex-col items-center gap-1">
+                            <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-slate-300 font-black text-sm">
+                            {trainer.initials}
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-white mt-1">{trainer.fullName}</span>
+                        </div>
+                    </th>
+                    ))}
+                </tr>
+                </thead>
+                <tbody className="relative">
+                {slots.map((slot, sIdx) => {
+                    return (
+                    <tr key={slot} className="border-b border-slate-700 last:border-0 hover:bg-white/[0.02] transition-colors group relative">
+                        <td className="p-3 text-center border-r border-slate-700 sticky left-0 bg-[#0A2E46] z-10 text-slate-400">
+                            <span className="text-[11px] font-black tracking-tighter group-hover:text-white transition-colors">{slot}</span>
                         </td>
-                      </tr>
-                    )}
-                    <tr className="border-b border-slate-700 last:border-0 hover:bg-white/[0.02] transition-colors">
-                      <td className="p-3 text-center border-r border-slate-700 sticky left-0 bg-[#0A2E46] z-10 text-slate-400">
-                        <span className="text-[11px] font-black tracking-tighter">{slot}</span>
-                      </td>
-                      {filteredTrainers.map((trainer) => {
-                        const session = schedules.find(s => {
-                          const d = safeToDate(s.startTime);
-                          const tStr = getSlotHeader(d);
-                          return isSameDay(d, selectedDate) && tStr === slot && s.trainerName === trainer.fullName && s.status !== 'Cancelled';
-                        });
+                        {filteredTrainers.map((trainer) => {
+                            const session = schedules.find(s => {
+                            const d = safeToDate(s.startTime);
+                            const tStr = getSlotHeader(d);
+                            return isSameDay(d, selectedDate) && tStr === slot && s.trainerName === trainer.fullName && s.status !== 'Cancelled';
+                            });
 
-                        const color = TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length];
+                            const color = TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length];
 
-                        return (
-                          <td 
-                            key={`${trainer.id}-${slot}`} 
-                            className="p-1.5 border-r border-slate-700 last:border-r-0 h-[80px]"
-                          >
-                            {session ? (
-                              <div
-                                onClick={() => handleClientClick(session)}
-                                className={cn(
-                                  "p-3 rounded-xl border-l-4 flex flex-col gap-1 transition-all cursor-pointer shadow-sm h-full bg-slate-800/60",
-                                  color.border
-                                )}
-                              >
-                                <span className="text-xs font-medium text-slate-400 tabular-nums leading-none tracking-tight">
-                                  {slot} - {session.endTime ? getSlotHeader(safeToDate(session.endTime)) : '30m'}
-                                </span>
-                                <span className="text-sm font-bold truncate text-white leading-tight">
-                                  {session.clientName}
-                                </span>
-                                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest leading-none">
-                                  {trainer.fullName}
-                                </span>
-                              </div>
-                            ) : (
-                                <div className="h-full flex items-center justify-center p-2">
-                                  <span className="text-[10px] font-medium uppercase tracking-widest text-slate-500">OPEN SLOT</span>
+                            return (
+                            <td 
+                                key={`${trainer.id}-${slot}`} 
+                                className="p-1 border-r border-slate-700 last:border-r-0 h-[60px]"
+                            >
+                                {session ? (
+                                <div
+                                    onClick={() => handleClientClick(session)}
+                                    className={cn(
+                                    "p-3 rounded-xl border-l-4 flex flex-col gap-0.5 hover:scale-[1.02] transition-all cursor-pointer shadow-md h-full bg-slate-800",
+                                    color.border
+                                    )}
+                                >
+                                    <span className="text-[10px] font-bold text-slate-400 tabular-nums leading-none tracking-tight">
+                                    {slot} - {session.endTime ? getSlotHeader(safeToDate(session.endTime)) : '30m'}
+                                    </span>
+                                    <span className="text-sm font-black truncate text-white leading-tight">
+                                    {session.clientName}
+                                    </span>
                                 </div>
-                            )}
-                          </td>
-                        );
-                      })}
+                                ) : (
+                                    <div className="h-full w-full opacity-0 hover:opacity-10 transition-opacity flex items-center justify-center p-2 bg-slate-600 rounded-lg cursor-pointer">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-white">Open</span>
+                                    </div>
+                                )}
+                            </td>
+                            );
+                        })}
                     </tr>
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                    );
+                })}
+                </tbody>
+            </table>
+            </div>
+            </div>
         </div>
       </div>
     );

@@ -26,7 +26,13 @@ export function PinLoginView({ trainers, user, onLogin, isLoading: initialLoadin
     setIsLoggingIn(true);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        return;
+      }
+      if (err.message && err.message.includes('INTERNAL ASSERTION FAILED: Pending promise was never set')) {
+        return;
+      }
       console.error('Google login failed:', err);
     } finally {
       setIsLoggingIn(false);

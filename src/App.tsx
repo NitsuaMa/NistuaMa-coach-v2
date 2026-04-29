@@ -104,6 +104,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { 
   Dialog, 
   DialogContent, 
@@ -795,8 +796,12 @@ export default function App() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
         // Ignore this error, it's normal if the user closes the popup
+        return;
+      }
+      // Check for internal assertion failure about pending promise
+      if (error.message && error.message.includes('INTERNAL ASSERTION FAILED: Pending promise was never set')) {
         return;
       }
       console.error("Login failed:", error);
@@ -945,34 +950,37 @@ export default function App() {
       <div className="flex flex-col min-h-screen bg-background text-foreground font-sans overflow-x-hidden w-full max-w-full">
         {/* Header */}
         {currentView !== 'workouts' && (
-          <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md px-6 h-16 flex items-center justify-between">
+          <header className="sticky top-0 z-50 w-full border-b border-slate-700/80 bg-[#0A2E46] px-6 h-16 md:h-20 flex items-center justify-between">
             <div className="flex items-center -ml-2">
-              <MaxStrengthLogo size="sm" showText={false} className="scale-[0.8] origin-left" />
+              <MaxStrengthLogo size="sm" showText={false} className="scale-[0.8] origin-left text-white drop-shadow-md" />
               <div className="flex flex-col ml-1.5 leading-none">
-                <span className="text-[10px] font-black uppercase text-[#68717A] tracking-[0.2em]">Strength</span>
-                <span className="text-[12px] font-bold text-[#004D8C] uppercase tracking-[0.3em]">Fitness</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength</span>
+                <span className="text-[12px] font-bold text-white uppercase tracking-[0.3em]">Fitness</span>
               </div>
             </div>
             
             <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setCurrentView('trainer-hub')} 
+                className={`rounded-full transition-all hover:bg-transparent ${currentView === 'trainer-hub' ? 'text-white' : 'text-slate-400 hover:text-white active:text-[#F06C22]'}`}
+                title="Trainer Control Hub"
+              >
+                <Settings className="w-6 h-6 md:w-7 md:h-7 transition-colors hover:stroke-[#F06C22]" />
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="flex items-center gap-3 px-2 py-1.5 bg-[#115E8D]/5 border border-[#115E8D]/10 rounded-full cursor-pointer hover:bg-[#115E8D]/10 transition-colors"
+                  className="flex items-center gap-3 rounded-full cursor-pointer transition-transform hover:scale-105 active:scale-95 outline-none"
                 >
-                  <div className="w-8 h-8 rounded-full bg-[#115E8D] text-white flex items-center justify-center shadow-inner">
-                    <span className="font-black text-xs uppercase tracking-wider">{authTrainer.initials}</span>
-                  </div>
-                  <div className="flex flex-col pr-3">
-                    <span className="text-[9px] font-black uppercase text-[#68717A] tracking-widest leading-none mb-0.5">Trainer Profile</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-black uppercase tracking-tight text-[#115E8D]">{authTrainer.fullName}</span>
-                      <ChevronDown className="w-3 h-3 text-[#115E8D]" />
-                    </div>
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-[#38BDF8] bg-slate-800 text-white flex items-center justify-center shadow-[0_0_15px_rgba(56,189,248,0.4)]">
+                    <span className="font-bold text-sm md:text-base uppercase tracking-wider">{authTrainer.initials}</span>
                   </div>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 rounded-[24px] border-2 p-2 shadow-2xl">
+                <DropdownMenuContent align="end" className="w-56 rounded-[24px] border border-slate-700/50 bg-slate-800 p-2 shadow-2xl text-slate-200">
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel className="font-black uppercase text-[10px] tracking-widest px-3 py-2 text-muted-foreground">
+                    <DropdownMenuLabel className="font-black uppercase text-[10px] tracking-widest px-3 py-2 text-slate-400">
                       Active Profile
                     </DropdownMenuLabel>
                     <DropdownMenuItem 
@@ -980,24 +988,24 @@ export default function App() {
                         setSelectedProfileTrainerId(null);
                         setCurrentView('trainer-profile');
                       }}
-                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer"
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer hover:bg-slate-700 hover:text-white focus:bg-slate-700 focus:text-white"
                     >
-                      <UserCircle className="w-4 h-4 text-primary" />
+                      <UserCircle className="w-4 h-4 text-[#38BDF8]" />
                       View Profile
                     </DropdownMenuItem>
                     <DropdownMenuItem 
                       onClick={() => setCurrentView('trainer-hub')}
-                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer"
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer hover:bg-slate-700 hover:text-white focus:bg-slate-700 focus:text-white"
                     >
                       <Settings className="w-4 h-4" />
                       Trainer Hub
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   
-                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuSeparator className="my-2 bg-slate-700" />
                   
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel className="font-black uppercase text-[10px] tracking-widest px-3 py-2 text-muted-foreground">
+                    <DropdownMenuLabel className="font-black uppercase text-[10px] tracking-widest px-3 py-2 text-slate-400">
                       Switch Trainer
                     </DropdownMenuLabel>
                     {trainers
@@ -1007,9 +1015,9 @@ export default function App() {
                         <DropdownMenuItem 
                           key={t.id}
                           onClick={() => handleTrainerLogin(t)}
-                          className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer group"
+                          className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest cursor-pointer group hover:bg-slate-700 hover:text-white focus:bg-slate-700 focus:text-white"
                         >
-                          <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center font-black group-hover:bg-primary group-hover:text-white transition-colors">
+                          <div className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center font-black group-hover:bg-[#38BDF8] group-hover:text-white group-hover:border-[#38BDF8] transition-colors">
                             {t.initials}
                           </div>
                           {t.fullName}
@@ -1018,12 +1026,12 @@ export default function App() {
                     }
                   </DropdownMenuGroup>
                   
-                  <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuSeparator className="my-2 bg-slate-700" />
                   
                   <DropdownMenuGroup>
                     <DropdownMenuItem 
                       onClick={handleTrainerLock}
-                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest text-amber-600 hover:bg-amber-50 cursor-pointer"
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest text-[#F06C22] hover:bg-[#F06C22]/10 focus:bg-[#F06C22]/10 focus:text-[#F06C22] cursor-pointer"
                     >
                       <Lock className="w-4 h-4" />
                       Switch to Name List
@@ -1031,7 +1039,7 @@ export default function App() {
 
                     <DropdownMenuItem 
                       onClick={handleLogout}
-                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest text-rose-500 hover:bg-rose-50 cursor-pointer"
+                      className="rounded-xl flex items-center gap-3 p-3 font-bold uppercase text-[10px] tracking-widest text-rose-500 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer"
                     >
                       <LogOut className="w-4 h-4" />
                       Logout Facility
@@ -1039,38 +1047,6 @@ export default function App() {
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={async () => {
-                  try {
-                    await axios.post('/api/trigger-master-sync', { hardReset: false });
-                  } catch (err) {
-                    console.error('Sync failed:', err);
-                  }
-                }}
-                className="rounded-full opacity-60 hover:opacity-100 hover:text-primary transition-all group"
-                title="Resync All Calendars"
-              >
-                <RefreshCw className="w-5 h-5 group-active:rotate-180 transition-transform duration-500" />
-              </Button>
-
-              <div className="w-px h-8 bg-border/50 mx-1" />
-
-              <Button variant="ghost" size="icon" onClick={handleLogout} className="rounded-full" title="Logout Facility Account">
-                <LogOut className="w-5 h-5 opacity-40 hover:opacity-100" />
-              </Button>
-              
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setCurrentView('trainer-hub')} 
-                className={`rounded-full ${currentView === 'trainer-hub' ? 'text-primary bg-primary/10' : ''}`}
-                title="Trainer Control Hub"
-              >
-                <Settings className="w-5 h-5" />
-              </Button>
             </div>
           </header>
         )}
@@ -1420,10 +1396,23 @@ export default function App() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                       <div className="aspect-video bg-muted rounded-2xl overflow-hidden relative flex items-center justify-center border border-border group">
                         {infoMachine.imageUrl ? (
-                           <img src={infoMachine.imageUrl} className="w-full h-full object-cover brightness-100 transition-all duration-500" referrerPolicy="no-referrer" />
+                           <img 
+                             src={infoMachine.imageUrl} 
+                             className="w-full h-full object-cover brightness-100 transition-all duration-500" 
+                             referrerPolicy="no-referrer" 
+                             onError={(e) => {
+                               (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=800&q=80';
+                             }}
+                           />
                         ) : (
                            // Unsplash default photo mechanism for robust mockups
-                           <img src={`https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80`} className="w-full h-full object-cover brightness-100 transition-all duration-500" />
+                           <img 
+                             src={infoMachine.id === 'm-leg-press' ? 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=800&q=80' : `https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80`} 
+                             className="w-full h-full object-cover brightness-100 transition-all duration-500" 
+                             onError={(e) => {
+                               (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80';
+                             }}
+                           />
                         )}
                         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end z-10">
                             <div>
@@ -2538,23 +2527,66 @@ function ClientsView({
   const weekDays = getUpcomingDays();
 
   // Helper for time slots
-  const generateSlots = (startHour: number, endHour: number) => {
+  const generateSlots = (startHour: number, endHour: number, ampmStr: string) => {
     const slots = [];
     for (let h = startHour; h <= endHour; h++) {
-      slots.push(`${h.toString().padStart(2, '0')}:00`);
+      const displayHour = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      const suffix = h >= 12 && ampmStr === 'AUTO' ? 'PM' : (h < 12 && ampmStr === 'AUTO' ? 'AM' : ampmStr);
+      slots.push(`${displayHour}:00 ${suffix}`);
       if (h !== endHour) {
-        slots.push(`${h.toString().padStart(2, '0')}:30`);
+        slots.push(`${displayHour}:30 ${suffix}`);
       }
     }
     return slots;
   };
 
-  const AM_SLOTS = [...generateSlots(7, 12), '12:30'];
-  const PM_SLOTS = [...generateSlots(15, 18), '18:30'];
+  const AM_SLOTS = [
+    '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', 
+    '7:00 AM', '7:30 AM', '8:00 AM', '8:30 AM', 
+    '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', 
+    '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+    '1:00 PM'
+  ];
+  const PM_SLOTS = [
+    '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', 
+    '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM', 
+    '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', 
+    '7:00 PM', '7:30 PM', '8:00 PM'
+  ];
 
   const currentSlots = activeTab === 'morning' ? AM_SLOTS : PM_SLOTS;
 
-  // Active trainers for column display - only those with sessions or all if we want comparison
+  // Active trainers for column display
+  const TRAINER_COLORS = [
+    { border: 'border-[#38BDF8]', bg: 'bg-[#38BDF8]/10' },
+    { border: 'border-[#10B981]', bg: 'bg-[#10B981]/10' },
+    { border: 'border-[#F06C22]', bg: 'bg-[#F06C22]/10' },
+    { border: 'border-purple-400', bg: 'bg-purple-400/10' },
+    { border: 'border-pink-400', bg: 'bg-pink-400/10' }
+  ];
+
+  const timeToPosition = (date: Date) => {
+    if (selectedDate.toDateString() !== new Date().toDateString()) return null;
+    const h = date.getHours();
+    const m = date.getMinutes();
+    const totalMins = h * 60 + m;
+    const shiftStartMins = activeTab === 'morning' ? 5 * 60 : 13 * 60;
+    const shiftEndMins = activeTab === 'morning' ? 13 * 60 : 20 * 60;
+    if (totalMins < shiftStartMins || totalMins > shiftEndMins) return null;
+    const minsFromStart = totalMins - shiftStartMins;
+    const totalShiftMins = shiftEndMins - shiftStartMins;
+    return (minsFromStart / totalShiftMins) * 100;
+  };
+  const currentTimePos = timeToPosition(now);
+
+  const get12HourStr = (d: Date) => {
+    let h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12;
+    return `${h}:${m} ${ampm}`;
+  };
 
   // Find if a slot has any sessions for any trainer
   const getSlotSessions = (slot: string) => {
@@ -2959,78 +2991,98 @@ function ClientsView({
             </section>
 
             {/* Main Training Grid */}
-            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-              {visibleTrainersList.map(trainer => {
-                const tSessions = todaysSchedules
-                  .filter(s => s.trainerName === trainer.fullName)
-                  .sort((a,b) => a.startTime.toDate().getTime() - b.startTime.toDate().getTime());
-                
-                return (
-                  <div key={trainer.id} className="flex flex-col bg-slate-900/30 rounded-[2rem] border border-slate-800/60 overflow-hidden shadow-xl backdrop-blur-sm group hover:border-[#38BDF8]/30 transition-all">
-                    <div className="p-5 bg-slate-800/40 border-b border-slate-800/80 flex items-center justify-between">
-                      <h4 className="text-[13px] font-black uppercase tracking-[0.15em] text-[#38BDF8]">
-                        {trainer.fullName.split(' ')[0]}
-                      </h4>
-                      <Badge className="bg-slate-900 text-slate-400 border-slate-700/50 font-black text-[9px] px-2 py-0.5 rounded-md">
-                        {tSessions.length}
-                      </Badge>
+            <section className="bg-slate-900 border border-slate-700/80 rounded-[32px] overflow-hidden shadow-2xl relative">
+              <div className="overflow-x-auto flex-grow relative">
+                <div className="min-w-[800px] h-full relative">
+                  {currentTimePos !== null && (
+                    <div 
+                      className="absolute left-0 right-0 border-t-2 border-[#F06C22] z-20 pointer-events-none shadow-[0_0_15px_#F06C22]"
+                      style={{ top: `calc(80px + (100% - 80px) * ${currentTimePos} / 100)` }}
+                    >
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 bg-[#F06C22] text-white text-[9px] font-black uppercase px-2 py-1 rounded-r-md tracking-widest flex items-center shadow-[0_0_10px_#F06C22]">
+                        <span className="w-2 h-2 rounded-full bg-white mr-1 animate-pulse"></span>
+                        Current Time
+                      </div>
                     </div>
-                    
-                    <div className="p-4 space-y-3">
-                      {tSessions.map(session => {
-                        const client = findClientForSession(session);
-                        const isCompleted = session.status === 'Completed' || session.startTime.toDate() < now;
-                        const sCount = client ? sessions.filter(s => s.clientId === client.id && s.status === 'Completed').length + 1 : 0;
-                        
-                        return (
-                          <div 
-                            key={session.id}
-                            className={`group/session relative p-4 rounded-2xl border transition-all cursor-pointer ${
-                              isCompleted 
-                                ? 'bg-slate-900/40 border-slate-800 opacity-40 grayscale' 
-                                : 'bg-slate-800 border-slate-700/50 hover:border-[#38BDF8]/50 hover:bg-[#114B72]/30 shadow-sm'
-                            }`}
-                            onClick={() => {
-                              if (client) {
-                                onSelectClient(client.id!);
-                                setView('profile');
-                              } else {
-                                setLinkingSession(session);
-                                setIsLinking(true);
-                              }
-                            }}
-                          >
-                            <div className="flex flex-col gap-2.5">
-                              <div className="flex justify-between items-start gap-2">
-                                <span className="font-bold text-slate-100 text-[13px] tracking-tight leading-tight group-hover/session:text-[#38BDF8] transition-colors">
-                                  {session.clientName}
-                                </span>
-                                {client && !isCompleted && (
-                                  <div className="text-[8px] font-black bg-[#F06C22] text-white px-2 py-0.5 rounded-md shadow-lg shadow-[#F06C22]/20 uppercase">
-                                    #{sCount}
+                  )}
+                  <table className="w-full border-collapse table-fixed h-full bg-[#0A2E46]">
+                    <thead>
+                      <tr className="bg-slate-900 border-b border-slate-700 h-20">
+                        <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-700 w-24 sticky left-0 bg-slate-900 z-30">Time</th>
+                        {visibleTrainersList.map((trainer) => (
+                          <th key={trainer.id} className="p-4 border-r border-slate-700 last:border-r-0 text-center z-20 sticky top-0 bg-slate-900">
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-slate-300 font-black text-sm">
+                                {trainer.initials}
+                              </div>
+                              <span className="text-[10px] font-black uppercase tracking-wider text-white mt-1">{trainer.fullName}</span>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="relative">
+                      {currentSlots.map((slot) => {
+                      return (
+                        <tr key={slot} className="border-b border-slate-700 last:border-0 hover:bg-white/[0.02] transition-colors group relative">
+                          <td className="p-3 text-center border-r border-slate-700 sticky left-0 bg-[#0A2E46] z-10 text-slate-400">
+                            <span className="text-[11px] font-black tracking-tighter group-hover:text-white transition-colors">{slot}</span>
+                          </td>
+                          {visibleTrainersList.map((trainer, tIdx) => {
+                            const session = todaysSchedules.find(s => {
+                              const tStr = get12HourStr(s.startTime.toDate());
+                              return tStr === slot && s.trainerName === trainer.fullName && s.status !== 'Cancelled';
+                            });
+
+                            const color = TRAINER_COLORS[tIdx % TRAINER_COLORS.length];
+                            const isCompleted = session && (session.status === 'Completed' || session.startTime.toDate() < now);
+
+                            return (
+                              <td 
+                                key={`${trainer.id}-${slot}`} 
+                                className="p-1 border-r border-slate-700 last:border-r-0 h-[60px]"
+                              >
+                                {session ? (
+                                  <div
+                                    onClick={() => {
+                                      const client = findClientForSession(session);
+                                      if (client) {
+                                        onSelectClient(client.id!);
+                                        setView('profile');
+                                      } else {
+                                        setLinkingSession(session);
+                                        setIsLinking(true);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "p-3 rounded-xl border-l-4 flex flex-col gap-0.5 hover:scale-[1.02] transition-all cursor-pointer shadow-md h-full",
+                                      isCompleted ? 'bg-slate-900/60 border-slate-700 opacity-60 grayscale' : cn("bg-slate-800", color.border)
+                                    )}
+                                  >
+                                    <span className="text-[10px] font-bold text-slate-400 tabular-nums leading-none tracking-tight">
+                                      {slot} - {session.endTime ? get12HourStr(session.endTime.toDate()) : '30m'}
+                                    </span>
+                                    <div className="flex justify-between items-start">
+                                      <span className="text-sm font-black truncate text-white leading-tight">
+                                        {session.clientName}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="h-full w-full opacity-0 hover:opacity-10 transition-opacity flex items-center justify-center p-2 bg-slate-600 rounded-lg pointer-events-none">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Open</span>
                                   </div>
                                 )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-3 h-3 text-slate-500" />
-                                <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
-                                  {session.startTime.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {tSessions.length === 0 && (
-                        <div className="py-10 flex flex-col items-center justify-center text-slate-700 space-y-2">
-                          <Clock className="w-5 h-5 opacity-20" />
-                          <span className="text-[9px] uppercase font-bold tracking-widest opacity-30 italic">No Sessions</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                </div>
+              </div>
             </section>
 
             {/* Recently Profiled (Compact Grid) */}
@@ -4061,13 +4113,26 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
     
     if (machineLogs.length === 0) return null;
 
-    const weights = machineLogs.map(log => parseFloat(log.weight || '0')).filter(w => w > 0);
-    const reps = machineLogs.map(log => parseFloat(log.reps || '0')).filter(r => r > 0);
+    const weights = machineLogs.map(log => parseFloat(log.weight || '0')).filter(w => !isNaN(w) && w > 0);
+    const reps = machineLogs.map(log => parseFloat(log.reps || '0')).filter(r => !isNaN(r) && r > 0);
+    const seconds = machineLogs.map(log => parseFloat(log.seconds || '0')).filter(s => !isNaN(s) && s > 0);
+
+    const totalVolume = machineLogs.reduce((acc, log) => {
+      const w = parseFloat(log.weight || '0');
+      const r = parseFloat(log.reps || '0');
+      if (!isNaN(w) && !isNaN(r) && w > 0 && r > 0) {
+        return acc + (w * r);
+      }
+      return acc;
+    }, 0);
 
     return {
       avgWeight: weights.length ? Math.round(weights.reduce((a, b) => a + b, 0) / weights.length) : 0,
       avgReps: reps.length ? (reps.reduce((a, b) => a + b, 0) / reps.length).toFixed(1) : 0,
       maxWeight: weights.length ? Math.max(...weights) : 0,
+      avgSeconds: seconds.length ? (seconds.reduce((a, b) => a + b, 0) / seconds.length).toFixed(1) : 0,
+      totalVolume: Math.round(totalVolume),
+      usageCount: machineLogs.length
     };
   };
 
@@ -4090,19 +4155,27 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
         {machines.map((machine) => {
           const stats = calculateStats(machine.id!);
           // Using deterministically selected robust Unsplash images for fitness equipment 
-          const imgId = [
-            "1534438327276-14e5300c3a48", "1540497077202-7c8a3999166f", "1574680096145-d05b474e2155",
-            "1518611012118-696072aa579a", "1581009146145-b5ef050c2e1e", "1534438327276-14e5300c3a48"
-          ][(machine.order || 0) % 6];
+          // If the machine is the Leg Press, explicitly provide a robust Leg Press URL (or fallback)
+          const fallbackImgUrl = machine.id === 'm-leg-press' 
+            ? 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=400&q=80' // Better default image
+            : `https://images.unsplash.com/photo-${[
+                "1534438327276-14e5300c3a48", "1540497077202-7c8a3999166f", "1574680096145-d05b474e2155",
+                "1518611012118-696072aa579a", "1581009146145-b5ef050c2e1e", "1584466977773-e625c37cdd50"
+              ][(machine.order || 0) % 6]}?auto=format&fit=crop&w=400&q=80`;
 
           return (
             <Card key={machine.id} className="group rounded-2xl overflow-hidden border border-border/80 hover:border-primary/50 transition-all shadow-sm bg-card flex flex-col">
               {/* Thumbnail Header Area */}
               <div className="relative h-32 bg-slate-900 overflow-hidden">
                 <img 
-                  src={`https://images.unsplash.com/photo-${imgId}?auto=format&fit=crop&w=400&q=80`} 
+                  src={machine.imageUrl || fallbackImgUrl} 
                   alt={machine.name} 
                   className="w-full h-full object-cover brightness-100 transition-all duration-700 ease-out scale-100 group-hover:scale-110" 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    // Fallback on error so it never shows broken image
+                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=400&q=80';
+                  }}
                 />
                 <div className="absolute top-2 left-2 w-6 h-6 rounded-md bg-primary/90 backdrop-blur-sm text-primary-foreground flex items-center justify-center font-bold text-xs shadow-md z-10 border border-white/10">
                   {machine.order}
@@ -4118,7 +4191,7 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
                 {/* Global Benchmark Compact */}
                 <div className="bg-muted/30 rounded-lg p-2 border border-border/40">
                   <p className="text-[7px] font-bold uppercase tracking-widest text-secondary mb-1.5 opacity-60">Global Benchmark</p>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center mb-2">
                     <div className="text-left">
                       <p className="text-[12px] font-bold text-secondary leading-none">{stats?.avgWeight || '--'} <span className="text-[8px] font-medium opacity-60">lbs</span></p>
                       <p className="text-[8px] font-medium text-secondary/60 uppercase mt-0.5">Avg Wgt</p>
@@ -4132,6 +4205,20 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
                     <div className="text-right">
                       <p className="text-[12px] font-bold text-primary leading-none">{stats?.maxWeight || '--'} <span className="text-[8px] font-medium text-primary/60">lbs</span></p>
                       <p className="text-[8px] font-medium text-primary/60 uppercase mt-0.5">Max</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-border/40">
+                    <div className="text-left">
+                      <p className="text-[10px] font-bold text-secondary leading-none">{stats?.totalVolume ? stats.totalVolume.toLocaleString() : '--'} <span className="text-[7px] font-medium opacity-60">lbs</span></p>
+                      <p className="text-[7px] font-medium text-secondary/60 uppercase mt-0.5">Vol</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold text-secondary leading-none">{stats?.avgSeconds ? stats.avgSeconds : '--'} <span className="text-[7px] font-medium opacity-60">s</span></p>
+                      <p className="text-[7px] font-medium text-secondary/60 uppercase mt-0.5">Avg Time</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-secondary leading-none">{stats?.usageCount || '--'}</p>
+                      <p className="text-[7px] font-medium text-secondary/60 uppercase mt-0.5">Uses</p>
                     </div>
                   </div>
                 </div>
