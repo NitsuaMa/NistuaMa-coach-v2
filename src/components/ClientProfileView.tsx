@@ -52,6 +52,7 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ROUTINE_TEMPLATES, RoutineTemplateType } from '../constants';
 import { Client, Machine, WorkoutSession, ExerciseLog, Routine, View, ClientMachineSetting, TrainerFocus, Trainer, ScheduleEntry, ProgressReport } from '../types';
 import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
@@ -87,6 +88,8 @@ export function ClientProfileView({
   const [progressReports, setProgressReports] = useState<ProgressReport[]>([]);
   const [scheduledSessions, setScheduledSessions] = useState<ScheduleEntry[]>([]);
   const [isEditingFocus, setIsEditingFocus] = useState(false);
+  const [isEditingSessionCount, setIsEditingSessionCount] = useState(false);
+  const [sessionCountInput, setSessionCountInput] = useState("");
   const [focusForm, setFocusForm] = useState<Partial<TrainerFocus>>({
     category: 'Path',
     notes: ''
@@ -126,7 +129,9 @@ export function ClientProfileView({
         globalNotes: client.globalNotes || '',
         isActive: client.isActive ?? true,
         isRoutineBActive: client.isRoutineBActive ?? false,
-        consultationCompleted: client.consultationCompleted ?? false
+        consultationCompleted: client.consultationCompleted ?? false,
+        packageTier: client.packageTier || "None",
+        remainingSessions: client.remainingSessions ?? 0
       });
     }
   }, [client]);
@@ -143,6 +148,22 @@ export function ClientProfileView({
       handleFirestoreError(error, OperationType.UPDATE, `clients/${clientId}`);
     } finally {
       setIsSavingInfo(false);
+    }
+  };
+
+  const handleSaveSessionCount = async () => {
+    if (!clientId) return;
+    const num = parseInt(sessionCountInput, 10);
+    if (isNaN(num)) return;
+    
+    try {
+      await updateDoc(doc(db, 'clients', clientId), {
+        sessionCount: num,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditingSessionCount(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clients/${clientId}`);
     }
   };
 
@@ -501,11 +522,63 @@ export function ClientProfileView({
             <User className="w-5 h-5 text-white/50" />
           </div>
           <div className="flex flex-col min-w-0">
-             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                <h2 className="text-lg sm:text-2xl font-black uppercase tracking-tighter leading-none m-0 truncate">
                  {client.firstName} {client.lastName}
                </h2>
-               <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-white/80">
+               <div className="flex items-center gap-1 group">
+                 <Badge variant="outline" className="bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/30 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest shadow-[0_0_10px_rgba(56,189,248,0.2)]">
+                   Session #{client.sessionCount ?? 0}
+                 </Badge>
+                 <button 
+                   onClick={() => {
+                     setSessionCountInput(String(client.sessionCount ?? 0));
+                     setIsEditingSessionCount(true);
+                   }}
+                   className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded-full"
+                 >
+                   <Edit3 className="w-3 h-3 text-[#38BDF8]" />
+                 </button>
+               </div>
+               
+               {/* Balance Badge */}
+               <div className="flex items-center gap-1">
+                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest shadow-[0_0_10px_rgba(52,211,153,0.2)]">
+                   {client.remainingSessions ?? 0} Left
+                 </Badge>
+               </div>
+             </div>
+             
+             {/* Flair Row */}
+             <div className="flex flex-wrap gap-2 mt-2 mb-2 items-center group/flair">
+               {client.packageTier && client.packageTier !== "None" && (
+                 <div className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border ${
+                   client.packageTier === "6-Month" ? "bg-blue-500/20 text-blue-400 border-blue-500/50" :
+                   client.packageTier === "12-Month" ? "bg-[#F06C22]/20 text-[#F06C22] border-[#F06C22]/50 shadow-[0_0_10px_rgba(240,108,34,0.3)]" :
+                   client.packageTier === "18-Month" ? "bg-gray-400/20 text-gray-200 border-gray-400/60 shadow-[0_0_15px_rgba(156,163,175,0.4)]" :
+                   ""
+                 }`}>
+                   {client.packageTier} VIP
+                 </div>
+               )}
+               {!client.packageTier || client.packageTier === "None" ? (
+                 <button 
+                   onClick={() => setActiveTab("details")}
+                   className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-white transition-colors flex items-center gap-1"
+                 >
+                   + Add Tier
+                 </button>
+               ) : (
+                 <button 
+                   onClick={() => setActiveTab("details")}
+                   className="opacity-0 group-hover/flair:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded-full"
+                 >
+                   <Edit3 className="w-3 h-3 text-slate-400" />
+                 </button>
+               )}
+             </div>
+
+             <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-white/80">
                  <div className="flex items-center gap-1 bg-white/10 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border border-white/5 whitespace-nowrap">
                    <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                    <span>LAST: <span className="text-white">{sessions[0]?.date ? new Date(sessions[0].date + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'NONE'}</span></span>
@@ -549,7 +622,6 @@ export function ClientProfileView({
                </div>
              </div>
           </div>
-        </div>
 
         <div className="flex items-center gap-2 z-10 shrink-0 ml-auto">
           <Button onClick={() => setView('workouts')} className="bg-[#F06C22] hover:bg-[#F06C22]/90 text-white rounded-lg font-black uppercase text-xs sm:text-sm tracking-widest h-9 sm:h-10 px-4 sm:px-6 shadow-[0_0_15px_rgba(240,108,34,0.5)] border-none shrink-0">
@@ -584,7 +656,7 @@ export function ClientProfileView({
               Timing
             </TabsTrigger>
             <TabsTrigger value="details" className="flex-1 min-w-[80px] rounded-full border border-slate-200 h-[26px] px-3 font-black uppercase text-[9px] tracking-widest text-[#68717A] bg-transparent data-[state=active]:border-transparent data-[state=active]:bg-[#115E8D] data-[state=active]:text-white transition-all data-[state=active]:shadow-sm">
-              Profile
+              Account & Settings
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1185,62 +1257,104 @@ export function ClientProfileView({
         <TabsContent value="details">
           <div className="grid gap-6 lg:grid-cols-3">
              <div className="lg:col-span-2 space-y-6">
-                <Card className="rounded-[40px] border-2 shadow-xl">
-                   <CardHeader className="p-8 border-b">
+                <Card className="rounded-[40px] shadow-xl bg-slate-800 border-slate-700 text-white">
+                   <CardHeader className="p-8 border-b border-slate-700">
                       <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Client Information</CardTitle>
-                      <CardDescription className="text-[10px] font-bold uppercase tracking-widest">Identity & Vital Statistics</CardDescription>
+                      <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-[#38BDF8]">Identity & Vital Statistics</CardDescription>
                    </CardHeader>
                    <CardContent className="p-8 grid gap-6 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">First Name</Label>
-                        <Input value={infoForm.firstName} onChange={e => setInfoForm(f => ({ ...f, firstName: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</Label>
+                        <Input value={infoForm.firstName || ''} onChange={e => setInfoForm(f => ({ ...f, firstName: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Last Name</Label>
-                        <Input value={infoForm.lastName} onChange={e => setInfoForm(f => ({ ...f, lastName: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</Label>
+                        <Input value={infoForm.lastName || ''} onChange={e => setInfoForm(f => ({ ...f, lastName: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Email Address</Label>
-                        <Input value={infoForm.email} onChange={e => setInfoForm(f => ({ ...f, email: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email Address</Label>
+                        <Input value={infoForm.email || ''} onChange={e => setInfoForm(f => ({ ...f, email: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Phone Number</Label>
-                        <Input value={infoForm.phone} onChange={e => setInfoForm(f => ({ ...f, phone: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Phone Number</Label>
+                        <Input value={infoForm.phone || ''} onChange={e => setInfoForm(f => ({ ...f, phone: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Height</Label>
-                        <Input value={infoForm.height} onChange={e => setInfoForm(f => ({ ...f, height: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Height</Label>
+                        <Input value={infoForm.height || ''} onChange={e => setInfoForm(f => ({ ...f, height: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Current Weight (lbs)</Label>
-                        <Input value={infoForm.weight} onChange={e => setInfoForm(f => ({ ...f, weight: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Current Weight (lbs)</Label>
+                        <Input value={infoForm.weight || ''} onChange={e => setInfoForm(f => ({ ...f, weight: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                       </div>
                    </CardContent>
                 </Card>
 
-                <Card className="rounded-[40px] border-2 shadow-xl">
-                    <CardHeader className="p-8 border-b">
+                <Card className="rounded-[40px] shadow-xl bg-slate-800 border-slate-700 text-white">
+                   <CardHeader className="p-8 border-b border-slate-700">
+                      <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Package & Sessions</CardTitle>
+                      <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-[#38BDF8]">Commitment Level & Balances</CardDescription>
+                   </CardHeader>
+                   <CardContent className="p-8 grid gap-6 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Package Tier</Label>
+                        <Select 
+                          value={infoForm.packageTier || "None"} 
+                          onValueChange={(v: "6-Month" | "12-Month" | "18-Month" | "None") => {
+                            let sessionBalance = infoForm.remainingSessions || 0;
+                            if (v === '6-Month') sessionBalance = 48;
+                            else if (v === '12-Month') sessionBalance = 96;
+                            else if (v === '18-Month') sessionBalance = 144;
+                            else if (v === 'None') sessionBalance = 2;
+                            setInfoForm(f => ({ ...f, packageTier: v, remainingSessions: sessionBalance }));
+                          }}
+                        >
+                          <SelectTrigger className="w-full h-12 bg-slate-900 border-slate-700 text-white font-bold rounded-2xl focus-visible:ring-[#38BDF8]">
+                            <SelectValue placeholder="Select Tier" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-800 border-slate-700 text-white rounded-xl">
+                            <SelectItem value="None">None / Trial</SelectItem>
+                            <SelectItem value="6-Month">6-Month (48 Sessions)</SelectItem>
+                            <SelectItem value="12-Month">12-Month (96 Sessions)</SelectItem>
+                            <SelectItem value="18-Month">18-Month VIP (144 Sessions)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Session Balance</Label>
+                         <Input 
+                           type="number"
+                           value={infoForm.remainingSessions ?? ''} 
+                           onChange={e => setInfoForm(f => ({ ...f, remainingSessions: parseInt(e.target.value) || 0 }))} 
+                           className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" 
+                         />
+                      </div>
+                   </CardContent>
+                </Card>
+
+                <Card className="rounded-[40px] shadow-xl bg-slate-800 border-slate-700 text-white">
+                    <CardHeader className="p-8 border-b border-slate-700">
                       <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Safety & Records</CardTitle>
-                      <CardDescription className="text-[10px] font-bold uppercase tracking-widest">Medical Notes & Emergencies</CardDescription>
+                      <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-[#38BDF8]">Medical Notes & Emergencies</CardDescription>
                     </CardHeader>
                     <CardContent className="p-8 space-y-6">
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Global Coaching Notes</Label>
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Global Coaching Notes</Label>
                         <Textarea 
-                          value={infoForm.globalNotes} 
+                          value={infoForm.globalNotes || ''} 
                           onChange={e => setInfoForm(f => ({ ...f, globalNotes: e.target.value }))} 
-                          className="min-h-[120px] rounded-3xl font-bold p-6 bg-muted/20 border-transparent focus:bg-background focus:border-primary transition-all" 
+                          className="min-h-[120px] rounded-3xl font-bold p-6 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8] transition-all" 
                           placeholder="Document medical history, limitations, or special considerations..."
                         />
                       </div>
                       <div className="grid gap-6 sm:grid-cols-2 pt-4">
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Emergency Contact Name</Label>
-                          <Input value={infoForm.emergencyContactName} onChange={e => setInfoForm(f => ({ ...f, emergencyContactName: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Emergency Contact Name</Label>
+                          <Input value={infoForm.emergencyContactName || ''} onChange={e => setInfoForm(f => ({ ...f, emergencyContactName: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Emergency Contact Phone</Label>
-                          <Input value={infoForm.emergencyContactPhone} onChange={e => setInfoForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} className="h-12 rounded-2xl font-black px-4" />
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Emergency Contact Phone</Label>
+                          <Input value={infoForm.emergencyContactPhone || ''} onChange={e => setInfoForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                         </div>
                       </div>
                     </CardContent>
@@ -1248,27 +1362,27 @@ export function ClientProfileView({
              </div>
 
              <div className="space-y-6">
-                <Card className="rounded-[40px] border-2 shadow-sm bg-neutral-900 text-white">
+                <Card className="rounded-[40px] shadow-sm bg-slate-900 border-slate-800 text-white">
                    <CardHeader className="p-8">
                       <h3 className="text-xs font-black uppercase tracking-[0.3em] opacity-40">System State</h3>
                    </CardHeader>
                    <CardContent className="px-8 pb-8 space-y-6">
                       <div className="flex items-center justify-between">
-                         <Label className="text-[10px] font-black uppercase tracking-widest">Active Client</Label>
+                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-300">Active Client</Label>
                          <Switch checked={infoForm.isActive} onCheckedChange={v => setInfoForm(f => ({ ...f, isActive: v }))} className="data-[state=checked]:bg-emerald-500" />
                       </div>
                       <div className="flex items-center justify-between">
-                         <Label className="text-[10px] font-black uppercase tracking-widest">Enable Routine B</Label>
+                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-300">Enable Routine B</Label>
                          <Switch checked={infoForm.isRoutineBActive} onCheckedChange={v => setInfoForm(f => ({ ...f, isRoutineBActive: v }))} className="data-[state=checked]:bg-amber-500" />
                       </div>
                       <div className="flex items-center justify-between">
                          <div>
-                           <Label className="text-[10px] font-black uppercase tracking-widest">Initial Consult</Label>
+                           <Label className="text-[10px] font-black uppercase tracking-widest text-slate-300">Initial Consult</Label>
                            <p className="text-[8px] font-bold opacity-40 uppercase tracking-tighter mt-0.5">Bypass Demo Screen</p>
                          </div>
                          <Switch checked={infoForm.consultationCompleted} onCheckedChange={v => setInfoForm(f => ({ ...f, consultationCompleted: v }))} className="data-[state=checked]:bg-[#F06C22]" />
                       </div>
-                      <div className="pt-6 border-t border-white/10 mt-6 pb-2">
+                      <div className="pt-6 border-t border-slate-800 mt-6 pb-2">
                          <Button 
                            variant="outline"
                            className="w-full h-12 rounded-2xl border-red-500/20 text-red-500 hover:bg-red-500/10 hover:text-red-400 font-black uppercase tracking-widest text-[10px] transition-all bg-transparent"
@@ -1282,7 +1396,7 @@ export function ClientProfileView({
                          <Button 
                            disabled={isSavingInfo}
                            onClick={handleSaveInfo}
-                           className="w-full h-16 rounded-3xl bg-action hover:bg-action/90 text-action-foreground font-black uppercase italic text-xs tracking-widest shadow-xl shadow-action/20"
+                           className="w-full h-16 rounded-3xl bg-[#F06C22] hover:bg-[#ea580c] text-white font-black uppercase italic text-xs tracking-widest shadow-[0_0_20px_rgba(240,108,34,0.3)] transition-all"
                          >
                            {isSavingInfo ? 'Processing...' : 'Save All Changes'}
                          </Button>
@@ -1348,6 +1462,45 @@ export function ClientProfileView({
         machine={selectedInsightMachine} 
         onClose={() => setSelectedInsightMachine(null)} 
       />
+
+      <Dialog open={isEditingSessionCount} onOpenChange={setIsEditingSessionCount}>
+        <DialogContent className="rounded-3xl border-slate-700 bg-slate-900 shadow-2xl p-6 sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase text-white italic tracking-tighter">Edit Session Count</DialogTitle>
+            <DialogDescription className="text-xs uppercase tracking-widest text-[#38BDF8] font-bold">
+              Adjust {client.firstName}'s total sessions.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-white font-bold text-xs uppercase tracking-widest">Total Sessions completed</Label>
+              <Input
+                type="number"
+                value={sessionCountInput}
+                onChange={e => setSessionCountInput(e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white font-black text-lg h-12 focus-visible:ring-[#38BDF8]"
+                placeholder="0"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsEditingSessionCount(false)}
+                className="flex-1 border-slate-700 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 rounded-xl font-black uppercase tracking-widest text-[10px]"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveSessionCount}
+                className="flex-[2] bg-[#38BDF8] hover:bg-[#0284c7] text-white rounded-xl font-black uppercase tracking-widest text-[10px]"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </motion.div>
   );
 }

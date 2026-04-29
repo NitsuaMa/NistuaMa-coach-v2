@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UserPlus, User, Loader2, ArrowRight } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Client } from '../types';
@@ -20,6 +21,7 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
   const [lastName, setLastName] = useState(nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [packageTier, setPackageTier] = useState<"6-Month" | "12-Month" | "18-Month" | "None">("None");
   const [isFirstTimeConsult, setIsFirstTimeConsult] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -49,6 +51,7 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
         lastName,
         phone,
         email,
+        packageTier,
         isActive: true,
         completedSessions: 0,
         remainingSessions: 10,
@@ -137,7 +140,7 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
               <Input 
                 value={phone} 
                 onChange={e => setPhone(e.target.value)}
-                className="h-14 font-bold rounded-xl"
+                className="h-14 font-bold rounded-xl bg-slate-50"
                 placeholder="Phone Number"
                 type="tel"
               />
@@ -147,10 +150,27 @@ export function CreateClientModal({ initialName = '', onClose, onClientCreated }
               <Input 
                 value={email} 
                 onChange={e => setEmail(e.target.value)}
-                className="h-14 font-bold rounded-xl"
+                className="h-14 font-bold rounded-xl bg-slate-50"
                 placeholder="Email Address"
                 type="email"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Package Tier</label>
+              <Select value={packageTier} onValueChange={(v: "6-Month" | "12-Month" | "18-Month" | "None") => setPackageTier(v)}>
+                <SelectTrigger className="w-full h-14 bg-slate-50 border-slate-200 text-[#0F172A] font-bold rounded-xl">
+                  <SelectValue placeholder="Select Tier" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white rounded-xl">
+                  <SelectItem value="None">None / Default</SelectItem>
+                  <SelectItem value="6-Month">6-Month</SelectItem>
+                  <SelectItem value="12-Month">12-Month</SelectItem>
+                  <SelectItem value="18-Month">18-Month (VIP)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-6">

@@ -30,7 +30,7 @@ interface Props {
   onSave: (newMachineIds: string[]) => void;
 }
 
-function SortableMachineItem({ id, machine, onRemove }: { id: string, machine: Machine, onRemove: () => void }) {
+function SortableMachineItem({ id, machine, onRemove }: { id: string, machine: Machine, onRemove: () => void, key?: React.Key }) {
   const {
     attributes,
     listeners,
@@ -65,7 +65,7 @@ function SortableMachineItem({ id, machine, onRemove }: { id: string, machine: M
       
       <div className="flex-1 min-w-0">
         <div className="font-black text-base text-white truncate">{machine.name}</div>
-        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">Target: {machine.targetMuscle || 'General'}</div>
+        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">Target: {machine.targetMuscles || 'General'}</div>
       </div>
       
       <button 
@@ -180,7 +180,7 @@ export function SessionRoutineManagerModal({ isOpen, onOpenChange, currentMachin
                       <SelectItem key={m.id!} value={m.id!} className="py-3 hover:bg-slate-700 focus:bg-slate-700 focus:text-white">
                         <div className="flex flex-col">
                           <span className="font-bold">{m.name}</span>
-                          <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">{m.targetMuscle || 'General'}</span>
+                          <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">{m.targetMuscles || 'General'}</span>
                         </div>
                       </SelectItem>
                     ))}

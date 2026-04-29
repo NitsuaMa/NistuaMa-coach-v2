@@ -3961,6 +3961,9 @@ function PerformanceEntryDialog({
   currentWeight,
   currentNextWeight,
   currentReps,
+  currentQuality,
+  prevWeight,
+  prevReps,
   isStaticHold,
   onSave,
   onClose
@@ -3969,138 +3972,138 @@ function PerformanceEntryDialog({
   currentWeight: string;
   currentNextWeight: string;
   currentReps: string;
+  currentQuality: number;
+  prevWeight: string;
+  prevReps: string;
   isStaticHold?: boolean;
-  onSave: (weight: string, target: string, reps: string) => void;
+  onSave: (weight: string, target: string, reps: string, quality: number) => void;
   onClose: () => void;
 }) {
-  const [current, setCurrent] = useState(parseFloat(currentWeight) || 0);
-  const [next, setNext] = useState(parseFloat(currentNextWeight) || current);
-  const [reps, setReps] = useState(parseFloat(currentReps) || 0);
+  const initialWeight = parseFloat(currentWeight) > 0 ? parseFloat(currentWeight) : (parseFloat(prevWeight) || 0);
+  const initialReps = parseFloat(currentReps) > 0 ? parseFloat(currentReps) : (parseFloat(prevReps) || 0);
+  
+  const [current, setCurrent] = useState(initialWeight);
+  const [reps, setReps] = useState(initialReps);
+  const [quality, setQuality] = useState(currentQuality || 2); 
 
   const roundUpTo2 = (val: number) => Math.ceil(val / 2) * 2;
 
-  const adjustCurrent = (amount: number) => setCurrent(roundUpTo2(current + amount));
-  const adjustNext = (amount: number) => setNext(roundUpTo2(next + amount));
+  const adjustCurrent = (amount: number) => setCurrent(Math.max(0, roundUpTo2(current + amount)));
   const adjustReps = (amount: number) => setReps(Math.max(0, reps + amount));
 
-  const applyPercentAdjust = (deltaPct: number) => {
-    if (current === 0) return;
-    const currentActualPct = ((next - current) / current) * 100;
-    // Snap to nearest 5% increment before adding delta to ensure "taps" are additive
-    const snappedPct = Math.round(currentActualPct / 5) * 5;
-    const newPct = snappedPct + deltaPct;
-    setNext(roundUpTo2(current * (1 + newPct / 100)));
-  };
+  const prevW = parseFloat(prevWeight) || 0;
+  const weightDelta = prevW > 0 ? current - prevW : 0;
+  const weightDeltaPct = prevW > 0 ? ((weightDelta / prevW) * 100).toFixed(1) : "0.0";
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[420px] rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
-        <div className="bg-primary p-6 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12">
+      <DialogContent className="sm:max-w-[420px] rounded-[32px] p-0 overflow-hidden border-slate-700 bg-slate-900 shadow-2xl">
+        <div className="bg-slate-800 p-6 text-white relative overflow-hidden border-b border-slate-700">
+          <div className="absolute top-0 right-0 p-8 opacity-5 rotate-12">
             <Zap className="w-24 h-24" />
           </div>
           <div className="flex items-center gap-4 relative z-10">
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-sm">
-              <Zap className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 bg-slate-700 rounded-2xl flex items-center justify-center shrink-0">
+              <Zap className="w-6 h-6 text-[#38BDF8]" />
             </div>
             <div>
-              <h2 className="text-xl font-black italic uppercase tracking-tight leading-none">{machine.name}</h2>
-              <p className="text-[10px] uppercase font-bold text-white/60 tracking-wider mt-1">Direct Performance Input</p>
+              <h2 className="text-2xl font-black italic uppercase tracking-tight leading-none">{machine.name}</h2>
+              <p className="text-[10px] uppercase font-bold text-[#38BDF8] tracking-widest mt-1">Smart Entry HUD</p>
             </div>
           </div>
         </div>
 
-        <div className="p-6 space-y-8">
-          <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Reps/Seconds Section */}
-              <section className="space-y-3 bg-muted/30 p-4 rounded-3xl border border-border/50">
-                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center block">
-                  {isStaticHold ? 'Seconds' : 'Reps'}
-                </Label>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex items-center gap-2 w-full justify-center">
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-2 bg-card shadow-sm" onClick={() => adjustReps(-1)}>-</Button>
-                    <Input 
-                      type="number"
-                      inputMode="numeric"
-                      className="h-14 w-20 text-center font-black text-2xl rounded-2xl border-2 bg-background focus:border-primary transition-all p-0"
-                      value={reps || ''}
-                      onChange={e => setReps(parseFloat(e.target.value) || 0)}
-                    />
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-2 bg-card shadow-sm" onClick={() => adjustReps(1)}>+</Button>
+        <div className="p-6 space-y-6">
+          {/* Smart Stepper: Weight */}
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-4 sm:p-5 flex flex-col items-center shadow-lg relative">
+            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center block mb-4">
+              Weight (lbs)
+            </Label>
+            <div className="flex items-center justify-between w-full h-24 px-2">
+              <button 
+                className="w-16 h-16 rounded-2xl bg-slate-700 text-slate-300 font-black text-2xl flex items-center justify-center active:scale-95 transition-transform"
+                onClick={() => adjustCurrent(-2)}
+              >
+                -2
+              </button>
+              
+              <div className="flex flex-col items-center justify-center flex-1">
+                <span className="font-black text-6xl text-white tracking-tighter leading-none">{current}</span>
+                {prevW > 0 && (
+                  <div className={`mt-2 text-[11px] font-black uppercase px-2 py-0.5 rounded-md ${weightDelta > 0 ? 'bg-emerald-500/20 text-emerald-400' : weightDelta < 0 ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-700 text-slate-400'}`}>
+                    {weightDelta > 0 ? '+' : ''}{weightDelta} lbs ({weightDelta > 0 ? '+' : ''}{weightDeltaPct}%)
                   </div>
-                </div>
-              </section>
+                )}
+              </div>
 
-              {/* Current Weight Section */}
-              <section className="space-y-3 bg-muted/30 p-4 rounded-3xl border border-border/50">
-                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center block">
-                  Weight (lbs)
-                </Label>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex items-center gap-2 w-full justify-center">
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-2 bg-card shadow-sm" onClick={() => adjustCurrent(-2)}>-</Button>
-                    <Input 
-                      type="number"
-                      inputMode="decimal"
-                      className="h-14 w-24 text-center font-black text-2xl rounded-2xl border-2 bg-background focus:border-emerald-500 transition-all p-0 text-emerald-600"
-                      value={current}
-                      onChange={e => setCurrent(parseFloat(e.target.value) || 0)}
-                    />
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-2 bg-card shadow-sm" onClick={() => adjustCurrent(2)}>+</Button>
-                  </div>
-                </div>
-              </section>
+              <button 
+                className="w-16 h-16 rounded-2xl bg-[#F06C22] text-white font-black text-2xl flex items-center justify-center shadow-[0_0_15px_rgba(240,108,34,0.4)] active:scale-95 transition-transform"
+                onClick={() => adjustCurrent(2)}
+              >
+                +2
+              </button>
             </div>
-
-            {/* Next Weight Section */}
-            <section className="space-y-3 bg-primary/5 p-4 rounded-3xl border border-primary/10">
-              <div className="flex items-center justify-between px-2">
-                <Label className="text-[10px] font-black uppercase text-primary/60 tracking-widest">
-                  Next Session Target
-                </Label>
-                <Badge variant="outline" className="text-[9px] font-black bg-primary/10 text-primary border-primary/20">Automatic Increment</Badge>
-              </div>
-              <div className="flex items-center gap-4 justify-center">
-                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-2 bg-card shadow-sm text-primary" onClick={() => adjustNext(-2)}>-</Button>
-                <div className="flex items-end gap-1">
-                  <Input 
-                    type="number"
-                    inputMode="decimal"
-                    className="h-14 w-24 text-center font-black text-3xl rounded-none border-none bg-transparent p-0 text-primary focus:ring-0 focus:border-transparent no-arrows"
-                    value={next}
-                    onChange={e => setNext(parseFloat(e.target.value) || 0)}
-                  />
-                  <span className="font-black text-primary/30 mb-2 italic">LBS</span>
-                </div>
-                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-2 bg-card shadow-sm text-primary" onClick={() => adjustNext(2)}>+</Button>
-              </div>
-              <div className="flex justify-center gap-4">
-                <Button 
-                  variant="ghost" 
-                  className="h-10 px-6 rounded-xl text-[11px] font-black uppercase tracking-widest text-orange-500 hover:text-orange-600 hover:bg-orange-500/10 border-2 border-orange-500/20"
-                  onClick={() => applyPercentAdjust(-5)}
-                >
-                  -5% DECREASE
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  className="h-10 px-6 rounded-xl text-[11px] font-black uppercase tracking-widest text-primary hover:text-primary hover:bg-primary/10 border-2 border-primary/20"
-                  onClick={() => applyPercentAdjust(5)}
-                >
-                  +5% INCREASE
-                </Button>
-              </div>
-            </section>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" className="h-14 rounded-2xl font-black uppercase italic tracking-widest border-2" onClick={onClose}>
+          {/* Smart Stepper: Reps / Seconds */}
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-4 sm:p-5 flex flex-col items-center shadow-lg relative">
+            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center block mb-4">
+              {isStaticHold ? 'Time (Seconds)' : 'Reps Completed'}
+            </Label>
+            <div className="flex items-center justify-between w-full h-20 px-2">
+              <button 
+                className="w-14 h-14 rounded-2xl bg-slate-700 text-slate-300 font-black text-2xl flex items-center justify-center active:scale-95 transition-transform"
+                onClick={() => adjustReps(-1)}
+              >
+                -1
+              </button>
+              
+              <div className="flex flex-col items-center justify-center flex-1">
+                <span className="font-black text-5xl text-white tracking-tight leading-none">{reps}</span>
+              </div>
+
+              <button 
+                className="w-14 h-14 rounded-2xl bg-[#38BDF8] text-white font-black text-2xl flex items-center justify-center shadow-[0_0_15px_rgba(56,189,248,0.4)] active:scale-95 transition-transform"
+                onClick={() => adjustReps(1)}
+              >
+                +1
+              </button>
+            </div>
+          </div>
+
+          {/* Quality Rating Segmented Control */}
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-4 sm:p-5 flex flex-col items-center shadow-lg relative">
+            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center block mb-4">
+              Set Quality / RPE
+            </Label>
+            <div className="flex items-center gap-2 w-full h-14">
+              <button 
+                onClick={() => setQuality(1)}
+                className={`flex-1 h-full rounded-2xl font-black uppercase text-xs tracking-widest transition-all ${quality === 1 ? 'bg-rose-500 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)] border-none' : 'bg-slate-900 border-2 border-slate-700 text-slate-500 hover:text-slate-400'}`}
+              >
+                Poor
+              </button>
+              <button 
+                onClick={() => setQuality(2)}
+                className={`flex-1 h-full rounded-2xl font-black uppercase text-xs tracking-widest transition-all ${quality === 2 ? 'bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)] border-none' : 'bg-slate-900 border-2 border-slate-700 text-slate-500 hover:text-slate-400'}`}
+              >
+                Good
+              </button>
+              <button 
+                onClick={() => setQuality(3)}
+                className={`flex-1 h-full rounded-2xl font-black uppercase text-xs tracking-widest transition-all ${quality === 3 ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] border-none' : 'bg-slate-900 border-2 border-slate-700 text-slate-500 hover:text-slate-400'}`}
+              >
+                Elite
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 pt-2">
+            <Button variant="outline" className="h-16 rounded-2xl font-black uppercase tracking-widest border-2 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white" onClick={onClose}>
               Cancel
             </Button>
-            <Button className="h-14 rounded-2xl font-black uppercase italic tracking-widest bg-action text-action-foreground hover:bg-action/90 shadow-xl shadow-action/20" onClick={() => onSave(current.toString(), next.toString(), reps.toString())}>
-              Commit Data
+            <Button className="h-16 rounded-2xl font-black uppercase tracking-widest bg-[#F06C22] text-white hover:bg-[#ea580c] shadow-[0_0_20px_rgba(240,108,34,0.4)] border-none" onClick={() => onSave(current.toString(), currentNextWeight || current.toString(), reps.toString(), quality)}>
+              Save Set
             </Button>
           </div>
         </div>
@@ -4108,7 +4111,6 @@ function PerformanceEntryDialog({
     </Dialog>
   );
 }
-
 
 function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], clients: Client[], onOpenInfo: (machine: Machine) => void }) {
   const [allLogs, setAllLogs] = useState<ExerciseLog[]>([]);
@@ -5436,12 +5438,16 @@ function WorkoutTrackerView({
           currentWeight={logs[`${currentSession.id}_${editingWeightMachineId}`]?.weight || '0'}
           currentNextWeight={logs[`${currentSession.id}_${editingWeightMachineId}`]?.targetWeight || ''}
           currentReps={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold ? (logs[`${currentSession.id}_${editingWeightMachineId}`]?.seconds || '0') : (logs[`${currentSession.id}_${editingWeightMachineId}`]?.reps || '0')}
+          currentQuality={logs[`${currentSession.id}_${editingWeightMachineId}`]?.repQuality || 0}
+          prevWeight={previousSession && logs[`${previousSession.id}_${editingWeightMachineId}`]?.weight ? logs[`${previousSession.id}_${editingWeightMachineId}`].weight : '0'}
+          prevReps={previousSession && logs[`${previousSession.id}_${editingWeightMachineId}`]?.isStaticHold ? (logs[`${previousSession.id}_${editingWeightMachineId}`]?.seconds || '0') : (logs[`${previousSession.id}_${editingWeightMachineId}`]?.reps || '0')}
           isStaticHold={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold}
           onClose={() => setEditingWeightMachineId(null)}
-          onSave={async (weight, target, repsOrSeconds) => {
+          onSave={async (weight, target, repsOrSeconds, quality) => {
             const isHold = logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold;
             await updateLog(currentSession.id!, editingWeightMachineId, 'weight', weight);
             await updateLog(currentSession.id!, editingWeightMachineId, 'targetWeight', target);
+            await updateLog(currentSession.id!, editingWeightMachineId, 'repQuality', quality);
             if (isHold) {
               await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', repsOrSeconds);
               await updateLog(currentSession.id!, editingWeightMachineId, 'reps', '0');

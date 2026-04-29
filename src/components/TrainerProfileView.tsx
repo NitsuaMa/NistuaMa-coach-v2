@@ -6,7 +6,9 @@ import {
   Clock, 
   CheckCircle2, 
   ArrowRight,
-  TrendingDown
+  TrendingDown,
+  Dumbbell,
+  Star
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,184 +52,202 @@ export function TrainerProfileView({
     <motion.div 
       initial={{ opacity: 0, y: 20 }} 
       animate={{ opacity: 1, y: 0 }} 
-      className="max-w-4xl mx-auto space-y-8 pb-20"
+      className="max-w-[1400px] mx-auto space-y-8 pb-20 p-6 bg-[#0A2E46] min-h-[calc(100vh-100px)] rounded-[40px] shadow-2xl relative overflow-hidden"
     >
+      <div className="absolute right-0 top-0 opacity-[0.03] pointer-events-none">
+        <Dumbbell className="w-96 h-96 text-white" />
+      </div>
+
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-700/50 pb-6 relative z-10">
         <div className="flex items-center gap-6">
-          <div className="w-20 h-20 rounded-[32px] bg-primary/10 flex items-center justify-center text-primary border-2 border-primary/20 shadow-xl shadow-primary/5">
+          <div className="w-20 h-20 rounded-[32px] bg-slate-800 flex items-center justify-center text-[#38BDF8] border-2 border-slate-700 shadow-xl shadow-black/20">
             <UserCircle className="w-12 h-12" />
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/60 italic leading-none">Studio Professional</p>
-            <h2 className="text-4xl font-black tracking-tighter uppercase italic text-foreground">{trainer.fullName}</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#38BDF8] italic leading-none">Tactical Command Center</p>
+            <h2 className="text-4xl font-black tracking-tighter uppercase italic text-white">{trainer.fullName}</h2>
             <div className="flex items-center gap-3 mt-1">
-              <Badge variant="outline" className="rounded-md border-primary/20 text-primary font-black uppercase text-[9px] h-5">
+              <Badge variant="outline" className="rounded-md border-slate-700 text-slate-300 bg-slate-800 font-black uppercase text-[9px] h-5">
                 {trainer.initials}
               </Badge>
               {trainer.isOwner && (
-                <Badge className="rounded-md bg-amber-500 hover:bg-amber-600 text-white font-black uppercase text-[9px] h-5">
+                 <Badge className="rounded-md bg-amber-500 hover:bg-amber-600 text-white font-black uppercase text-[9px] h-5 shadow-[0_0_10px_rgba(245,158,11,0.5)] border-none">
                   Owner
                 </Badge>
               )}
             </div>
           </div>
         </div>
+        <div className="flex gap-4">
+          <Button 
+            variant="outline" 
+            onClick={() => setView('calendar')}
+            className="h-14 px-8 rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-[#38BDF8] hover:text-white hover:border-[#38BDF8] transition-all shadow-xl shadow-black/20"
+          >
+            Studio Calendar
+            <Calendar className="w-4 h-4 ml-3 opacity-60" />
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-8 md:grid-cols-2">
-        {/* Upcoming Schedule */}
-        <Card className="border-2 shadow-xl rounded-[40px] overflow-hidden">
-          <CardHeader className="bg-primary/5 pb-8">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-3xl bg-primary/10 flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-2xl font-black italic uppercase">Training Next</CardTitle>
-                <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-primary/60">Upcoming clients from MindBody</CardDescription>
-              </div>
+      <div className="flex flex-col gap-10 relative z-10">
+        {/* Roster Grid */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-2xl font-black uppercase italic text-white tracking-tighter">Daily Roster</h3>
+              <p className="text-[#38BDF8] text-[10px] font-black uppercase tracking-widest">Upcoming appointments • {upcomingSchedules.length} Scheduled</p>
             </div>
-          </CardHeader>
-          <CardContent className="p-8">
-            <div className="space-y-4">
-              {upcomingSchedules.length > 0 ? (
-                upcomingSchedules.slice(0, 10).map((s, i) => {
-                  const sTime = s.startTime.toDate();
-                  const isToday = sTime.toDateString() === now.toDateString();
-                  
-                  return (
-                    <motion.div 
-                      key={s.id || i}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="flex items-center justify-between p-5 bg-card border-2 border-muted hover:border-primary/30 transition-all rounded-3xl group cursor-pointer"
-                      onClick={() => {
-                        if (s.clientId) {
-                          onSelectClient(s.clientId);
-                          setView('profile');
-                        }
-                      }}
-                    >
-                      <div className="flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-black text-lg uppercase italic tracking-tight truncate">{s.clientName}</p>
-                          {isToday && (
-                            <Badge className="bg-rose-500 text-white font-black uppercase text-[8px] h-4 py-0">Today</Badge>
+          </div>
+          
+          {upcomingSchedules.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {upcomingSchedules.slice(0, 12).map((s, i) => {
+                const sTime = s.startTime.toDate();
+                const isToday = sTime.toDateString() === now.toDateString();
+                const client = clients.find(c => c.id === s.clientId);
+                
+                return (
+                  <motion.div 
+                    key={s.id || i}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex flex-col p-5 bg-[#115E8D]/20 border-2 border-slate-700 hover:border-[#38BDF8] hover:bg-[#115E8D]/40 transition-all rounded-[32px] group cursor-pointer shadow-lg relative overflow-hidden h-full"
+                    onClick={() => {
+                      if (s.clientId) {
+                        onSelectClient(s.clientId);
+                        setView('profile');
+                      }
+                    }}
+                  >
+                    <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity pointer-events-none">
+                      <UserCircle className="w-32 h-32 text-white" />
+                    </div>
+
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="flex flex-col gap-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-black text-2xl text-white uppercase italic tracking-tight truncate leading-none pt-1">
+                            {s.clientName}
+                          </p>
+                          {client?.packageTier === "18-Month" && (
+                            <Star className="w-4 h-4 text-slate-300 fill-slate-300 drop-shadow-[0_0_5px_rgba(203,213,225,0.8)] mt-1" />
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            <span className="text-[10px] font-bold uppercase">
-                              {sTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        {isToday && (
+                           <Badge className="bg-rose-500 text-white font-black uppercase text-[9px] px-2 shadow-[0_0_10px_rgba(244,63,94,0.4)] border-none">
+                              Today
+                           </Badge>
+                        )}
+                        <div className="flex gap-2">
+                          <div className="bg-[#F06C22] text-white font-black uppercase text-[11px] px-3 py-1 rounded-lg shadow-[0_0_15px_rgba(240,108,34,0.6)] border border-[#F06C22]/50 whitespace-nowrap">
+                            Session #{client?.sessionCount ?? 0}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            <span className="text-[10px] font-bold uppercase">
-                              {sTime.toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                            </span>
-                          </div>
+                          {client?.remainingSessions != null && (
+                            <div className="bg-emerald-500/10 text-emerald-400 font-black uppercase text-[11px] px-3 py-1 rounded-lg shadow-[0_0_15px_rgba(52,211,153,0.2)] border border-emerald-500/30 whitespace-nowrap">
+                              {client.remainingSessions} Left
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="w-10 h-10 rounded-2xl bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-                        <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
+                    </div>
+                    
+                    <div className="flex items-center gap-3 text-slate-400 mt-auto pt-4 border-t border-slate-700/50">
+                      <div className="flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800 shadow-inner">
+                        <Clock className="w-4 h-4 text-[#38BDF8]" />
+                        <span className="text-[12px] font-black uppercase text-slate-200">
+                          {sTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-20 bg-muted/20 border-2 border-dashed rounded-[32px] flex flex-col items-center gap-4 opacity-50">
-                  <Calendar className="w-12 h-12 text-muted-foreground" />
-                  <p className="text-xs font-black uppercase tracking-widest leading-relaxed">No upcoming sessions<br/>found in schedule.</p>
-                </div>
-              )}
+                      <div className="flex items-center gap-1.5 ml-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-[10px] font-bold uppercase text-slate-500">
+                          {sTime.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="ml-auto w-10 h-10 rounded-2xl bg-slate-800 group-hover:bg-[#38BDF8] flex items-center justify-center transition-colors shadow-inner border border-slate-700 group-hover:border-[#38BDF8]">
+                        <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
-          </CardContent>
-        </Card>
+          ) : (
+            <div className="text-center py-24 bg-slate-800/30 border-2 border-dashed border-slate-700 rounded-[40px] flex flex-col items-center gap-4">
+              <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mb-2 shadow-inner border border-slate-700">
+                <Calendar className="w-8 h-8 text-slate-500" />
+              </div>
+              <p className="text-sm font-black uppercase tracking-widest leading-relaxed text-slate-400">No upcoming sessions<br/>found in schedule.</p>
+            </div>
+          )}
+        </div>
 
         {/* Recently Trained */}
-        <Card className="border-2 shadow-xl rounded-[40px] overflow-hidden border-emerald-200">
-          <CardHeader className="bg-emerald-50/50 pb-8">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-3xl bg-emerald-100 flex items-center justify-center">
-                <History className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <CardTitle className="text-2xl font-black italic uppercase text-emerald-950">Recently Trained</CardTitle>
-                <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-emerald-600/60">Sessions logged recently</CardDescription>
-              </div>
+        <div className="space-y-4 pt-8 border-t border-slate-700/50">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-xl font-black uppercase italic text-white tracking-tighter">Recently Logged</h3>
+              <p className="text-emerald-500 text-[10px] font-black uppercase tracking-widest">Historical sessions</p>
             </div>
-          </CardHeader>
-          <CardContent className="p-8">
-            <div className="space-y-4">
-              {recentSessions.length > 0 ? (
-                recentSessions.slice(0, 10).map((s, i) => {
-                  const client = clients.find(c => c.id === s.clientId);
-                  const sessionDate = new Date(s.date + 'T00:00:00');
-                  
-                  return (
-                    <motion.div 
-                      key={s.id || i}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="flex items-center justify-between p-5 bg-card border-2 border-emerald-100 hover:border-emerald-300 transition-all rounded-3xl group cursor-pointer"
-                      onClick={() => {
-                        if (s.clientId) {
-                          onSelectClient(s.clientId);
-                          setView('history');
-                        }
-                      }}
-                    >
-                      <div className="flex flex-col gap-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-black text-lg uppercase italic tracking-tight truncate">
-                            {client ? `${client.firstName} ${client.lastName}` : 'System Log'}
-                          </p>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {recentSessions.length > 0 ? (
+              recentSessions.slice(0, 6).map((s, i) => {
+                const client = clients.find(c => c.id === s.clientId);
+                const sessionDate = new Date(s.date + 'T00:00:00');
+                
+                return (
+                  <motion.div 
+                    key={s.id || i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex flex-col p-4 bg-slate-800/40 border-2 border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800/80 transition-all rounded-3xl group cursor-pointer"
+                    onClick={() => {
+                      if (s.clientId) {
+                        onSelectClient(s.clientId);
+                        setView('history');
+                      }
+                    }}
+                  >
+                    <div className="flex justify-between items-center mb-3">
+                        <p className="font-black text-white text-lg uppercase italic tracking-tight truncate">
+                          {client ? `${client.firstName} ${client.lastName}` : 'System Log'}
+                        </p>
+                         <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 group-hover:text-white transition-colors" />
                         </div>
-                        <div className="flex items-center gap-3 text-emerald-600/60">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            <span className="text-[10px] font-bold uppercase">
-                              {sessionDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
-                          </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center mt-auto">
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-bold uppercase">
+                            {sessionDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <Badge className="bg-emerald-100 text-emerald-700 font-black uppercase text-[8px] h-5 py-0 px-2 tracking-widest border border-emerald-200">
-                          LOGGED
+                        <Badge variant="outline" className="text-emerald-500 border-none bg-emerald-500/10 font-black uppercase text-[9px] tracking-widest px-2 shadow-inner">
+                          Logged
                         </Badge>
-                        <div className="w-10 h-10 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center transition-colors">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-20 bg-emerald-50/30 border-2 border-dashed border-emerald-200 rounded-[32px] flex flex-col items-center gap-4 opacity-50">
-                  <TrendingDown className="w-12 h-12 text-emerald-600" />
-                  <p className="text-xs font-black uppercase tracking-widest leading-relaxed text-emerald-950/60">No recent activity<br/>recorded yet.</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex justify-center">
-        <Button 
-          variant="outline" 
-          onClick={() => setView('calendar')}
-          className="h-14 px-8 rounded-2xl font-black uppercase tracking-widest text-xs border-2 hover:bg-primary/5 hover:text-primary transition-all"
-        >
-          View Full Studio Calendar
-          <ArrowRight className="w-4 h-4 ml-2" />
-        </Button>
+                    </div>
+                  </motion.div>
+                );
+              })
+            ) : (
+              <div className="col-span-full text-center py-12 bg-slate-800/30 border-2 border-dashed border-slate-700 rounded-[32px] flex flex-col items-center gap-3">
+                <TrendingDown className="w-10 h-10 text-slate-600 mb-2" />
+                <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed text-slate-500">No recent activity recorded.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </motion.div>
   );

@@ -45,6 +45,8 @@ export interface Client {
   legacy_filemaker_id?: string;
   mindbody_name?: string;
   completedSessions?: number;
+  sessionCount?: number;
+  packageTier?: "6-Month" | "12-Month" | "18-Month" | "None";
   consultationCompleted?: boolean;
   requiresConsultation?: boolean;
   createdAt?: any;
