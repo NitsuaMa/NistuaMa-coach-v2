@@ -40,6 +40,7 @@ import {
   Sparkles,
   CheckCircle2,
   RefreshCw,
+  RefreshCcw,
   RotateCcw,
   Mic,
   Check,
@@ -1075,7 +1076,7 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        <main className={`flex-1 overflow-y-auto p-6 pb-24 max-w-full mx-auto w-full ${currentView === 'workouts' ? 'p-2 pb-24' : ''}`}>
+        <main className={`flex-1 w-full max-w-full mx-auto relative ${currentView === 'workouts' ? 'p-2 pb-24 overflow-y-auto' : currentView === 'clients' ? 'h-[calc(100vh-5rem)] overflow-hidden bg-[#0A2E46] p-0 flex flex-col' : 'p-6 pb-24 overflow-y-auto'}`}>
           <AnimatePresence mode="wait">
             {currentView === 'consultation-wizard' && selectedClientId && (
               <ConsultationWizard 
@@ -2600,21 +2601,23 @@ function ClientsView({
     return { next, last };
   };
 
+  const visibleTrainersList = sortedTrainers.filter(t => t.isVisibleOnCalendar !== false).slice(0, 5);
+
   return (
     <motion.div 
       key="clients"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-8"
+      className="flex flex-col h-full bg-[#0A2E46] text-white w-full overflow-hidden"
     >
-      <div className="flex flex-col gap-3 sticky top-0 bg-background/95 backdrop-blur-md pt-2 pb-3 z-30">
+      <div className="flex flex-col gap-3 shrink-0 p-4 pb-0 bg-[#0A2E46] z-30">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <Input 
               placeholder="Search clients..." 
-              className="pl-12 h-12 rounded-2xl bg-muted/50 border-none font-bold text-base"
+              className="pl-12 h-12 rounded-2xl bg-slate-800 border-none font-bold text-base text-white focus-visible:ring-[#38BDF8]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -2628,9 +2631,9 @@ function ClientsView({
               }
             }} 
             size="lg" 
-            className="rounded-xl h-12 px-8 shadow-md bg-primary text-primary-foreground font-bold w-full sm:w-auto uppercase text-sm"
+            className="rounded-xl h-12 px-8 shadow-[0_0_20px_rgba(56,189,248,0.2)] bg-[#38BDF8] hover:bg-[#0284C7] text-[#0A2E46] font-black w-full sm:w-auto uppercase tracking-widest text-sm"
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-5 h-5 mr-2" />
             Add New Client
           </Button>
         </div>
@@ -2876,322 +2879,219 @@ function ClientsView({
         )}
       </AnimatePresence>
 
-      <div className="grid gap-8">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden w-full">
         {!searchTerm ? (
-          <>
-            {/* Daily Hub Schedule Section */}
-            <section className="space-y-4">
-              <div className="flex flex-col gap-5">
-                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    {/* Sleek Horizontal Week Selector */}
-                    <div className="flex flex-wrap gap-2">
-                      {weekDays.map((date) => {
-                        const isSelected = date.toDateString() === selectedDate.toDateString();
-                        const isToday = date.toDateString() === new Date().toDateString();
-                        return (
-                          <button
-                            key={date.toISOString()}
-                            onClick={() => setSelectedDate(date)}
-                            className={`min-w-[70px] px-4 py-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all border-2 ${
-                              isSelected 
-                                ? 'bg-primary border-primary text-primary-foreground shadow-sm scale-105' 
-                                : 'bg-transparent border-muted hover:border-primary/30 text-muted-foreground hover:text-primary'
-                            }`}
-                          >
-                            <span className="flex flex-col items-center">
-                              {date.toLocaleDateString([], { weekday: 'short' })}
-                              <span className={`text-[9px] mt-0.5 ${isSelected ? 'text-primary-foreground/90 font-bold' : 'opacity-60'}`}>
-                                {isToday ? 'Today' : date.toLocaleDateString([], { day: 'numeric' })}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
+          <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0A2E46] p-6 space-y-10">
+            {/* Header / Week Selector / Shift Toggle */}
+            <section className="space-y-6">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                {/* Week Selector */}
+                <div className="flex flex-wrap gap-2">
+                  {weekDays.map((date) => {
+                    const isSelected = date.toDateString() === selectedDate.toDateString();
+                    const isToday = date.toDateString() === new Date().toDateString();
+                    return (
+                      <button
+                        key={date.toISOString()}
+                        onClick={() => setSelectedDate(date)}
+                        className={`min-w-[80px] px-4 py-3 rounded-2xl flex flex-col items-center gap-1 transition-all border-2 ${
+                          isSelected 
+                            ? 'bg-[#38BDF8] border-[#38BDF8] text-[#0A2E46] shadow-[0_0_15px_rgba(56,189,248,0.4)] scale-105 z-10' 
+                            : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:border-[#38BDF8]/30 hover:text-white'
+                        }`}
+                      >
+                        <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+                          {date.toLocaleDateString([], { weekday: 'short' })}
+                        </span>
+                        <span className={`text-base font-black leading-none ${isSelected ? 'text-[#0A2E46]' : 'text-slate-200'}`}>
+                          {isToday ? 'Today' : date.toLocaleDateString([], { day: 'numeric' })}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Shift Selector */}
+                <div className="flex p-1.5 bg-slate-900/80 rounded-2xl border border-slate-700/50 backdrop-blur-md self-start xl:self-center">
+                  <button 
+                    onClick={() => setActiveTab('morning')}
+                    className={`px-8 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                      activeTab === 'morning' 
+                        ? 'bg-[#38BDF8] shadow-lg text-[#0A2E46]' 
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    AM Shift
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('afternoon')}
+                    className={`px-8 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                      activeTab === 'afternoon' 
+                        ? 'bg-[#38BDF8] shadow-lg text-[#0A2E46]' 
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    PM Shift
+                  </button>
+                </div>
+              </div>
+
+              {/* Roster Summary Tags */}
+              <div className="flex flex-wrap items-center gap-3 py-4 border-y border-slate-800/50">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mr-2 flex items-center gap-2">
+                  <Dumbbell className="w-3 h-3" /> Live Roster
+                </span>
+                {visibleTrainersList.map(trainer => {
+                  const sessionCount = todaysSchedules.filter(s => s.trainerName === trainer.fullName).length;
+                  if (sessionCount === 0) return null;
+                  return (
+                    <div key={trainer.id} className="flex items-center gap-2 bg-[#38BDF8]/10 border border-[#38BDF8]/20 rounded-full pl-1.5 pr-4 py-1.5 shadow-inner">
+                      <div className="w-6 h-6 rounded-full bg-[#38BDF8] flex items-center justify-center text-[10px] font-black text-[#0A2E46]">
+                        {trainer.initials}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-200 uppercase tracking-widest">
+                        {trainer.fullName.split(' ')[0]} <span className="text-[#38BDF8]/80 ml-1">({sessionCount})</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Main Training Grid */}
+            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+              {visibleTrainersList.map(trainer => {
+                const tSessions = todaysSchedules
+                  .filter(s => s.trainerName === trainer.fullName)
+                  .sort((a,b) => a.startTime.toDate().getTime() - b.startTime.toDate().getTime());
+                
+                return (
+                  <div key={trainer.id} className="flex flex-col bg-slate-900/30 rounded-[2rem] border border-slate-800/60 overflow-hidden shadow-xl backdrop-blur-sm group hover:border-[#38BDF8]/30 transition-all">
+                    <div className="p-5 bg-slate-800/40 border-b border-slate-800/80 flex items-center justify-between">
+                      <h4 className="text-[13px] font-black uppercase tracking-[0.15em] text-[#38BDF8]">
+                        {trainer.fullName.split(' ')[0]}
+                      </h4>
+                      <Badge className="bg-slate-900 text-slate-400 border-slate-700/50 font-black text-[9px] px-2 py-0.5 rounded-md">
+                        {tSessions.length}
+                      </Badge>
                     </div>
                     
-                    {/* AM/PM Shift Selector */}
-                    <div className="flex p-1 bg-muted rounded-xl border border-border/50 shrink-0">
-                      <button 
-                        onClick={() => setActiveTab('morning')}
-                        className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'morning' ? 'bg-primary shadow-sm text-primary-foreground' : 'text-muted-foreground hover:bg-background/50 text-secondary'}`}
-                      >
-                        AM Shift
-                      </button>
-                      <button 
-                        onClick={() => setActiveTab('afternoon')}
-                        className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'afternoon' ? 'bg-primary shadow-sm text-primary-foreground' : 'text-muted-foreground hover:bg-background/50 text-secondary'}`}
-                      >
-                        PM Shift
-                      </button>
-                    </div>
-                 </div>
-                 
-                 {/* Daily Roster Summary */}
-                 <div className="flex flex-wrap items-center gap-3 pt-2 pb-4 border-b border-border/40">
-                   <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground shrink-0 flex items-center gap-2">
-                     <Calendar className="w-4 h-4" /> Daily Roster:
-                   </span>
-                   {sortedTrainers.map(trainer => {
-                     const sessionCount = todaysSchedules.filter(s => s.trainerName === trainer.fullName).length;
-                     if (sessionCount === 0) return null;
-                     return (
-                       <button 
-                         key={trainer.id} 
-                         onClick={() => {
-                           if (onSelectTrainer) onSelectTrainer(trainer.id!);
-                         }}
-                         className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-full pl-1 pr-4 py-1 hover:bg-primary/10 transition-colors cursor-pointer"
-                       >
-                         <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-black text-primary">
-                           {trainer.initials}
-                         </div>
-                         <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">
-                           {trainer.fullName.split(' ')[0]} <span className="text-primary/60 ml-0.5">- {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}</span>
-                         </span>
-                       </button>
-                     );
-                   })}
-                   {todaysSchedules.filter(s => s.trainerName === '' || !s.trainerName || s.trainerName.toLowerCase().includes('select')).length > 0 && (
-                      <div className="flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-full px-4 py-1.5 text-red-600">
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                          Unassigned ({todaysSchedules.filter(s => s.trainerName === '' || !s.trainerName || s.trainerName.toLowerCase().includes('select')).length})
-                        </span>
-                      </div>
-                   )}
-                   {todaysSchedules.length === 0 && (
-                     <span className="text-[10px] font-bold italic text-muted-foreground bg-muted px-4 py-1.5 rounded-full">No sessions scheduled</span>
-                   )}
-                 </div>
-              </div>
-
-              {/* Team Comparison Grid */}
-              <div className="bg-card border-2 rounded-3xl overflow-hidden shadow-sm flex flex-col relative w-full h-[65vh]">
-                {/* Header Row (Sticky) */}
-                <div className="flex bg-muted/30 border-b border-border/20 z-20 shrink-0 shadow-sm sticky top-0">
-                  <div className="w-16 shrink-0 border-r border-border/10 flex items-center justify-center p-2 bg-muted/50">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Time</span>
-                  </div>
-                  <div className="flex-1 overflow-hidden" id="grid-header-scroll">
-                    <div className="flex min-w-max">
-                      {hasUnassignedAnywhereInGrid && (
-                        <div className="w-40 shrink-0 p-3 border-r border-red-500/10 bg-red-500/5 text-center flex items-center justify-center">
-                          <span className="text-[11px] font-black uppercase tracking-widest text-red-600 opacity-90">Unassigned</span>
+                    <div className="p-4 space-y-3">
+                      {tSessions.map(session => {
+                        const client = findClientForSession(session);
+                        const isCompleted = session.status === 'Completed' || session.startTime.toDate() < now;
+                        const sCount = client ? sessions.filter(s => s.clientId === client.id && s.status === 'Completed').length + 1 : 0;
+                        
+                        return (
+                          <div 
+                            key={session.id}
+                            className={`group/session relative p-4 rounded-2xl border transition-all cursor-pointer ${
+                              isCompleted 
+                                ? 'bg-slate-900/40 border-slate-800 opacity-40 grayscale' 
+                                : 'bg-slate-800 border-slate-700/50 hover:border-[#38BDF8]/50 hover:bg-[#114B72]/30 shadow-sm'
+                            }`}
+                            onClick={() => {
+                              if (client) {
+                                onSelectClient(client.id!);
+                                setView('profile');
+                              } else {
+                                setLinkingSession(session);
+                                setIsLinking(true);
+                              }
+                            }}
+                          >
+                            <div className="flex flex-col gap-2.5">
+                              <div className="flex justify-between items-start gap-2">
+                                <span className="font-bold text-slate-100 text-[13px] tracking-tight leading-tight group-hover/session:text-[#38BDF8] transition-colors">
+                                  {session.clientName}
+                                </span>
+                                {client && !isCompleted && (
+                                  <div className="text-[8px] font-black bg-[#F06C22] text-white px-2 py-0.5 rounded-md shadow-lg shadow-[#F06C22]/20 uppercase">
+                                    #{sCount}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-3 h-3 text-slate-500" />
+                                <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
+                                  {session.startTime.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {tSessions.length === 0 && (
+                        <div className="py-10 flex flex-col items-center justify-center text-slate-700 space-y-2">
+                          <Clock className="w-5 h-5 opacity-20" />
+                          <span className="text-[9px] uppercase font-bold tracking-widest opacity-30 italic">No Sessions</span>
                         </div>
                       )}
-                      {sortedTrainers.map(trainer => (
-                        <div key={trainer.id} className="w-40 shrink-0 p-3 border-r border-border/10 text-center flex items-center justify-center">
-                          <span className="text-[11px] font-black uppercase tracking-widest text-foreground text-ellipsis overflow-hidden whitespace-nowrap opacity-90">
-                            {trainer.fullName.split(' ')[0]}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+
+            {/* Recently Profiled (Compact Grid) */}
+            <section className="space-y-6 pt-10 border-t border-slate-800/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#38BDF8]/10 flex items-center justify-center border border-[#38BDF8]/20">
+                    <Users className="w-5 h-5 text-[#38BDF8]" />
+                  </div>
+                  <h3 className="text-[17px] font-black uppercase tracking-[0.1em] text-white">Recently Active Profiles</h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                {recentClients.map(client => {
+                  const getTierInfo = (c: Client) => {
+                    const tier = c.packageTier;
+                    if (tier === '18-Month') return { name: '18-Month VIP', css: 'bg-slate-400/10 text-slate-300 border-slate-400/50 shadow-[0_0_15px_rgba(148,163,184,0.1)]' };
+                    if (tier === '12-Month') return { name: '12-Month Tier', css: 'bg-[#F06C22]/10 text-[#F06C22] border-[#F06C22]/50 shadow-[0_0_15px_rgba(240,108,34,0.15)]' };
+                    if (tier === '6-Month') return { name: '6-Month Tier', css: 'bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/50 shadow-[0_0_15px_rgba(56,189,248,0.15)]' };
+                    return { name: 'Prospect', css: 'border-slate-700 text-slate-500 bg-slate-800/20' };
+                  };
+                  const tierInfo = getTierInfo(client);
+
+                  return (
+                    <div 
+                      key={client.id}
+                      className="group relative flex flex-col bg-slate-900/40 rounded-[2rem] border border-slate-800/80 p-5 hover:border-[#38BDF8]/40 hover:bg-slate-800/40 cursor-pointer transition-all shadow-xl"
+                      onClick={() => {
+                        onSelectClient(client.id!);
+                        setView('profile');
+                      }}
+                    >
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-[#0A2E46] flex items-center justify-center font-black text-sm text-[#38BDF8] border border-[#114B72] group-hover:scale-105 transition-transform">
+                          {client.firstName[0]}{client.lastName[0]}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-slate-100 text-[15px] truncate leading-tight">{client.firstName} {client.lastName}</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 truncate flex items-center gap-1.5">
+                            <RefreshCcw className="w-2.5 h-2.5"/> Active
                           </span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Body (Scrollable Y and X) */}
-                <div 
-                  className="flex-1 overflow-auto relative flex"
-                  onScroll={(e) => {
-                    const target = e.target as HTMLDivElement;
-                    const header = document.getElementById('grid-header-scroll');
-                    if (header) header.scrollLeft = target.scrollLeft;
-                  }}
-                >
-                  <div className="flex min-w-max relative" style={{ height: `${currentSlots.length * 5}rem` }}>
-                    {/* Time Column (Sticky Left) */}
-                    <div className="w-16 shrink-0 border-r border-border/10 bg-card sticky left-0 z-20 flex flex-col relative">
-                      <div className="h-4 w-full border-b border-transparent" /> {/* Spacer to align with pt-4 */}
-                      {currentSlots.map(slot => (
-                        <div key={slot} className="relative w-full border-b border-border/10" style={{ height: '5rem' }}>
-                          <div className="absolute top-[-0.65rem] right-2 bg-card px-1 rounded">
-                            <span className="text-[11px] font-black italic tracking-tighter text-foreground/80 drop-shadow-sm">
-                              {slot}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Trainers Columns Wrapper */}
-                    <div className="flex-1 flex relative min-w-max">
-                       <div className="h-4 w-full absolute top-0 left-0 border-b border-transparent pointer-events-none" /> {/* Spacer */}
-                       
-                       {/* Background horizontal lines for time slots */}
-                       <div className="absolute inset-0 top-4 flex flex-col pointer-events-none z-0">
-                         {currentSlots.map((slot, idx) => (
-                           <div key={`bg-${slot}`} className={`w-full border-b border-border/10 border-dashed ${idx % 2 !== 0 ? 'bg-muted/10' : ''}`} style={{ height: '5rem' }} />
-                         ))}
-                       </div>
-
-                       {/* Current Time Indicator logic */}
-                       {(() => {
-                         const startHour = activeTab === 'morning' ? 7 : 15;
-                         const dHour = currentTime.getHours();
-                         const endHour = activeTab === 'morning' ? 12.5 : 18.5;
-                         
-                         const totalMins = dHour * 60 + currentTime.getMinutes();
-                         const startMins = startHour * 60;
-                         const endMins = endHour * 60 + 30; // buffer
-                         
-                         if (totalMins >= startMins && totalMins <= endMins) {
-                           const offsetMin = totalMins - startMins;
-                           // 5rem = 80px. 80px per 30 mins means 80/30 = 2.666px per min
-                           const pxOffset = ((offsetMin / 30) * 80) + 16; // Add 16px for the top padding offset
-                           return (
-                             <div 
-                               className="absolute left-0 right-0 h-0.5 bg-[#ff4e00] z-30 pointer-events-none flex items-center drop-shadow-[0_0_8px_rgba(255,78,0,0.8)]"
-                               style={{ top: `${pxOffset}px` }}
-                             >
-                               <div className="absolute -left-14 bg-[#ff4e00] text-white text-[11px] font-black px-2 py-0.5 rounded shadow-[0_0_10px_rgba(255,78,0,0.5)]">
-                                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-                               </div>
-                               <div className="w-2.5 h-2.5 rounded-full bg-[#ff4e00] absolute -left-1.5 shadow-[0_0_10px_rgba(255,78,0,0.8)]" />
-                             </div>
-                           );
-                         }
-                         return null;
-                       })()}
-
-                       {hasUnassignedAnywhereInGrid && (
-                          <div className="w-40 shrink-0 border-r border-red-500/10 bg-red-500/[0.01] relative pointer-events-auto">
-                            {todaysSchedules.filter(s => !s.trainerName || s.trainerName.toLowerCase().includes('select') || s.trainerName === '').map(session => {
-                               const offsetMin = (session.startTime.toDate().getHours() * 60 + session.startTime.toDate().getMinutes()) - ((activeTab === 'morning' ? 7 : 15) * 60);
-                               const topPx = ((offsetMin / 30) * 80) + 16; 
-                               const isConsultation = session.serviceName?.toLowerCase().includes('consult') || session.serviceName?.toLowerCase().includes('first');
-                               const heightPx = isConsultation ? 120 : 80; 
-                               const client = findClientForSession(session);
-                               
-                               return (
-                                  <motion.div
-                                    key={session.id}
-                                    whileHover={{ scale: 1.02 }}
-                                    onClick={() => {
-                                      if (client) {
-                                        onSelectClient(client.id!);
-                                        setView('profile');
-                                      } else {
-                                        if (isConsultation && onStartNewClientOnboarding) {
-                                          onStartNewClientOnboarding(session.clientName || '');
-                                        } else {
-                                          setLinkingSession(session);
-                                          setIsLinking(true);
-                                        }
-                                      }
-                                    }}
-                                    className={`absolute left-1 right-1 rounded-xl border p-3 flex flex-col justify-center cursor-pointer overflow-hidden transition-all shadow-md z-10 ${
-                                      client ? 'bg-red-950/40 border-l-4 border-l-red-500 hover:brightness-110 border-red-500/20' : 'bg-red-900/60 border-l-4 border-l-red-600 border-red-500/40 opacity-80'
-                                    }`}
-                                    style={{ top: `${topPx}px`, height: `${heightPx - 4}px` }}
-                                  >
-                                    <p className="text-[11px] font-black tracking-wide text-white truncate leading-tight drop-shadow-sm">{session.clientName}</p>
-                                    {!client && <p className="text-[8px] font-bold text-red-200 uppercase mt-1 tracking-widest">UNLINKED</p>}
-                                  </motion.div>
-                               );
-                            })}
-                          </div>
-                       )}
-
-                       {/* Trainer Columns */}
-                       {sortedTrainers.map(trainer => (
-                          <div key={trainer.id} className="w-40 shrink-0 border-r border-border/5 relative z-10 pointer-events-auto">
-                            {todaysSchedules.filter(s => s.trainerName === trainer.fullName).map(session => {
-                               const offsetMin = (session.startTime.toDate().getHours() * 60 + session.startTime.toDate().getMinutes()) - ((activeTab === 'morning' ? 7 : 15) * 60);
-                               const topPx = ((offsetMin / 30) * 80) + 16; 
-                               const isConsultation = session.serviceName?.toLowerCase().includes('consult') || session.serviceName?.toLowerCase().includes('first');
-                               const heightPx = isConsultation ? 120 : 80; 
-                               const client = findClientForSession(session);
-                               const isCompleted = session.status === 'Completed' || session.startTime.toDate() < now;
-
-                               return (
-                                 <motion.div
-                                   key={session.id}
-                                   whileHover={{ y: -1, scale: 1.01 }}
-                                   onClick={() => {
-                                      if (client) {
-                                        onSelectClient(client.id!);
-                                        setView('profile');
-                                      } else {
-                                        if (isConsultation && onStartNewClientOnboarding) {
-                                          onStartNewClientOnboarding(session.clientName || '');
-                                        } else {
-                                          setLinkingSession(session);
-                                          setIsLinking(true);
-                                        }
-                                      }
-                                   }}
-                                   className={`absolute left-1 right-1 rounded-xl border p-3 flex flex-col cursor-pointer overflow-hidden transition-all shadow-md ${
-                                      isCompleted 
-                                        ? 'bg-muted/20 border-transparent grayscale opacity-50 justify-center' 
-                                        : isConsultation
-                                          ? 'bg-amber-950/40 border-l-4 border-l-amber-500 border-amber-500/20 hover:brightness-110 justify-between'
-                                          : client 
-                                            ? 'bg-slate-800 border-l-4 border-l-blue-500 border-blue-500/20 shadow-[inset_0_1px_3px_rgba(255,255,255,0.05)] hover:brightness-110 justify-center'
-                                            : 'bg-amber-900 border-l-4 border-l-amber-600 border-amber-600/40 opacity-80 justify-center'
-                                   }`}
-                                   style={{ top: `${topPx}px`, height: `${heightPx - 4}px` }}
-                                 >
-                                   <div className="flex flex-col gap-1">
-                                      <div className="flex justify-between items-start gap-1 w-full">
-                                        <span className={`text-[11px] font-black uppercase tracking-widest truncate leading-tight drop-shadow-sm ${isCompleted ? 'text-muted-foreground' : 'text-white'}`}>
-                                          {session.clientName}
-                                        </span>
-                                        {!client && !isCompleted && <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />}
-                                      </div>
-                                      {isConsultation && !isCompleted && (
-                                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-[0.2em] line-clamp-1">Consultation</span>
-                                      )}
-                                      {!client && !isConsultation && !isCompleted && (
-                                        <span className="text-[8px] font-bold text-amber-200 uppercase tracking-widest bg-amber-950/50 w-fit px-1.5 py-0.5 rounded truncate">Not Profiled</span>
-                                      )}
-                                   </div>
-                                 </motion.div>
-                               );
-                            })}
-                          </div>
-                       ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Recent Clients Section */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-muted-foreground" />
-                <h3 className="text-lg font-bold uppercase tracking-tight text-secondary">Recently Profiled</h3>
-              </div>
-              <div className="grid gap-2">
-                {recentClients.map(client => (
-                  <div 
-                    key={client.id}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-muted/10 border border-transparent hover:border-muted-foreground/20 hover:bg-muted/20 cursor-pointer transition-all group"
-                    onClick={() => {
-                      onSelectClient(client.id!);
-                      setView('profile');
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center font-black text-[10px] text-muted-foreground">
-                        {client.firstName[0]}{client.lastName[0]}
                       </div>
-                      <span className="text-sm font-semibold text-foreground">{client.firstName} {client.lastName}</span>
+                      <div className={`mt-auto w-fit text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg border ${tierInfo.css}`}>
+                        {tierInfo.name}
+                      </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground opacity-30 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
-          </>
+          </div>
         ) : (
-          /* Search Results Section */
-          <div className="grid gap-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Search className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-bold uppercase tracking-tight text-secondary">Search Results ({filteredClients.length})</h3>
+          <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0A2E46] p-6">
+            <div className="flex items-center gap-3 mb-8">
+              <Search className="w-6 h-6 text-[#38BDF8]" />
+              <h3 className="text-xl font-black uppercase tracking-widest text-white">Client Directory <span className="text-slate-500 ml-2">({filteredClients.length})</span></h3>
             </div>
-            {filteredClients.map((client) => {
+            <div className="space-y-4 max-w-5xl">
+              {filteredClients.map((client) => {
               const { next, last } = getClientSessions(client);
               const clientName = `${client.firstName} ${client.lastName}`;
               
@@ -3290,6 +3190,7 @@ function ClientsView({
                 <p className="text-xs font-black uppercase">No client matches "{searchTerm}"</p>
               </div>
             )}
+            </div>
           </div>
         )}
       </div>
@@ -3976,7 +3877,7 @@ function PerformanceEntryDialog({
   prevWeight: string;
   prevReps: string;
   isStaticHold?: boolean;
-  onSave: (weight: string, target: string, reps: string, quality: number) => void;
+  onSave: (weight: string, target: string, repsOrSeconds: string, quality: number, isHold: boolean) => void;
   onClose: () => void;
 }) {
   const initialWeight = parseFloat(currentWeight) > 0 ? parseFloat(currentWeight) : (parseFloat(prevWeight) || 0);
@@ -3985,6 +3886,7 @@ function PerformanceEntryDialog({
   const [current, setCurrent] = useState(initialWeight);
   const [reps, setReps] = useState(initialReps);
   const [quality, setQuality] = useState(currentQuality || 2); 
+  const [isHold, setIsHold] = useState(isStaticHold || false);
 
   const roundUpTo2 = (val: number) => Math.ceil(val / 2) * 2;
 
@@ -4028,7 +3930,13 @@ function PerformanceEntryDialog({
               </button>
               
               <div className="flex flex-col items-center justify-center flex-1">
-                <span className="font-black text-6xl text-white tracking-tighter leading-none">{current}</span>
+                <input 
+                  type="number"
+                  inputMode="decimal"
+                  value={current || ''}
+                  onChange={e => setCurrent(parseFloat(e.target.value) || 0)}
+                  className="font-black text-6xl text-white tracking-tighter leading-none bg-transparent border-none text-center outline-none w-full p-0 m-0 no-arrows focus:ring-0"
+                />
                 {prevW > 0 && (
                   <div className={`mt-2 text-[11px] font-black uppercase px-2 py-0.5 rounded-md ${weightDelta > 0 ? 'bg-emerald-500/20 text-emerald-400' : weightDelta < 0 ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-700 text-slate-400'}`}>
                     {weightDelta > 0 ? '+' : ''}{weightDelta} lbs ({weightDelta > 0 ? '+' : ''}{weightDeltaPct}%)
@@ -4047,9 +3955,21 @@ function PerformanceEntryDialog({
 
           {/* Smart Stepper: Reps / Seconds */}
           <div className="bg-slate-800 border border-slate-700 rounded-3xl p-4 sm:p-5 flex flex-col items-center shadow-lg relative">
-            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center block mb-4">
-              {isStaticHold ? 'Time (Seconds)' : 'Reps Completed'}
-            </Label>
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl p-1 mb-4 w-full max-w-[240px]">
+              <button 
+                onClick={() => setIsHold(false)}
+                className={`flex-1 h-9 rounded-lg font-black uppercase text-[10px] tracking-widest transition-all ${!isHold ? 'bg-[#38BDF8] text-white shadow-[0_0_10px_rgba(56,189,248,0.3)]' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                [ REPS ]
+              </button>
+              <button 
+                onClick={() => setIsHold(true)}
+                className={`flex-1 h-9 rounded-lg font-black uppercase text-[10px] tracking-widest transition-all ${isHold ? 'bg-[#38BDF8] text-white shadow-[0_0_10px_rgba(56,189,248,0.3)]' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                [ TSC (TIME) ]
+              </button>
+            </div>
+
             <div className="flex items-center justify-between w-full h-20 px-2">
               <button 
                 className="w-14 h-14 rounded-2xl bg-slate-700 text-slate-300 font-black text-2xl flex items-center justify-center active:scale-95 transition-transform"
@@ -4059,7 +3979,13 @@ function PerformanceEntryDialog({
               </button>
               
               <div className="flex flex-col items-center justify-center flex-1">
-                <span className="font-black text-5xl text-white tracking-tight leading-none">{reps}</span>
+                <input 
+                  type="number"
+                  inputMode="numeric"
+                  value={reps || ''}
+                  onChange={e => setReps(parseFloat(e.target.value) || 0)}
+                  className="font-black text-5xl text-white tracking-tight leading-none bg-transparent border-none text-center outline-none w-full p-0 m-0 no-arrows focus:ring-0"
+                />
               </div>
 
               <button 
@@ -4102,7 +4028,7 @@ function PerformanceEntryDialog({
             <Button variant="outline" className="h-16 rounded-2xl font-black uppercase tracking-widest border-2 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white" onClick={onClose}>
               Cancel
             </Button>
-            <Button className="h-16 rounded-2xl font-black uppercase tracking-widest bg-[#F06C22] text-white hover:bg-[#ea580c] shadow-[0_0_20px_rgba(240,108,34,0.4)] border-none" onClick={() => onSave(current.toString(), currentNextWeight || current.toString(), reps.toString(), quality)}>
+            <Button className="h-16 rounded-2xl font-black uppercase tracking-widest bg-[#F06C22] text-white hover:bg-[#ea580c] shadow-[0_0_20px_rgba(240,108,34,0.4)] border-none" onClick={() => onSave(current.toString(), currentNextWeight || current.toString(), reps.toString(), quality, isHold)}>
               Save Set
             </Button>
           </div>
@@ -5107,22 +5033,24 @@ function WorkoutTrackerView({
 
   const updateLog = (sessionId: string, machineId: string, field: keyof ExerciseLog, value: any) => {
     const key = `${sessionId}_${machineId}`;
-    const existing = logs[key];
     const currentSettings = clientMachineSettings[machineId]?.settings || {};
 
-    const updatedLog: ExerciseLog = existing 
-      ? { ...existing, [field]: value, machineSettings: currentSettings }
-      : { 
-          id: `temp_${Date.now()}`, // Temporary ID for local state
-          sessionId, 
-          clientId, 
-          machineId, 
-          [field]: value, 
-          machineSettings: currentSettings,
-          createdAt: Timestamp.now()
-        } as any;
-
-    setLogs(prev => ({ ...prev, [key]: updatedLog }));
+    setLogs(prev => {
+      const existing = prev[key];
+      const updatedLog: ExerciseLog = existing 
+        ? { ...existing, [field]: value, machineSettings: currentSettings }
+        : { 
+            id: `temp_${Date.now()}`, // Temporary ID for local state
+            sessionId, 
+            clientId, 
+            machineId, 
+            [field]: value, 
+            machineSettings: currentSettings,
+            createdAt: Timestamp.now()
+          } as any;
+      
+      return { ...prev, [key]: updatedLog };
+    });
   };
 
   const saveMachineSettings = async (machineId: string, newSettings: Record<string, string>, reason: string) => {
@@ -5443,11 +5371,13 @@ function WorkoutTrackerView({
           prevReps={previousSession && logs[`${previousSession.id}_${editingWeightMachineId}`]?.isStaticHold ? (logs[`${previousSession.id}_${editingWeightMachineId}`]?.seconds || '0') : (logs[`${previousSession.id}_${editingWeightMachineId}`]?.reps || '0')}
           isStaticHold={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold}
           onClose={() => setEditingWeightMachineId(null)}
-          onSave={async (weight, target, repsOrSeconds, quality) => {
-            const isHold = logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold;
+          onSave={async (weight, target, repsOrSeconds, quality, isHold) => {
+            const timeDiff = Math.floor((Date.now() - lastMachineLoggedAt.current) / 1000);
+
             await updateLog(currentSession.id!, editingWeightMachineId, 'weight', weight);
             await updateLog(currentSession.id!, editingWeightMachineId, 'targetWeight', target);
             await updateLog(currentSession.id!, editingWeightMachineId, 'repQuality', quality);
+            await updateLog(currentSession.id!, editingWeightMachineId, 'isStaticHold', isHold);
             if (isHold) {
               await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', repsOrSeconds);
               await updateLog(currentSession.id!, editingWeightMachineId, 'reps', '0');
@@ -5455,7 +5385,19 @@ function WorkoutTrackerView({
               await updateLog(currentSession.id!, editingWeightMachineId, 'reps', repsOrSeconds);
               await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', '0');
             }
+            await updateLog(currentSession.id!, editingWeightMachineId, 'timeSpent', timeDiff.toString());
+            
+            lastMachineLoggedAt.current = Date.now();
+            
             setEditingWeightMachineId(null);
+            
+            // Advance UI to the next machine automatically after a brief delay
+            const currentIndex = activeMachineIds.indexOf(editingWeightMachineId);
+            if (currentIndex !== -1 && currentIndex < activeMachineIds.length - 1) {
+              setTimeout(() => {
+                setEditingWeightMachineId(activeMachineIds[currentIndex + 1]);
+              }, 150);
+            }
           }}
         />
       )}
@@ -5754,6 +5696,7 @@ function WorkoutTrackerView({
                       .map((machine, index) => {
                         const currentLog = currentSession ? logs[`${currentSession.id}_${machine.id}`] || {} : {};
                         const isActive = activeMachineIds.includes(machine.id!);
+                        const isCompleted = currentLog?.weight && (currentLog?.reps || currentLog?.seconds) && currentLog?.repQuality;
                         const seqPosition = isActive ? activeMachineIds.indexOf(machine.id!) + 1 : null;
                         const historySessions = currentSession ? sessions.slice(1, 2) : sessions.slice(0, 1);
                         const prevSession = historySessions[0];
@@ -5796,13 +5739,13 @@ function WorkoutTrackerView({
                             key={machine.id} 
                             className={`flex w-full group transition-all h-[34px] sm:h-[36px] items-center border-b border-slate-100 last:border-b-0 border-l-[3px]
                               ${(!isActive && !showAllMachines) ? 'opacity-30 grayscale hover:grayscale-0' : ''}
-                              ${isFocusMachine ? 'bg-[#F06C22]/[0.05] border-l-[#F06C22]' : isActive ? 'bg-[#115E8D]/[0.02] border-l-transparent' : 'even:bg-slate-50 odd:bg-white border-l-transparent'} 
+                              ${isFocusMachine ? 'bg-[#F06C22]/[0.05] border-l-[#F06C22]' : isCompleted && isActive ? 'bg-emerald-500/[0.05] border-l-emerald-500' : isActive ? 'bg-[#115E8D]/[0.02] border-l-transparent' : 'even:bg-slate-50 odd:bg-white border-l-transparent'} 
                               hover:bg-[#115E8D]/5`}
                           >
                             <td className="w-[40px] shrink-0 flex items-center justify-center p-0 border-r border-slate-200/60 h-full">
                               {isActive ? (
-                                <div className={`flex items-center justify-center rounded-full w-5 h-5 text-white shadow-sm ${isFocusMachine ? 'bg-[#F06C22]' : 'bg-[#115E8D] opacity-80'}`}>
-                                  <span className="font-black text-[9px] leading-none">{seqPosition}</span>
+                                <div className={`flex items-center justify-center rounded-full w-5 h-5 text-white shadow-sm ${isFocusMachine ? 'bg-[#F06C22]' : isCompleted ? 'bg-emerald-500' : 'bg-[#115E8D] opacity-80'}`}>
+                                  {isCompleted ? <Check className="w-3 h-3" /> : <span className="font-black text-[9px] leading-none">{seqPosition}</span>}
                                 </div>
                               ) : !currentSession ? (
                                 <button
@@ -5824,7 +5767,13 @@ function WorkoutTrackerView({
                                 onClick={() => setEditingSettingsMachineId(machine.id!)}
                                 className="tracking-widest leading-none uppercase truncate mt-[2px] cursor-pointer hover:opacity-80"
                               >
-                                {settingsDisplay}
+                                {isCompleted ? (
+                                  <span className="font-black text-[9px] text-[#F06C22]">
+                                    {currentLog.weight} LBS | {currentLog.isStaticHold ? `${currentLog.seconds}s` : `${currentLog.reps} REPS`} | QUALITY: {currentLog.repQuality}
+                                  </span>
+                                ) : (
+                                  settingsDisplay
+                                )}
                               </div>
                             </td>
 
@@ -5855,17 +5804,6 @@ function WorkoutTrackerView({
                               ) : (
                                  <span className={`font-black text-[11px] ${isFocusMachine ? 'text-slate-400' : 'text-slate-300 group-hover/reps:text-[#115E8D]/50'}`}>--</span>
                               )}
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (currentSession?.id) {
-                                    updateLog(currentSession.id, machine.id!, 'isStaticHold', !currentLog.isStaticHold);
-                                  }
-                                }}
-                                className={`absolute bottom-[2px] right-[2px] p-[2px] rounded transition-colors ${currentLog.isStaticHold ? 'text-[#F06C22]' : 'text-slate-300 hover:text-slate-400'}`}
-                              >
-                                <Timer className="w-[8px] h-[8px]" />
-                              </button>
                             </td>
 
                             <td className={`w-[60px] shrink-0 px-1 border-r border-slate-200/60 flex items-center justify-center h-full transition-colors ${isFocusMachine ? 'bg-white shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]' : 'group-hover:bg-[#115E8D]/5'}`}>

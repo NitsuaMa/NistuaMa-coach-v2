@@ -551,17 +551,18 @@ export function ClientProfileView({
              
              {/* Flair Row */}
              <div className="flex flex-wrap gap-2 mt-2 mb-2 items-center group/flair">
-               {client.packageTier && client.packageTier !== "None" && (
-                 <div className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border ${
-                   client.packageTier === "6-Month" ? "bg-blue-500/20 text-blue-400 border-blue-500/50" :
+               {true && (
+                 <div className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border ${
+                   client.packageTier === "6-Month" ? "bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/50 shadow-[0_0_15px_rgba(56,189,248,0.15)]" :
                    client.packageTier === "12-Month" ? "bg-[#F06C22]/20 text-[#F06C22] border-[#F06C22]/50 shadow-[0_0_10px_rgba(240,108,34,0.3)]" :
-                   client.packageTier === "18-Month" ? "bg-gray-400/20 text-gray-200 border-gray-400/60 shadow-[0_0_15px_rgba(156,163,175,0.4)]" :
+                   client.packageTier === "18-Month" ? "bg-gray-400/20 text-gray-200 border-gray-400/60 shadow-[0_0_15px_rgba(156,163,175,0.4)]" : "bg-slate-700/20 text-slate-400 border-slate-700/50" + 
+
                    ""
                  }`}>
-                   {client.packageTier} VIP
+                   {client.packageTier === '18-Month' ? '18-Month VIP' : client.packageTier === '12-Month' ? '12-Month Tier' : client.packageTier === '6-Month' ? '6-Month Tier' : 'Prospect'}
                  </div>
                )}
-               {!client.packageTier || client.packageTier === "None" ? (
+               {false ? (
                  <button 
                    onClick={() => setActiveTab("details")}
                    className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-white transition-colors flex items-center gap-1"

@@ -23,6 +23,7 @@ export interface Trainer {
 
 export interface Client {
   id?: string;
+  mindbodyId?: string;
   firstName: string;
   lastName: string;
   gender: 'Male' | 'Female' | 'Other';
@@ -140,6 +141,7 @@ export interface ExerciseLog {
   isStaticHold?: boolean;
   isTSC?: boolean;
   repQuality?: number;
+  timeSpent?: string;
   notes?: string;
   machineSettings?: Record<string, string>; // Settings used for this specific set
   createdAt?: any;
