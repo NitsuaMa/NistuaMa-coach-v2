@@ -185,11 +185,11 @@ export function CalendarView({
     });
 
     return (
-      <div className="grid grid-cols-[40px_repeat(7,1fr)] gap-px bg-border border rounded-3xl overflow-hidden shadow-xl">
-        <div className="bg-muted/30 border-r border-b" />
+      <div className="grid grid-cols-[40px_repeat(7,1fr)] gap-px bg-slate-700 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="bg-slate-900 border-r border-b border-slate-700" />
         {dayNames.map(d => (
-          <div key={d} className="bg-muted/50 p-4 text-center border-b">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{d}</span>
+          <div key={d} className="bg-slate-900/90 p-4 text-center border-b border-slate-700">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{d}</span>
           </div>
         ))}
         {matrix.map((day, idx) => {
@@ -201,25 +201,33 @@ export function CalendarView({
 
           const isRowStart = idx % 7 === 0;
 
+          // Heatmap color logic based on number of sessions
+          let heatmapClass = 'bg-slate-900';
+          if (day.current && daySessions.length > 0) {
+              if (daySessions.length <= 2) heatmapClass = 'bg-[#0A2E46]';
+              else if (daySessions.length <= 5) heatmapClass = 'bg-[#114B72]';
+              else heatmapClass = 'bg-[#18689D]';
+          }
+
           return (
             <React.Fragment key={idx}>
               {isRowStart && (
                 <div 
-                  className="bg-muted/5 border-r flex items-center justify-center cursor-pointer hover:bg-primary/10 transition-colors group/week"
+                  className="bg-slate-800 border-r border-slate-700 flex items-center justify-center cursor-pointer hover:bg-slate-700 transition-colors group/week"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedDate(day.date);
                     setViewMode('week');
                   }}
                 >
-                  <span className="text-[8px] font-black uppercase -rotate-90 text-muted-foreground/30 group-hover/week:text-primary transition-colors">Week</span>
+                  <span className="text-[8px] font-black uppercase -rotate-90 text-slate-500 group-hover/week:text-white transition-colors">Week</span>
                 </div>
               )}
               <div 
                 className={cn(
-                  "min-h-[110px] p-2 bg-background transition-all group relative cursor-pointer",
-                  !day.current ? 'opacity-20 grayscale' : 'hover:bg-primary/[0.02]',
-                  today && 'bg-primary/[0.01]'
+                  "min-h-[110px] p-4 transition-all group relative cursor-pointer flex flex-col justify-between",
+                  !day.current ? 'bg-slate-900/50 opacity-40 grayscale' : heatmapClass,
+                  today && 'ring-2 ring-inset ring-[#38BDF8] z-10'
                 )}
                 onClick={() => {
                   if (day.current) {
@@ -230,21 +238,33 @@ export function CalendarView({
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className={cn(
-                    "text-xs font-black w-6 h-6 flex items-center justify-center rounded-full transition-all",
-                    today ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground'
+                    "text-sm font-black flex items-center justify-center rounded-full transition-all w-8 h-8",
+                    today ? 'bg-[#38BDF8] text-white shadow-sm' : 'text-slate-300'
                   )}>
                     {day.num}
                   </span>
                 </div>
                 
                 {day.current && (
-                  <div className="space-y-1 mt-2">
+                  <div className="flex flex-col mt-auto gap-2">
                     {daySessions.length > 0 ? (
-                      <Badge variant="secondary" className="w-full justify-center text-[9px] font-black uppercase tracking-tighter bg-primary/10 text-primary border-none py-1">
-                        {daySessions.length} sessions
-                      </Badge>
+                      <>
+                        <span className="text-xs text-slate-400">
+                          {daySessions.length} {daySessions.length === 1 ? 'Session' : 'Sessions'}
+                        </span>
+                        <div className="flex flex-wrap gap-1 items-end h-3">
+                          {Array.from(new Set(daySessions.map(s => trainerMap[s.trainerName]).filter(Boolean))).map(tId => {
+                            const trainer = visibleCalendarTrainers.find(t => t.id === tId);
+                            if (!trainer) return null;
+                            const color = TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length];
+                            return (
+                              <div key={tId} className={cn("w-2 h-2 rounded-full", color.bg)} title={trainer.fullName} />
+                            );
+                          })}
+                        </div>
+                      </>
                     ) : (
-                      <span className="text-[8px] text-muted-foreground/20 font-bold uppercase block text-center mt-4 italic">Empty</span>
+                      <span className="text-xs text-slate-500 pb-4">Open Day</span>
                     )}
                   </div>
                 )}
@@ -360,15 +380,19 @@ export function CalendarView({
                           <td 
                             key={`week-cell-${dIdx}-${slot}`} 
                             className={cn(
-                              "p-1.5 border-r border-slate-700 last:border-r-0 min-h-[60px] align-top",
-                              active && "bg-white/[0.02]"
+                              "p-1.5 border-r border-slate-700 last:border-r-0 min-h-[60px] align-top relative",
+                              active ? "bg-white/[0.02]" : "",
+                              daySessions.length === 0 ? "hover:bg-slate-800/30" : ""
                             )}
                             onClick={() => {
                                 setSelectedDate(date);
                                 setViewMode('day');
                             }}
                           >
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5 h-full">
+                              {daySessions.length === 0 && (
+                                <div className="absolute inset-2 border-2 border-dashed border-slate-700/30 rounded-xl pointer-events-none" />
+                              )}
                               {daySessions.map((session, sessIdx) => {
                                 const trainer = visibleCalendarTrainers.find(t => t.id === trainerMap[session.trainerName]);
                                 const color = trainer && visibleCalendarTrainers.length > 0 ? TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length] : TRAINER_COLORS[0];
@@ -376,10 +400,15 @@ export function CalendarView({
                                 const tId = trainerMap[session.trainerName];
                                 const isTrainerSelected = selectedTrainerId === 'all' || tId === selectedTrainerId;
                                 
-                                const endTimeStr = (() => {
-                                  if (!session.endTime) return '';
-                                  return getSlotHeader(safeToDate(session.endTime));
-                                })();
+                                const formatClientName = (fullName: string) => {
+                                  if (!fullName) return 'Unknown';
+                                  const parts = fullName.trim().split(' ');
+                                  if (parts.length > 1) {
+                                    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                                  }
+                                  return parts[0];
+                                };
+                                const formattedName = formatClientName(session.clientName || '');
 
                                 return (
                                   <div
@@ -389,21 +418,18 @@ export function CalendarView({
                                       handleClientClick(session);
                                     }}
                                     className={cn(
-                                      "p-2 rounded-xl border-l-4 flex flex-col gap-1 shadow-sm transition-all cursor-pointer relative overflow-hidden bg-slate-800/80",
+                                      "flex flex-col overflow-hidden p-1.5 rounded-xl border-l-4 shadow-sm transition-all cursor-pointer relative",
                                       isTrainerSelected 
                                         ? `${color.border} opacity-100 hover:brightness-125` 
                                         : "border-slate-700 opacity-20 grayscale",
                                       color.bg
                                     )}
                                   >
-                                    <div className="flex items-start justify-between gap-1">
-                                      <span className="text-xs font-black text-white truncate max-w-[85px]" title={session.clientName}>{session.clientName || 'Unknown'}</span>
-                                      <span className={cn("text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0", color.bg, color.text, "border border-current/20")}>
-                                        {trainer?.initials || '--'}
-                                      </span>
-                                    </div>
-                                    <span className="text-[10px] font-bold text-slate-400 tabular-nums">
-                                      {slot} - {endTimeStr || '30m'}
+                                    <span className="text-[10px] text-white/90 font-medium leading-none mb-1 whitespace-nowrap text-ellipsis overflow-hidden">
+                                      {slot}
+                                    </span>
+                                    <span className="text-xs font-bold text-white truncate whitespace-nowrap text-ellipsis leading-none" title={session.clientName}>
+                                      {formattedName}
                                     </span>
                                   </div>
                                 );
@@ -430,19 +456,19 @@ export function CalendarView({
       : visibleCalendarTrainers.filter(t => t.id === selectedTrainerId);
 
     return (
-      <div className="bg-card border-2 rounded-[32px] overflow-hidden shadow-xl">
+      <div className="bg-[#0A2E46] border border-slate-700 rounded-[32px] overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse min-w-[800px]">
+          <table className="w-full border-collapse min-w-[800px] table-fixed">
             <thead>
-              <tr className="bg-muted/30 border-b">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground border-r w-24 sticky left-0 bg-background z-10">Time</th>
+              <tr className="bg-slate-900 border-b border-slate-700">
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-r border-slate-700 w-24 sticky left-0 bg-slate-900 z-10">Time</th>
                 {filteredTrainers.map((trainer) => (
-                  <th key={trainer.id} className="p-4 border-r last:border-r-0 text-center">
+                  <th key={trainer.id} className="p-4 border-r border-slate-700 last:border-r-0 text-center">
                     <div className="flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-xs">
+                        <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-slate-300 font-black text-sm">
                           {trainer.initials}
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider">{trainer.fullName}</span>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-white mt-1">{trainer.fullName}</span>
                     </div>
                   </th>
                 ))}
@@ -454,15 +480,15 @@ export function CalendarView({
                 return (
                   <React.Fragment key={slot}>
                     {isGap && (
-                      <tr className="bg-muted/5 h-8 border-y">
+                      <tr className="bg-slate-900/50 h-8 border-y border-slate-700">
                         <td colSpan={filteredTrainers.length + 1} className="text-center">
-                            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">Break</span>
+                            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-500">Midday Gap</span>
                         </td>
                       </tr>
                     )}
-                    <tr className="border-b last:border-0">
-                      <td className="p-3 text-center border-r sticky left-0 bg-background z-10 text-muted-foreground">
-                        <span className="text-[10px] font-black tracking-tighter">{slot}</span>
+                    <tr className="border-b border-slate-700 last:border-0 hover:bg-white/[0.02] transition-colors">
+                      <td className="p-3 text-center border-r border-slate-700 sticky left-0 bg-[#0A2E46] z-10 text-slate-400">
+                        <span className="text-[11px] font-black tracking-tighter">{slot}</span>
                       </td>
                       {filteredTrainers.map((trainer) => {
                         const session = schedules.find(s => {
@@ -471,37 +497,34 @@ export function CalendarView({
                           return isSameDay(d, selectedDate) && tStr === slot && s.trainerName === trainer.fullName && s.status !== 'Cancelled';
                         });
 
+                        const color = TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length];
+
                         return (
                           <td 
                             key={`${trainer.id}-${slot}`} 
-                            className="p-2 border-r last:border-r-0 min-h-[60px]"
+                            className="p-1.5 border-r border-slate-700 last:border-r-0 h-[80px]"
                           >
                             {session ? (
                               <div
                                 onClick={() => handleClientClick(session)}
                                 className={cn(
-                                  "p-3 rounded-xl border flex flex-col justify-between transition-all cursor-pointer shadow-sm h-full min-h-[60px]",
-                                  session.status === 'Completed'
-                                    ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-700/60'
-                                    : 'bg-primary/5 border-primary/20 hover:border-primary/40'
+                                  "p-3 rounded-xl border-l-4 flex flex-col gap-1 transition-all cursor-pointer shadow-sm h-full bg-slate-800/60",
+                                  color.border
                                 )}
                               >
-                                <div>
-                                  <div className="flex items-center justify-between gap-2 mb-1">
-                                    <span className="text-[11px] font-black truncate">{session.clientName}</span>
-                                    {session.status === 'Completed' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                                  </div>
-                                  <span className="text-[9px] font-bold opacity-60 block truncate">{session.serviceName}</span>
-                                </div>
-                                <div className="mt-2 flex justify-end">
-                                    <Badge variant="outline" className="text-[8px] font-black h-4 px-1 border-current/20">
-                                        {session.status.toUpperCase()}
-                                    </Badge>
-                                </div>
+                                <span className="text-xs font-medium text-slate-400 tabular-nums leading-none tracking-tight">
+                                  {slot} - {session.endTime ? getSlotHeader(safeToDate(session.endTime)) : '30m'}
+                                </span>
+                                <span className="text-sm font-bold truncate text-white leading-tight">
+                                  {session.clientName}
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest leading-none">
+                                  {trainer.fullName}
+                                </span>
                               </div>
                             ) : (
-                                <div className="h-full min-h-[60px] flex items-center justify-center opacity-[0.05]">
-                                    <Clock className="w-4 h-4" />
+                                <div className="h-full flex items-center justify-center p-2">
+                                  <span className="text-[10px] font-medium uppercase tracking-widest text-slate-500">OPEN SLOT</span>
                                 </div>
                             )}
                           </td>
@@ -519,17 +542,20 @@ export function CalendarView({
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12 w-full overflow-x-hidden px-4 sm:px-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+    <div className="space-y-8 pb-12 w-full overflow-x-hidden p-6 sm:p-8 bg-slate-900 min-h-screen rounded-[40px] border border-slate-800/50 shadow-2xl relative">
+      <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-slate-800/40 to-transparent pointer-events-none rounded-t-[40px]" />
+      
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
         <div className="flex items-center gap-6">
-          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center shadow-inner">
-            <CalendarIcon className="w-7 h-7 text-primary" />
+          <div className="w-14 h-14 bg-slate-800 rounded-2xl flex items-center justify-center shadow-inner border border-slate-700">
+            <CalendarIcon className="w-7 h-7 text-[#38BDF8]" />
           </div>
           <div>
-            <h2 className="text-3xl font-black tracking-tight uppercase italic">
+            <h2 className="text-3xl font-black tracking-tight uppercase italic text-white flex items-center gap-3">
                 {viewMode === 'month' ? 'Month View' : viewMode === 'week' ? 'Week View' : 'Day View'}
+                <Badge variant="outline" className="text-[8px] font-black h-5 px-2 tracking-widest border-slate-700 text-slate-400 bg-slate-800/50 uppercase not-italic">Read Only</Badge>
             </h2>
-            <p className="text-muted-foreground font-black uppercase text-[10px] tracking-[0.2em] mt-1 border-l-2 border-primary pl-2">
+            <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.2em] mt-1 border-l-2 border-[#38BDF8] pl-2">
                 {viewMode === 'month' 
                   ? selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
                   : viewMode === 'week'
@@ -541,63 +567,60 @@ export function CalendarView({
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex bg-muted/30 p-1 rounded-xl border">
+          <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 shadow-sm">
             <Button 
               variant="ghost" 
               size="sm" 
               onClick={handleSync}
               disabled={isSyncing}
-              className="rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8 gap-2"
+              className="rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8 gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
             >
-              {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3 text-[#38BDF8]" />}
               {isSyncing ? 'Syncing' : 'Sync'}
             </Button>
-            <div className="w-px h-4 bg-border/40 mx-1 my-auto" />
+            <div className="w-px h-4 bg-slate-700 mx-1 my-auto" />
             <Button 
-              variant={viewMode === 'month' ? 'secondary' : 'ghost'} 
               size="sm" 
               onClick={() => setViewMode('month')}
-              className="rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8"
+              className={cn("rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8 transition-all duration-200", viewMode === 'month' ? "bg-slate-600 text-white shadow-sm" : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/[0.5]")}
             >
               Month
             </Button>
             <Button 
-              variant={viewMode === 'week' ? 'secondary' : 'ghost'} 
               size="sm" 
               onClick={() => setViewMode('week')}
-              className="rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8"
+              className={cn("rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8 transition-all duration-200", viewMode === 'week' ? "bg-slate-600 text-white shadow-sm" : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/[0.5]")}
             >
               Week
             </Button>
             <Button 
-              variant={viewMode === 'day' ? 'secondary' : 'ghost'} 
               size="sm" 
               onClick={() => setViewMode('day')}
-              className="rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8"
+              className={cn("rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8 transition-all duration-200", viewMode === 'day' ? "bg-slate-600 text-white shadow-sm" : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/[0.5]")}
             >
               Day
             </Button>
           </div>
 
-          <div className="flex items-center bg-muted/30 px-3 py-1 rounded-xl border gap-2">
-            <Users className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex items-center bg-slate-800 px-3 py-1 rounded-xl border border-slate-700 gap-2 shadow-sm">
+            <Users className="w-3.5 h-3.5 text-[#38BDF8]" />
             <Select value={selectedTrainerId} onValueChange={setSelectedTrainerId}>
-              <SelectTrigger className="h-6 border-none bg-transparent focus:ring-0 text-[10px] font-black uppercase tracking-widest min-w-[120px] p-0 shadow-none">
+              <SelectTrigger className="h-6 border-none bg-transparent focus:ring-0 text-[10px] font-black uppercase tracking-widest min-w-[120px] p-0 shadow-none text-white hover:text-[#38BDF8] transition-colors">
                 <SelectValue placeholder="Team Filter" />
               </SelectTrigger>
-              <SelectContent className="rounded-xl border-2">
-                {isAdmin && <SelectItem value="all" className="font-bold">Entire Team</SelectItem>}
+              <SelectContent className="rounded-xl border-slate-700 bg-slate-800 text-white">
+                {isAdmin && <SelectItem value="all" className="font-bold focus:bg-slate-700 focus:text-white">Entire Team</SelectItem>}
                 {visibleCalendarTrainers.filter(t => isAdmin || t.id === authTrainer?.id).map(t => (
-                  <SelectItem key={t.id} value={t.id!} className="font-bold">{t.fullName}</SelectItem>
+                  <SelectItem key={t.id} value={t.id!} className="font-bold hover:bg-slate-700 focus:bg-slate-700 focus:text-white">{t.fullName}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="icon" onClick={handlePrev} className="rounded-xl h-8 w-8 border-2"><ChevronLeft className="w-4 h-4" /></Button>
-            <Button variant="outline" onClick={() => setSelectedDate(new Date())} className="rounded-xl font-black uppercase text-[9px] tracking-widest px-4 h-8 border-2">Today</Button>
-            <Button variant="outline" size="icon" onClick={handleNext} className="rounded-xl h-8 w-8 border-2"><ChevronRight className="w-4 h-4" /></Button>
+          <div className="flex gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700 shadow-sm">
+            <Button variant="ghost" size="icon" onClick={handlePrev} className="rounded-lg h-8 w-8 text-slate-300 hover:text-white hover:bg-slate-700"><ChevronLeft className="w-4 h-4" /></Button>
+            <Button variant="ghost" onClick={() => setSelectedDate(new Date())} className="rounded-lg font-black uppercase text-[9px] tracking-widest px-4 h-8 text-slate-300 hover:text-white hover:bg-slate-700">Today</Button>
+            <Button variant="ghost" size="icon" onClick={handleNext} className="rounded-lg h-8 w-8 text-slate-300 hover:text-white hover:bg-slate-700"><ChevronRight className="w-4 h-4" /></Button>
           </div>
         </div>
       </div>
@@ -609,6 +632,7 @@ export function CalendarView({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -5 }}
           transition={{ duration: 0.15 }}
+          className="relative z-10"
         >
           {viewMode === 'month' && renderMonth()}
           {viewMode === 'week' && renderWeek()}
