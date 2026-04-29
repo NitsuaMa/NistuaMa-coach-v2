@@ -108,7 +108,7 @@ export function PinLoginView({ trainers, user, onLogin, isLoading: initialLoadin
             size="sm"
             onClick={user ? handleSignOut : handleGoogleLogin}
             disabled={isLoggingIn}
-            className="flex flex-col items-center gap-1 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all h-auto py-2 group"
+            className="flex flex-col items-center gap-1 transition-all h-auto py-2 group"
           >
             {isLoggingIn ? (
               <Loader2 className="w-6 h-6 animate-spin text-primary" />

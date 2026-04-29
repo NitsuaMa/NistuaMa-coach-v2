@@ -13,6 +13,8 @@ import {
   Check,
   X
 } from 'lucide-react';
+import { db } from '../firebase';
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,15 +48,16 @@ export function PreSessionOverview({
   sessionNotes
 }: PreSessionOverviewProps & { machines: Machine[] }) {
   const [isAdjusting, setIsAdjusting] = useState(false);
-  const [selectedRoutineType, setSelectedRoutineType] = useState<'A' | 'B' | 'Free' | 'Create_B'>('A');
+  const [selectedRoutineType, setSelectedRoutineType] = useState<'A' | 'B' | 'Free' | 'Create_B' | 'Create_A'>('A');
   const [adjustedMachineIds, setAdjustedMachineIds] = useState<string[]>([]);
   const [adjustmentNote, setAdjustmentNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const routineA = routines.find(r => r.name.includes('Routine A'));
   const routineB = routines.find(r => r.name.includes('Routine B'));
   
   React.useEffect(() => {
-    let type: 'A' | 'B' | 'Free' | 'Create_B' = 'Free';
+    let type: 'A' | 'B' | 'Free' | 'Create_B' | 'Create_A' = 'Free';
     if (targetRoutine) {
       if (targetRoutine.name.includes('Routine A')) type = 'A';
       else if (targetRoutine.name.includes('Routine B')) type = 'B';
@@ -67,9 +70,11 @@ export function PreSessionOverview({
       type = 'Create_B';
     }
 
-    setSelectedRoutineType(type);
-    if (type === 'Create_B' || type === 'Free') setAdjustedMachineIds([]);
-    else setAdjustedMachineIds(targetRoutine?.machineIds || routineA?.machineIds || []);
+    if (selectedRoutineType !== 'Create_A') {
+      setSelectedRoutineType(type);
+      if (type === 'Create_B' || type === 'Free') setAdjustedMachineIds([]);
+      else setAdjustedMachineIds(targetRoutine?.machineIds || routineA?.machineIds || []);
+    }
   }, [targetRoutine, routineA, routineB]);
 
   const handleStart = () => {
@@ -83,7 +88,7 @@ export function PreSessionOverview({
   const orthopedics = client.medicalHistory;
   const globalNotes = client.globalNotes;
   
-  const selectedRoutineIds = selectedRoutineType === 'Create_B' || selectedRoutineType === 'Free' 
+  const selectedRoutineIds = selectedRoutineType === 'Create_B' || selectedRoutineType === 'Create_A' || selectedRoutineType === 'Free' 
     ? adjustedMachineIds 
     : (selectedRoutineType === 'A' ? (routineA?.machineIds || []) : (routineB?.machineIds || []));
 
@@ -106,13 +111,15 @@ export function PreSessionOverview({
           <Button variant="outline" onClick={onCancel} className="flex-1 md:flex-none rounded-xl font-bold uppercase text-[10px] sm:text-xs tracking-widest px-6 bg-white/5 border-white/10 hover:bg-white/10 text-white transition-all h-14">
             Cancel
           </Button>
-          <Button 
-            onClick={handleStart}
-            className="flex-1 md:flex-none rounded-xl font-black uppercase text-xs sm:text-sm tracking-widest px-8 bg-[#F06C22] hover:bg-[#d95d18] text-white shadow-[0_4px_20px_rgba(240,108,34,0.4)] gap-2 h-14 transition-all"
-          >
-            <Play className="w-4 h-4 fill-current" />
-            {isAdjusting ? 'Start Adjusted Session' : 'Start Session'}
-          </Button>
+          {selectedRoutineType !== 'Create_A' && (
+            <Button 
+              onClick={handleStart}
+              className="flex-1 md:flex-none rounded-xl font-black uppercase text-xs sm:text-sm tracking-widest px-8 bg-[#F06C22] hover:bg-[#d95d18] text-white shadow-[0_4px_20px_rgba(240,108,34,0.4)] gap-2 h-14 transition-all"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              {isAdjusting ? 'Start Adjusted Session' : 'Start Session'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -190,7 +197,7 @@ export function PreSessionOverview({
                 <button 
                   onClick={() => { setSelectedRoutineType('A'); setAdjustedMachineIds(routineA?.machineIds || []); }}
                   className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
-                    selectedRoutineType === 'A' ? 'bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-white/5 border-white/5 text-[#94A3B8] hover:bg-white/10 hover:text-white'
+                    selectedRoutineType === 'A' || selectedRoutineType === 'Create_A' ? 'bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-white/5 border-white/5 text-[#94A3B8] hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <span className="font-black italic uppercase">Routine A</span>
@@ -224,12 +231,41 @@ export function PreSessionOverview({
                 </button>
              </div>
 
-             {(selectedRoutineType === 'Create_B' || selectedRoutineType === 'Free') && (
+             {(selectedRoutineType === 'Create_B' || selectedRoutineType === 'Create_A' || selectedRoutineType === 'Free') && (
                <div className="space-y-4 pt-4 border-t border-white/10 animate-in slide-in-from-top-2">
                  <div className="space-y-2">
-                   <Label className="text-[9px] font-black uppercase tracking-widest text-[#68717A]">
-                     Adjust Machines
-                   </Label>
+                   <div className="flex items-center justify-between">
+                     <Label className="text-[9px] font-black uppercase tracking-widest text-[#68717A]">
+                       Adjust Machines
+                     </Label>
+                     {selectedRoutineType === 'Create_A' && adjustedMachineIds.length > 0 && (
+                       <Button 
+                         size="sm"
+                         disabled={isSaving}
+                         onClick={async () => {
+                           setIsSaving(true);
+                           try {
+                             if (routineA && routineA.id) {
+                               await updateDoc(doc(db, 'routines', routineA.id), { machineIds: adjustedMachineIds });
+                             } else {
+                               await addDoc(collection(db, 'routines'), {
+                                 clientId: client.id,
+                                 name: 'Routine A',
+                                 machineIds: adjustedMachineIds,
+                                 createdAt: serverTimestamp()
+                               });
+                             }
+                             setSelectedRoutineType('A');
+                           } finally {
+                             setIsSaving(false);
+                           }
+                         }}
+                         className="bg-[#38BDF8] hover:bg-[#0284c7] text-[#0A2E46] font-black uppercase tracking-widest h-7 text-[9px]"
+                       >
+                         Confirm Routine A
+                       </Button>
+                     )}
+                   </div>
                    <div className="max-h-[250px] overflow-y-auto pr-2 space-y-2 bg-[#0A2E46]/50 rounded-xl p-3 border border-white/5">
                      {machines.map(m => {
                        const isSelected = adjustedMachineIds.includes(m.id);
@@ -274,7 +310,24 @@ export function PreSessionOverview({
               </div>
               
               <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                 {selectedRoutineIds.length === 0 ? (
+                 {selectedRoutineType === 'A' && (!routineA || (routineA.machineIds || []).length === 0) ? (
+                   <div className="flex flex-col items-center justify-center p-12 h-full border-[3px] border-dashed border-slate-600 rounded-3xl bg-[#0A2E46]/30">
+                     <Dumbbell className="w-14 h-14 text-slate-500 mb-5" />
+                     <p className="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-8 text-center max-w-[200px] leading-relaxed">Client lacks an established A Routine</p>
+                     <Button 
+                       onClick={() => { setSelectedRoutineType('Create_A'); setAdjustedMachineIds([]); }}
+                       className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase text-xs tracking-widest px-8 py-6 rounded-xl shadow-[0_4px_20px_rgba(240,108,34,0.4)] transition-all flex items-center gap-2"
+                     >
+                       <Settings2 className="w-4 h-4" />
+                       Initialize A Routine
+                     </Button>
+                   </div>
+                 ) : selectedRoutineType === 'Create_A' && selectedRoutineIds.length === 0 ? (
+                   <div className="flex flex-col items-center justify-center p-12 h-full opacity-50">
+                     <Dumbbell className="w-12 h-12 text-[#68717A] mb-4" />
+                     <p className="text-xs font-black uppercase tracking-widest text-[#68717A] text-center max-w-[200px]">Add machines from the sequence intelligence selector</p>
+                   </div>
+                 ) : selectedRoutineIds.length === 0 ? (
                    <div className="flex flex-col items-center justify-center p-12 h-full opacity-50">
                      <Dumbbell className="w-12 h-12 text-[#68717A] mb-4" />
                      <p className="text-xs font-black uppercase tracking-widest text-[#68717A]">No machines selected</p>

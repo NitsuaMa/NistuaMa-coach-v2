@@ -43,7 +43,8 @@ import {
   RotateCcw,
   Mic,
   Check,
-  X
+  X,
+  Settings2
 } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'motion/react';
@@ -63,7 +64,8 @@ import {
   setDoc,
   getDocs,
   limit,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   GoogleAuthProvider, 
@@ -90,6 +92,7 @@ import { ConsultationSetupWizard } from './components/ConsultationSetupWizard';
 import { ConsultationWizard } from './components/ConsultationWizard';
 import { CreateClientModal } from './components/CreateClientModal';
 import { ClientProgressReportView } from './components/ClientProgressReportView';
+import { SessionRoutineManagerModal } from './components/SessionRoutineManagerModal';
 import { MachineKnowledgeDashboard } from './components/MachineKnowledgeDashboard';
 import { MaxStrengthLogo } from './components/MaxStrengthLogo';
 
@@ -146,6 +149,7 @@ type RoutineType = 'A' | 'B' | 'Free';
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [authTrainer, setAuthTrainer] = useState<Trainer | null>(null);
   const [currentView, setCurrentView] = useState<View>('clients');
   const [newClientOnboardingName, setNewClientOnboardingName] = useState<string | null>(null);
@@ -348,12 +352,15 @@ export default function App() {
     if (viewOverride === 'trainer-hub' && user?.email === "jurgensaj@gmail.com") {
       if (trainers.length > 0) {
         const ownerTrainer = trainers.find(t => t.isOwner) || trainers[0];
-        setAuthTrainer(ownerTrainer);
-      } else {
+        if (authTrainer?.id !== ownerTrainer.id) {
+          setAuthTrainer(ownerTrainer);
+          setCurrentView('trainer-hub');
+        }
+      } else if (!authTrainer) {
         // Mock a trainer if none exist for bypass
         setAuthTrainer({ id: 'owner-temp', fullName: 'Owner Tim', initials: 'TD', pin: '0000', isOwner: true } as any);
+        setCurrentView('trainer-hub');
       }
-      setCurrentView('trainer-hub');
       return;
     }
 
@@ -364,7 +371,7 @@ export default function App() {
         if (matching) setAuthTrainer(matching);
       }
     }
-  }, [trainers, authTrainer]);
+  }, [trainers, authTrainer, user]);
 
   const handleTrainerLogin = (trainer: Trainer) => {
     setAuthTrainer(trainer);
@@ -546,11 +553,18 @@ export default function App() {
   }, []);
 
   // Seed Machines and Trainers if empty
+  const hasSeededRef = React.useRef(false);
   useEffect(() => {
-    if (!isAuthReady || !user || hasQuotaError) return;
+    if (!isAuthReady || !user || hasQuotaError || hasSeededRef.current) return;
 
     const seedData = async () => {
       try {
+        // Only seed if we haven't checked this session
+        if (sessionStorage.getItem('msf_seeded_check')) {
+          hasSeededRef.current = true;
+          return;
+        }
+
         const trainersSnap = await getDocs(collection(db, 'trainers'));
         if (trainersSnap.empty) {
           console.log("Seeding standardized trainers...");
@@ -585,8 +599,10 @@ export default function App() {
           await Promise.all(machinePromises);
         }
 
+        sessionStorage.setItem('msf_seeded_check', 'true');
+        hasSeededRef.current = true;
       } catch (error: any) {
-        if (error.message?.includes('Quota limit exceeded')) setHasQuotaError(true);
+        if (error.message?.toLowerCase().includes('quota')) setHasQuotaError(true);
         console.error("Failed to seed:", error);
       }
     };
@@ -594,9 +610,11 @@ export default function App() {
     seedData();
   }, [isAuthReady, user, hasQuotaError]);
 
-  // Cleanup old unassigned sessions (once daily per user session)
+  // Cleanup old unassigned sessions (once daily per user session, limited to admin)
   useEffect(() => {
     if (!isAuthReady || !user || hasQuotaError) return;
+    // Only run cleanup for the main admin to save quota across users
+    if (user.email !== "jurgensaj@gmail.com") return;
 
     const cleanup = async () => {
       const todayString = new Date().toISOString().split('T')[0];
@@ -636,14 +654,14 @@ export default function App() {
               // Delete session
               await deleteDoc(docRef.ref);
             } catch (err: any) {
-               if (err.message?.includes('Quota limit exceeded')) setHasQuotaError(true);
+               if (err.message?.toLowerCase().includes('quota')) setHasQuotaError(true);
             }
           });
           
         await Promise.all(deletePromises);
         localStorage.setItem('last_unassigned_cleanup', todayString);
       } catch (error: any) {
-        if (error.message?.includes('Quota limit exceeded')) setHasQuotaError(true);
+        if (error.message?.toLowerCase().includes('quota')) setHasQuotaError(true);
         console.error("Error cleaning up sessions:", error);
       }
     };
@@ -651,15 +669,35 @@ export default function App() {
   }, [isAuthReady, user, hasQuotaError]);
 
   // Data Listeners
+  const lastUidRef = React.useRef<string | null>(null);
   useEffect(() => {
-    if (!isAuthReady || !user || hasQuotaError) return;
+    if (!isAuthReady || !user || hasQuotaError) {
+      lastUidRef.current = null;
+      return;
+    }
+    
+    // Guard against redundant resubscriptions if user identity hasn't changed
+    if (lastUidRef.current === user.uid) return;
+    lastUidRef.current = user.uid;
 
     const trainersQuery = query(collection(db, 'trainers'), orderBy('order', 'asc'));
+    
+    // Check cache for trainers
+    const cachedTrainers = sessionStorage.getItem('msf_trainers_cache');
+    if (cachedTrainers) {
+      try {
+        setTrainers(JSON.parse(cachedTrainers));
+      } catch (e) {
+        console.error("Failed to parse cached trainers", e);
+      }
+    }
+
     const unsubscribeTrainers = onSnapshot(trainersQuery, (snapshot) => {
       const trainersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trainer));
       setTrainers(trainersData);
+      sessionStorage.setItem('msf_trainers_cache', JSON.stringify(trainersData));
     }, (error) => {
-      if (error.message.includes('Quota limit exceeded')) setHasQuotaError(true);
+      if (error.message?.toLowerCase().includes('quota')) { setHasQuotaError(true); return; }
       handleFirestoreError(error, OperationType.GET, 'trainers');
     });
 
@@ -668,27 +706,37 @@ export default function App() {
       const clientsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
       setClients(clientsData);
     }, (error) => {
-      if (error.message.includes('Quota limit exceeded')) setHasQuotaError(true);
+      if (error.message?.toLowerCase().includes('quota')) { setHasQuotaError(true); return; }
       handleFirestoreError(error, OperationType.GET, 'clients');
     });
 
     const machinesQuery = query(collection(db, 'machines'), orderBy('order', 'asc'));
+    
+    // Check cache for machines
+    const cachedMachines = sessionStorage.getItem('msf_machines_cache');
+    if (cachedMachines) {
+      try {
+        setMachines(JSON.parse(cachedMachines));
+      } catch (e) {
+        console.error("Failed to parse cached machines", e);
+      }
+    }
+
     const unsubscribeMachines = onSnapshot(machinesQuery, (snapshot) => {
       const machinesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Machine));
       
-      // Merge Remote data into DEFAULT_MACHINES to ensure all 20 units are always available
-      // even if something was deleted in Firestore, and to provide hardcoded defaults
       const mergedMachines = DEFAULT_MACHINES.map(dm => {
         const remote = machinesData.find(r => r.id === dm.id);
         return remote ? { ...dm, ...remote } : dm;
       });
 
-      // Also include any custom machines added later (if any)
       const customMachines = machinesData.filter(r => !DEFAULT_MACHINES.find(dm => dm.id === r.id));
+      const finalMachines = [...mergedMachines, ...customMachines].sort((a, b) => a.order - b.order);
       
-      setMachines([...mergedMachines, ...customMachines].sort((a, b) => a.order - b.order));
+      setMachines(finalMachines);
+      sessionStorage.setItem('msf_machines_cache', JSON.stringify(finalMachines));
     }, (error) => {
-      if (error.message.includes('Quota limit exceeded')) setHasQuotaError(true);
+      if (error.message?.toLowerCase().includes('quota')) { setHasQuotaError(true); return; }
       handleFirestoreError(error, OperationType.GET, 'machines');
     });
 
@@ -706,7 +754,7 @@ export default function App() {
       const schedulesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSchedules(schedulesData);
     }, (error) => {
-      if (error.message.includes('Quota limit exceeded')) setHasQuotaError(true);
+      if (error.message?.toLowerCase().includes('quota')) { setHasQuotaError(true); return; }
       handleFirestoreError(error, OperationType.GET, 'schedules');
     });
 
@@ -719,7 +767,7 @@ export default function App() {
       const sessionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkoutSession));
       setSessions(sessionsData);
     }, (error) => {
-      if (error.message.includes('Quota limit exceeded')) setHasQuotaError(true);
+      if (error.message?.toLowerCase().includes('quota')) { setHasQuotaError(true); return; }
       handleFirestoreError(error, OperationType.GET, 'sessions');
     });
 
@@ -727,7 +775,7 @@ export default function App() {
       const focusData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainerFocus));
       setTrainerFocuses(focusData);
     }, (error) => {
-      if (error.message.includes('Quota limit exceeded')) setHasQuotaError(true);
+      if (error.message?.toLowerCase().includes('quota')) { setHasQuotaError(true); return; }
       handleFirestoreError(error, OperationType.GET, 'trainerFocuses');
     });
 
@@ -1120,6 +1168,8 @@ export default function App() {
                 }}
                 authTrainer={authTrainer}
                 trainerFocuses={trainerFocuses}
+                isSyncing={isSyncing}
+                setIsSyncing={setIsSyncing}
               />
             )}
             {currentView === 'history' && (
@@ -1145,6 +1195,7 @@ export default function App() {
                   setCurrentView('progress-report');
                 }}
                 setView={setCurrentView}
+                hasQuotaError={hasQuotaError}
               />
             )}
             {currentView === 'progress-report' && selectedClientId && authTrainer && (
@@ -1366,15 +1417,14 @@ export default function App() {
                   <div className="flex flex-col gap-8">
                     {/* Visual & Core Info Header */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      <div className="aspect-video bg-muted rounded-2xl overflow-hidden relative flex items-center justify-center border border-border">
+                      <div className="aspect-video bg-muted rounded-2xl overflow-hidden relative flex items-center justify-center border border-border group">
                         {infoMachine.imageUrl ? (
-                           <img src={infoMachine.imageUrl} className="w-full h-full object-cover opacity-90" referrerPolicy="no-referrer" />
+                           <img src={infoMachine.imageUrl} className="w-full h-full object-cover brightness-100 transition-all duration-500" referrerPolicy="no-referrer" />
                         ) : (
                            // Unsplash default photo mechanism for robust mockups
-                           <img src={`https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80`} className="w-full h-full object-cover opacity-90" />
+                           <img src={`https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80`} className="w-full h-full object-cover brightness-100 transition-all duration-500" />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end z-10">
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-widest text-[#F06C22] mb-1">Targeted Muscles</p>
                               <div className="flex flex-wrap gap-1.5">
@@ -2505,8 +2555,6 @@ function ClientsView({
 
   // Active trainers for column display - only those with sessions or all if we want comparison
 
-  const allTrainerNames = sortedTrainers.map(t => t.fullName);
-
   // Find if a slot has any sessions for any trainer
   const getSlotSessions = (slot: string) => {
     return todaysSchedules.filter(s => {
@@ -2930,10 +2978,10 @@ function ClientsView({
                           <span className="text-[11px] font-black uppercase tracking-widest text-red-600 opacity-90">Unassigned</span>
                         </div>
                       )}
-                      {allTrainerNames.map(name => (
-                        <div key={name} className="w-40 shrink-0 p-3 border-r border-border/10 text-center flex items-center justify-center">
+                      {sortedTrainers.map(trainer => (
+                        <div key={trainer.id} className="w-40 shrink-0 p-3 border-r border-border/10 text-center flex items-center justify-center">
                           <span className="text-[11px] font-black uppercase tracking-widest text-foreground text-ellipsis overflow-hidden whitespace-nowrap opacity-90">
-                            {name.split(' ')[0]}
+                            {trainer.fullName.split(' ')[0]}
                           </span>
                         </div>
                       ))}
@@ -3045,9 +3093,9 @@ function ClientsView({
                        )}
 
                        {/* Trainer Columns */}
-                       {allTrainerNames.map(trainerName => (
-                          <div key={trainerName} className="w-40 shrink-0 border-r border-border/5 relative z-10 pointer-events-auto">
-                            {todaysSchedules.filter(s => s.trainerName === trainerName).map(session => {
+                       {sortedTrainers.map(trainer => (
+                          <div key={trainer.id} className="w-40 shrink-0 border-r border-border/5 relative z-10 pointer-events-auto">
+                            {todaysSchedules.filter(s => s.trainerName === trainer.fullName).map(session => {
                                const offsetMin = (session.startTime.toDate().getHours() * 60 + session.startTime.toDate().getMinutes()) - ((activeTab === 'morning' ? 7 : 15) * 60);
                                const topPx = ((offsetMin / 30) * 80) + 16; 
                                const isConsultation = session.serviceName?.toLowerCase().includes('consult') || session.serviceName?.toLowerCase().includes('first');
@@ -3367,52 +3415,43 @@ function ClientHistoryView({
   useEffect(() => {
     if (!clientId) return;
 
-    // Fetch Routines for filtering
-    const routinesQuery = query(collection(db, 'routines'), where('clientId', '==', clientId));
-    const unsubscribeRoutines = onSnapshot(routinesQuery, (snapshot) => {
-      setRoutines(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Routine)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'routines');
-    });
+    const fetchData = async () => {
+      try {
+        // Fetch Routines for filtering
+        const routinesQuery = query(collection(db, 'routines'), where('clientId', '==', clientId));
+        const routineSnap = await getDocs(routinesQuery);
+        setRoutines(routineSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Routine)));
 
-    const sessionsQuery = query(
-      collection(db, 'sessions'),
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc'),
-      limit(historyLimit)
-    );
+        const sessionsQuery = query(
+          collection(db, 'sessions'),
+          where('clientId', '==', clientId),
+          orderBy('createdAt', 'desc'),
+          limit(historyLimit)
+        );
+        const sessionSnap = await getDocs(sessionsQuery);
+        const sessionsData = sessionSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkoutSession));
+        setAllSessions(sessionsData);
 
-    const unsubscribeSessions = onSnapshot(sessionsQuery, (snapshot) => {
-      const sessionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkoutSession));
-      setAllSessions(sessionsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'sessions');
-    });
-
-    // Fetch Session Notes for client
-    const notesQuery = query(
-      collection(db, 'sessionNotes'),
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
-      const notesMap: Record<string, SessionNote[]> = {};
-      snapshot.docs.forEach(doc => {
-        const note = { id: doc.id, ...doc.data() } as SessionNote;
-        if (!notesMap[note.sessionId]) notesMap[note.sessionId] = [];
-        notesMap[note.sessionId].push(note);
-      });
-      setSessionNotes(notesMap);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'sessionNotes');
-    });
-
-    return () => {
-      unsubscribeSessions();
-      unsubscribeNotes();
-      unsubscribeRoutines();
+        // Fetch Session Notes for client
+        const notesQuery = query(
+          collection(db, 'sessionNotes'),
+          where('clientId', '==', clientId),
+          orderBy('createdAt', 'desc')
+        );
+        const notesSnap = await getDocs(notesQuery);
+        const notesMap: Record<string, SessionNote[]> = {};
+        notesSnap.docs.forEach(doc => {
+          const note = { id: doc.id, ...doc.data() } as SessionNote;
+          if (!notesMap[note.sessionId]) notesMap[note.sessionId] = [];
+          notesMap[note.sessionId].push(note);
+        });
+        setSessionNotes(notesMap);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'multiple');
+      }
     };
+
+    fetchData();
   }, [clientId, historyLimit]);
 
   useEffect(() => {
@@ -3447,27 +3486,27 @@ function ClientHistoryView({
   useEffect(() => {
     if (!sessionIdsStr) return;
 
-    const sessionIds = sessionIdsStr.split(',');
-    
-    // Firestore 'in' query supports up to 30 items, so chunk if necessary
-    // But since max length is 12, we are safe.
-    const logsQuery = query(
-      collection(db, 'exerciseLogs'),
-      where('sessionId', 'in', sessionIds)
-    );
+    const fetchLogs = async () => {
+      try {
+        const sessionIds = sessionIdsStr.split(',');
+        const logsQuery = query(
+          collection(db, 'exerciseLogs'),
+          where('sessionId', 'in', sessionIds)
+        );
 
-    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      const logsData: Record<string, ExerciseLog> = {};
-      snapshot.docs.forEach(doc => {
-        const log = { id: doc.id, ...doc.data() } as ExerciseLog;
-        logsData[`${log.sessionId}_${log.machineId}`] = log;
-      });
-      setLogs(prev => ({ ...prev, ...logsData }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'exerciseLogs');
-    });
+        const snapshot = await getDocs(logsQuery);
+        const logsData: Record<string, ExerciseLog> = {};
+        snapshot.docs.forEach(doc => {
+          const log = { id: doc.id, ...doc.data() } as ExerciseLog;
+          logsData[`${log.sessionId}_${log.machineId}`] = log;
+        });
+        setLogs(prev => ({ ...prev, ...logsData }));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'exerciseLogs');
+      }
+    };
 
-    return () => unsubscribeLogs();
+    fetchLogs();
   }, [sessionIdsStr]);
 
   const updateSessionNote = async (sessionId: string, currentNote: string) => {
@@ -4129,21 +4168,25 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
           ][(machine.order || 0) % 6];
 
           return (
-            <Card key={machine.id} className="rounded-2xl overflow-hidden border border-border/80 hover:border-primary/50 transition-all shadow-sm bg-card flex flex-col">
+            <Card key={machine.id} className="group rounded-2xl overflow-hidden border border-border/80 hover:border-primary/50 transition-all shadow-sm bg-card flex flex-col">
               {/* Thumbnail Header Area */}
-              <div className="relative h-28 bg-muted">
-                <img src={`https://images.unsplash.com/photo-${imgId}?auto=format&fit=crop&w=400&q=80`} alt={machine.name} className="w-full h-full object-cover opacity-80" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                <div className="absolute top-2 left-2 w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs shadow-md">
+              <div className="relative h-32 bg-slate-900 overflow-hidden">
+                <img 
+                  src={`https://images.unsplash.com/photo-${imgId}?auto=format&fit=crop&w=400&q=80`} 
+                  alt={machine.name} 
+                  className="w-full h-full object-cover brightness-100 transition-all duration-700 ease-out scale-100 group-hover:scale-110" 
+                />
+                <div className="absolute top-2 left-2 w-6 h-6 rounded-md bg-primary/90 backdrop-blur-sm text-primary-foreground flex items-center justify-center font-bold text-xs shadow-md z-10 border border-white/10">
                   {machine.order}
-                </div>
-                <div className="absolute bottom-2 left-3 pr-3">
-                  <h3 className="text-sm font-bold uppercase tracking-tight text-white leading-tight">{machine.name}</h3>
-                  <p className="text-[8px] font-medium uppercase tracking-widest text-action">{machine.fullName || "Targeted Muscles"}</p>
                 </div>
               </div>
               
               <CardContent className="p-3 flex-1 flex flex-col justify-between space-y-3">
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-black uppercase tracking-tight text-secondary leading-tight line-clamp-1">{machine.name}</h3>
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-[#F06C22]">{machine.fullName || machine.id?.replace(/_/g, ' ')}</p>
+                </div>
+
                 {/* Global Benchmark Compact */}
                 <div className="bg-muted/30 rounded-lg p-2 border border-border/40">
                   <p className="text-[7px] font-bold uppercase tracking-widest text-secondary mb-1.5 opacity-60">Global Benchmark</p>
@@ -4427,7 +4470,9 @@ function WorkoutTrackerView({
   setClientFormData,
   onOpenInfo,
   authTrainer,
-  trainerFocuses
+  trainerFocuses,
+  isSyncing,
+  setIsSyncing
 }: { 
   clientId: string | null, 
   clients: Client[], 
@@ -4442,7 +4487,9 @@ function WorkoutTrackerView({
   setClientFormData: (v: any) => void,
   onOpenInfo: (m: Machine) => void,
   authTrainer: Trainer | null,
-  trainerFocuses: TrainerFocus[]
+  trainerFocuses: TrainerFocus[],
+  isSyncing: boolean,
+  setIsSyncing: (v: boolean) => void
 }) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [logs, setLogs] = useState<Record<string, ExerciseLog>>({});
@@ -4453,8 +4500,6 @@ function WorkoutTrackerView({
   const [clientMachineSettings, setClientMachineSettings] = useState<Record<string, ClientMachineSetting>>({});
   const [sessionNotes, setSessionNotes] = useState<SessionNote[]>([]);
   const lastMachineLoggedAt = React.useRef<number>(Date.now());
-  const [executionSequenceIndex, setExecutionSequenceIndex] = useState(1);
-  const [confirmedMachineIds, setConfirmedMachineIds] = useState<string[]>([]);
   const [isEditingRoutine, setIsEditingRoutine] = useState(false);
   const [showRoutinePicker, setShowRoutinePicker] = useState(false);
   const [editingSettingsMachineId, setEditingSettingsMachineId] = useState<string | null>(null);
@@ -4479,6 +4524,10 @@ function WorkoutTrackerView({
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [pendingAssignSession, setPendingAssignSession] = useState<WorkoutSession | null>(null);
+  const [isSessionRoutineManagerOpen, setIsSessionRoutineManagerOpen] = useState(false);
+  const handleSaveSessionMachineIds = (newIds: string[]) => {
+    setActiveMachineIds(newIds);
+  };
 
   const handleLogTSC = async (seconds: number) => {
     if (!currentSession || activeMachineIds.length === 0) return;
@@ -4500,6 +4549,14 @@ function WorkoutTrackerView({
     }
   };
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   // Special listener for unassigned sessions when no client is selected
   useEffect(() => {
@@ -4871,8 +4928,6 @@ function WorkoutTrackerView({
       };
       
       lastMachineLoggedAt.current = Date.now();
-      setExecutionSequenceIndex(1);
-      setConfirmedMachineIds([]);
       setCurrentSession(newSession as WorkoutSession);
       setShowRoutinePicker(false);
       setIsPreSessionMode(false);
@@ -4973,8 +5028,6 @@ function WorkoutTrackerView({
       if (currentSession?.id === sessionId) {
         setCurrentSession(null);
         setLogs({});
-        setExecutionSequenceIndex(1);
-        setConfirmedMachineIds([]);
         setSelectedClientId(null);
         setView('clients');
       }
@@ -4993,98 +5046,81 @@ function WorkoutTrackerView({
   const finalizeEndSession = async () => {
     if (!currentSession?.id) return;
     
-    // If it's a regular session, just end it
-    if (!currentSession.isUnassigned) {
-      try {
-        await updateDoc(doc(db, 'sessions', currentSession.id), {
-          status: 'Completed',
-          endTime: serverTimestamp()
-        });
+    setIsSyncing(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Update session status
+      const sessionRef = doc(db, 'sessions', currentSession.id);
+      batch.update(sessionRef, {
+        status: 'Completed',
+        endTime: serverTimestamp()
+      });
 
-        // Mark consultation as completed if it wasn't already
-        if (selectedClient && !selectedClient.consultationCompleted) {
-          await updateDoc(doc(db, 'clients', selectedClient.id!), {
-            consultationCompleted: true,
+      // 2. Sync all local logs
+      const sessionLogs = Object.values(logs).filter((l: any) => l.sessionId === currentSession.id);
+      for (const logObj of sessionLogs) {
+        const log = logObj as any;
+        if (log.id && log.id.toString().startsWith('temp_')) {
+          // New log
+          const newLogRef = doc(collection(db, 'exerciseLogs'));
+          const { id, ...logData } = log;
+          batch.set(newLogRef, {
+            ...logData,
+            updatedAt: serverTimestamp()
+          });
+        } else if (log.id) {
+          // Existing log
+          const logRef = doc(db, 'exerciseLogs', log.id);
+          const { id, ...logData } = log;
+          batch.update(logRef, {
+            ...logData,
             updatedAt: serverTimestamp()
           });
         }
-
-        setCurrentSession(null);
-        setExecutionSequenceIndex(1);
-        setConfirmedMachineIds([]);
-        setShowEndConfirmation(false);
-        setView('profile');
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, 'sessions');
       }
-    } else {
-      // It's unassigned, keep confirmation open but we'll transition to the specific unassigned end flow
-      // which is handled in the UI of the confirmation dialog
+
+      // 3. Update client if consultation completed
+      if (selectedClient && !selectedClient.consultationCompleted) {
+        const clientRef = doc(db, 'clients', selectedClient.id!);
+        batch.update(clientRef, {
+          consultationCompleted: true,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      await batch.commit();
+
+      setCurrentSession(null);
+      setShowEndConfirmation(false);
+      setView('profile');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'sessions');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('Standard');
 
-  const updateLog = async (sessionId: string, machineId: string, field: keyof ExerciseLog, value: any) => {
+  const updateLog = (sessionId: string, machineId: string, field: keyof ExerciseLog, value: any) => {
     const key = `${sessionId}_${machineId}`;
     const existing = logs[key];
     const currentSettings = clientMachineSettings[machineId]?.settings || {};
 
-    try {
-      if (existing) {
-        await updateDoc(doc(db, 'exerciseLogs', existing.id!), { 
-          [field]: value,
-          machineSettings: currentSettings,
-          updatedAt: serverTimestamp()
-        });
-      } else {
-        await addDoc(collection(db, 'exerciseLogs'), { 
+    const updatedLog: ExerciseLog = existing 
+      ? { ...existing, [field]: value, machineSettings: currentSettings }
+      : { 
+          id: `temp_${Date.now()}`, // Temporary ID for local state
           sessionId, 
-          clientId,
+          clientId, 
           machineId, 
-          [field]: value,
+          [field]: value, 
           machineSettings: currentSettings,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'exerciseLogs');
-    }
-  };
+          createdAt: Timestamp.now()
+        } as any;
 
-  const handleConfirmMachine = async (machineId: string) => {
-    if (!currentSession?.id) return;
-    
-    const duration = Math.floor((Date.now() - lastMachineLoggedAt.current) / 1000);
-    const key = `${currentSession.id}_${machineId}`;
-    const log = logs[key];
-    
-    try {
-      const updates: any = {
-        actualDuration: duration,
-        actualOrder: executionSequenceIndex,
-        updatedAt: serverTimestamp()
-      };
-
-      if (log?.id) {
-        await updateDoc(doc(db, 'exerciseLogs', log.id), updates);
-      } else {
-        await addDoc(collection(db, 'exerciseLogs'), {
-          ...updates,
-          sessionId: currentSession.id,
-          clientId,
-          machineId,
-          createdAt: serverTimestamp()
-        });
-      }
-      
-      setExecutionSequenceIndex(prev => prev + 1);
-      lastMachineLoggedAt.current = Date.now();
-      setConfirmedMachineIds(prev => [...prev, machineId]);
-    } catch (error) {
-      console.error("Error confirming machine:", error);
-    }
+    setLogs(prev => ({ ...prev, [key]: updatedLog }));
   };
 
   const saveMachineSettings = async (machineId: string, newSettings: Record<string, string>, reason: string) => {
@@ -5161,8 +5197,6 @@ function WorkoutTrackerView({
     } else {
       setCurrentSession(null);
       setLogs({});
-      setExecutionSequenceIndex(1);
-      setConfirmedMachineIds([]);
       setSelectedClientId(null);
       setView('clients');
       setShowCancelConfirmation(false);
@@ -5183,7 +5217,7 @@ function WorkoutTrackerView({
 
   if (!selectedClient && !currentSession) {
     const filteredClients = clients
-      .filter(c => c.isActive && (`${c.firstName} ${c.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())))
+      .filter(c => c.isActive && (`${c.firstName} ${c.lastName}`.toLowerCase().includes(debouncedSearchTerm.toLowerCase())))
       .sort((a,b) => a.lastName.localeCompare(b.lastName));
 
     return (
@@ -5534,8 +5568,13 @@ function WorkoutTrackerView({
                 <Button 
                   className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary/20"
                   onClick={finalizeEndSession}
+                  disabled={isSyncing}
                 >
-                  Confirm End
+                  {isSyncing ? (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2 animate-spin" /> Syncing...
+                    </>
+                  ) : "Confirm End"}
                 </Button>
               </div>
             )}
@@ -5627,15 +5666,17 @@ function WorkoutTrackerView({
             {!showAllMachines ? "View Full Floor" : "Focus Routine"}
           </Button>
           {currentSession && (
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setIsShowingSessionNotes(true)} 
-              className="h-7 px-3 gap-1.5 font-bold text-[9px] rounded-lg uppercase tracking-wider bg-[#115E8D]/5 border-[#115E8D]/20 text-[#115E8D]"
-            >
-              <MessageSquare className="w-3 h-3" />
-              Notes
-            </Button>
+            <>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setIsShowingSessionNotes(true)} 
+                className="h-7 px-3 gap-1.5 font-bold text-[9px] rounded-lg uppercase tracking-wider bg-[#115E8D]/5 border-[#115E8D]/20 text-[#115E8D]"
+              >
+                <MessageSquare className="w-3 h-3" />
+                Notes
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -5646,13 +5687,24 @@ function WorkoutTrackerView({
           <table className="w-full text-left border-collapse table-fixed select-none min-w-[600px] h-full flex flex-col">
             <thead className="flex w-full shrink-0">
               <tr className="bg-[#115E8D] text-white uppercase text-[9px] font-black tracking-widest leading-none h-[28px] w-full flex">
-                <th className="p-1.5 text-center w-[40px] shrink-0 border-r border-[#115E8D]/20">#</th>
+                <th className="p-0 flex items-center justify-center w-[40px] shrink-0 border-r border-[#115E8D]/20">
+                  {currentSession ? (
+                    <button 
+                      onClick={() => setIsSessionRoutineManagerOpen(true)}
+                      className="w-full h-full flex items-center justify-center hover:bg-white/10 transition-colors"
+                      title="Edit Routine"
+                    >
+                      <Settings2 className="w-3.5 h-3.5 text-white/80" />
+                    </button>
+                  ) : (
+                    "#"
+                  )}
+                </th>
                 <th className="p-1.5 pl-3 flex-1 border-r border-[#115E8D]/20 truncate">Exercise & Settings</th>
                 <th className="p-1.5 text-center w-[50px] shrink-0 border-r border-[#115E8D]/20">Prev</th>
                 <th className="p-1.5 text-center w-[60px] shrink-0 border-r border-[#115E8D]/20">Weight</th>
                 <th className="p-1.5 text-center w-[60px] shrink-0 border-r border-[#115E8D]/20">Reps</th>
-                <th className="p-1.5 text-center w-[60px] shrink-0 border-r border-[#115E8D]/20">Quality</th>
-                <th className="p-1.5 text-center w-[60px] shrink-0">Log</th>
+                <th className="p-1.5 text-center w-[60px] shrink-0">Quality</th>
               </tr>
             </thead>
 
@@ -5674,7 +5726,7 @@ function WorkoutTrackerView({
                   <>
                     {currentSession?.routineId && activeMachineIds.length === 0 && (
                       <tr className="flex">
-                         <td colSpan={6} className="p-4 text-center w-full">
+                         <td colSpan={5} className="p-4 text-center w-full">
                            <p className="text-[10px] text-slate-400 font-bold uppercase">Routine blank. Start selecting machines.</p>
                          </td>
                       </tr>
@@ -5701,7 +5753,6 @@ function WorkoutTrackerView({
                         const prevSession = historySessions[0];
                         const prevLog = prevSession ? logs[`${prevSession.id}_${machine.id}`] : null;
                         const isFocusMachine = activeFocusMachineId === machine.id;
-                        const isConfirmed = confirmedMachineIds.includes(machine.id!);
 
                         // Parse Settings
                         const settingsStr = clientMachineSettings[machine.id!]?.settings;
@@ -5738,23 +5789,25 @@ function WorkoutTrackerView({
                           <tr 
                             key={machine.id} 
                             className={`flex w-full group transition-all h-[34px] sm:h-[36px] items-center border-b border-slate-100 last:border-b-0 border-l-[3px]
-                              ${isConfirmed ? 'opacity-40 grayscale pointer-events-none' : ''}
                               ${(!isActive && !showAllMachines) ? 'opacity-30 grayscale hover:grayscale-0' : ''}
                               ${isFocusMachine ? 'bg-[#F06C22]/[0.05] border-l-[#F06C22]' : isActive ? 'bg-[#115E8D]/[0.02] border-l-transparent' : 'even:bg-slate-50 odd:bg-white border-l-transparent'} 
                               hover:bg-[#115E8D]/5`}
                           >
                             <td className="w-[40px] shrink-0 flex items-center justify-center p-0 border-r border-slate-200/60 h-full">
-                              <button
-                                className={`flex items-center justify-center transition-all rounded-full ${isFocusMachine ? 'w-5 h-5 bg-[#F06C22] text-white shadow-sm' : isActive ? 'w-5 h-5 bg-[#115E8D] text-white shadow-sm opacity-80' : 'w-4 h-4 border border-slate-300 text-slate-300 hover:text-[#115E8D] hover:border-[#115E8D]'}`}
-                                onClick={() => !currentSession && toggleMachine(machine.id!)}
-                                disabled={!!currentSession}
-                              >
-                                {isActive ? (
-                                  <span className="font-black text-[9px] leading-none text-white">{seqPosition}</span>
-                                ) : (
+                              {isActive ? (
+                                <div className={`flex items-center justify-center rounded-full w-5 h-5 text-white shadow-sm ${isFocusMachine ? 'bg-[#F06C22]' : 'bg-[#115E8D] opacity-80'}`}>
+                                  <span className="font-black text-[9px] leading-none">{seqPosition}</span>
+                                </div>
+                              ) : !currentSession ? (
+                                <button
+                                  className="flex items-center justify-center transition-all rounded-full w-4 h-4 border border-slate-300 text-slate-300 hover:text-[#115E8D] hover:border-[#115E8D]"
+                                  onClick={() => toggleMachine(machine.id!)}
+                                >
                                   <Plus className="w-2.5 h-2.5" />
-                                )}
-                              </button>
+                                </button>
+                              ) : (
+                                <div className="w-1 h-1 rounded-full bg-slate-200"></div>
+                              )}
                             </td>
                             
                             <td className="flex-1 p-1 pl-3 border-r border-slate-200/60 h-full flex flex-col justify-center min-w-0 truncate">
@@ -5822,7 +5875,6 @@ function WorkoutTrackerView({
                                    return (
                                      <button
                                        key={v}
-                                       disabled={isConfirmed}
                                        onClick={() => {
                                          if (currentSession?.id) {
                                            updateLog(currentSession.id, machine.id!, 'repQuality', v);
@@ -5833,22 +5885,6 @@ function WorkoutTrackerView({
                                    );
                                 })}
                               </div>
-                            </td>
-
-                            <td className={`w-[60px] shrink-0 p-1 flex items-center justify-center h-full transition-colors ${isFocusMachine ? 'bg-white' : 'group-hover:bg-[#115E8D]/5'}`}>
-                               <button
-                                 disabled={isConfirmed || !currentSession || !isActive}
-                                 onClick={() => handleConfirmMachine(machine.id!)}
-                                 className={`w-full h-7 rounded-lg flex items-center justify-center transition-all ${
-                                   isConfirmed 
-                                     ? 'bg-emerald-500 text-white' 
-                                     : isActive
-                                       ? 'bg-[#F06C22] hover:bg-[#D95B16] text-white shadow-sm'
-                                       : 'bg-slate-100 text-slate-300'
-                                 }`}
-                               >
-                                 <Check className={`w-3.5 h-3.5 ${isConfirmed ? 'animate-in zoom-in' : ''}`} />
-                               </button>
                             </td>
                           </tr>
                         );
@@ -5866,6 +5902,16 @@ function WorkoutTrackerView({
           session={currentSession}
           userTrainers={trainers}
           onClose={() => setIsShowingSessionNotes(false)}
+        />
+      )}
+
+      {currentSession && (
+        <SessionRoutineManagerModal
+          isOpen={isSessionRoutineManagerOpen}
+          onOpenChange={setIsSessionRoutineManagerOpen}
+          currentMachineIds={activeMachineIds}
+          machines={machines}
+          onSave={handleSaveSessionMachineIds}
         />
       )}
 

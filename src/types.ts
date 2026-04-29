@@ -18,6 +18,7 @@ export interface Trainer {
   legacy_filemaker_id?: string;
   createdAt?: any;
   order?: number;
+  isVisibleOnCalendar?: boolean;
 }
 
 export interface Client {

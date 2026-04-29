@@ -7,6 +7,7 @@ import {
   where, 
   orderBy, 
   limit,
+  getDocs,
   addDoc,
   updateDoc,
   doc,
@@ -65,7 +66,8 @@ export function ClientProfileView({
   trainers,
   onDelete,
   onSelectReport,
-  setView 
+  setView,
+  hasQuotaError
 }: { 
   clientId: string | null, 
   clients: Client[], 
@@ -74,7 +76,8 @@ export function ClientProfileView({
   trainers: Trainer[],
   onDelete: (id: string) => void,
   onSelectReport: (id: string) => void,
-  setView: (v: View) => void 
+  setView: (v: View) => void,
+  hasQuotaError?: boolean
 }) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [allLogs, setAllLogs] = useState<ExerciseLog[]>([]);
@@ -208,59 +211,55 @@ export function ClientProfileView({
   };
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || hasQuotaError) return;
+    
+    // Only fetch primary overview data or routines data if on those tabs
+    const shouldFetch = activeTab === 'overview' || activeTab === 'routines' || activeTab === 'routines_setup'; 
 
-    // Fetch Routines
-    const routinesQuery = query(collection(db, 'routines'), where('clientId', '==', clientId));
-    const unsubscribeRoutines = onSnapshot(routinesQuery, (snapshot) => {
-      const routinesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Routine));
-      setRoutines(routinesData);
-      
-      // Initialize staged IDs if not already modified
-      const initialStaged: Record<string, string[]> = {};
-      routinesData.forEach(r => {
-        initialStaged[r.name] = r.machineIds;
-      });
-      setStagedMachineIds(prev => ({ ...initialStaged, ...prev }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'routines');
-    });
+    const fetchData = async () => {
+      try {
+        // Fetch Routines
+        const routinesQuery = query(collection(db, 'routines'), where('clientId', '==', clientId));
+        const routineSnap = await getDocs(routinesQuery);
+        const routinesData = routineSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Routine));
+        setRoutines(routinesData);
+        
+        // Initialize staged IDs
+        const initialStaged: Record<string, string[]> = {};
+        routinesData.forEach(r => {
+          initialStaged[r.name] = r.machineIds;
+        });
+        setStagedMachineIds(prev => ({ ...initialStaged, ...prev }));
 
-    // Fetch All Sessions for this client with limit
-    const sessionsQuery = query(
-      collection(db, 'sessions'), 
-      where('clientId', '==', clientId),
-      orderBy('date', 'desc'),
-      limit(sessionLimit)
-    );
+        // Only fetch sessions/logs if needed for charts or history
+        if (activeTab === 'overview' || activeTab === 'history' || activeTab === 'timing') {
+          // Fetch Recent Sessions
+          const sessionsQuery = query(
+            collection(db, 'sessions'), 
+            where('clientId', '==', clientId),
+            orderBy('date', 'desc'),
+            limit(activeTab === 'overview' ? 5 : sessionLimit)
+          );
+          const sessionSnap = await getDocs(sessionsQuery);
+          setSessions(sessionSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkoutSession)));
 
-    const unsubscribeSessions = onSnapshot(sessionsQuery, (snapshot) => {
-      const sessData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WorkoutSession));
-      setSessions(sessData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'sessions');
-    });
-
-    // Fetch logs for the visible sessions - this is more complex but saves a lot of reads
-    // For now, we'll fetch the most recent N logs for this client
-    const logsQuery = query(
-      collection(db, 'exerciseLogs'), 
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc'),
-      limit(sessionLimit * 20) // Assuming avg 20 machines per session
-    );
-    const unsubscribeLogs = onSnapshot(logsQuery, (logSnap) => {
-      setAllLogs(logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExerciseLog)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'exerciseLogs');
-    });
-
-    return () => {
-      unsubscribeRoutines();
-      unsubscribeSessions();
-      unsubscribeLogs();
+          // Fetch Recent Logs
+          const logsQuery = query(
+            collection(db, 'exerciseLogs'), 
+            where('clientId', '==', clientId),
+            orderBy('createdAt', 'desc'),
+            limit(activeTab === 'overview' ? 100 : sessionLimit * 20)
+          );
+          const logSnap = await getDocs(logsQuery);
+          setAllLogs(logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExerciseLog)));
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'multiple');
+      }
     };
-  }, [clientId, sessionLimit]);
+
+    fetchData();
+  }, [clientId, sessionLimit, activeTab, hasQuotaError]);
 
   useEffect(() => {
     if (!clientId) return;
@@ -285,38 +284,46 @@ export function ClientProfileView({
   }, [clientId]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || hasQuotaError) return;
+    if (activeTab !== 'overview' && activeTab !== 'focus') return;
 
-    // Fetch Focuses for this client
-    const focusQ = query(
-      collection(db, 'trainerFocuses'),
-      where('clientId', '==', clientId),
-      orderBy('updatedAt', 'desc')
-    );
+    const fetchFocuses = async () => {
+      try {
+        const focusQ = query(
+          collection(db, 'trainerFocuses'),
+          where('clientId', '==', clientId),
+          orderBy('updatedAt', 'desc')
+        );
+        const snap = await getDocs(focusQ);
+        setTrainerFocuses(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainerFocus)));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'trainerFocuses');
+      }
+    };
 
-    const unsubscribeFocus = onSnapshot(focusQ, (snap) => {
-      setTrainerFocuses(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainerFocus)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'trainerFocuses');
-    });
-
-    return () => unsubscribeFocus();
+    fetchFocuses();
   }, [clientId]);
 
   useEffect(() => {
-    if (!clientId) return;
-    const q = query(
-      collection(db, 'progressReports'),
-      where('clientId', '==', clientId),
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    );
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setProgressReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProgressReport)));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'progressReports');
-    });
-    return () => unsubscribe();
+    if (!clientId || hasQuotaError) return;
+    if (activeTab !== 'reports') return;
+    
+    const fetchReports = async () => {
+      try {
+        const q = query(
+          collection(db, 'progressReports'),
+          where('clientId', '==', clientId),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        const snap = await getDocs(q);
+        setProgressReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProgressReport)));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, 'progressReports');
+      }
+    };
+    
+    fetchReports();
   }, [clientId]);
 
   useEffect(() => {

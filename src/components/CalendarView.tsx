@@ -52,6 +52,8 @@ export function CalendarView({
   );
   const [isSyncing, setIsSyncing] = useState(false);
 
+  const visibleCalendarTrainers = trainers.filter(t => t.isVisibleOnCalendar !== false);
+
   const handleSync = async () => {
     setIsSyncing(true);
     try {
@@ -119,6 +121,14 @@ export function CalendarView({
 
   const AM_SLOTS = ['07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30'];
   const PM_SLOTS = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
+
+  const TRAINER_COLORS = [
+    { border: 'border-[#38BDF8]', bg: 'bg-[#38BDF8]/10', text: 'text-[#38BDF8]' },
+    { border: 'border-[#10B981]', bg: 'bg-[#10B981]/10', text: 'text-[#10B981]' },
+    { border: 'border-[#F06C22]', bg: 'bg-[#F06C22]/10', text: 'text-[#F06C22]' },
+    { border: 'border-[#A855F7]', bg: 'bg-[#A855F7]/10', text: 'text-[#A855F7]' },
+    { border: 'border-[#22D3EE]', bg: 'bg-[#22D3EE]/10', text: 'text-[#22D3EE]' },
+  ];
 
   const getWeekDays = (date: Date) => {
     const start = new Date(date);
@@ -261,20 +271,61 @@ export function CalendarView({
     });
 
     return (
-      <div className="bg-card border-2 rounded-[32px] overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse min-w-[1000px]">
+      <div className="flex flex-col gap-6">
+        {/* Trainer Legend */}
+        {visibleCalendarTrainers.length > 0 && (
+          <div className="flex flex-wrap gap-3">
+            {isAdmin && (
+              <button
+                onClick={() => setSelectedTrainerId('all')}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all",
+                  selectedTrainerId === 'all' 
+                    ? "bg-white text-[#0A2E46]" 
+                    : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                )}
+              >
+                All Trainers
+              </button>
+            )}
+            {visibleCalendarTrainers.filter(t => isAdmin || t.id === authTrainer?.id).map(trainer => {
+              const color = TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length];
+              const isSelected = selectedTrainerId === trainer.id || selectedTrainerId === 'all';
+              
+              return (
+                <button
+                  key={trainer.id}
+                  onClick={() => setSelectedTrainerId(selectedTrainerId === trainer.id ? 'all' : trainer.id!)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border border-transparent",
+                    isSelected ? `${color.bg} ${color.text} border-current/20` : "bg-slate-800 text-slate-500 opacity-50 hover:opacity-100 hover:grayscale-0 grayscale"
+                  )}
+                >
+                  <span className={cn("w-2 h-2 rounded-full", isSelected ? "bg-current" : "bg-slate-500")} />
+                  {trainer.fullName}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="bg-[#0A2E46] border border-slate-700 rounded-[32px] overflow-hidden shadow-2xl">
+          <table className="w-full border-collapse table-fixed">
             <thead>
-              <tr className="bg-muted/30 border-b">
-                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground border-r w-24 sticky left-0 bg-background z-10 text-center">Time</th>
+              <tr className="border-b border-slate-700">
+                <th className="p-3 text-[10px] font-black uppercase tracking-widest text-slate-500 border-r border-slate-700 w-20 bg-slate-900/50 text-center">
+                  Time
+                </th>
                 {weekDays.map((date, idx) => {
                   const active = isToday(date);
                   return (
-                    <th key={`week-day-${idx}`} className={cn("p-4 text-center min-w-[140px]", active && 'bg-primary/5')}>
-                      <p className={cn("text-[10px] font-black uppercase tracking-widest", active ? 'text-primary' : 'text-muted-foreground')}>
+                    <th key={`week-day-${idx}`} className={cn("p-4 text-center border-r border-slate-700 last:border-r-0", active && 'bg-white/[0.05]')}>
+                      <p className={cn("text-[10px] font-black uppercase tracking-widest", active ? 'text-white' : 'text-slate-400')}>
                         {date.toLocaleDateString(undefined, { weekday: 'short' })}
                       </p>
-                      <p className={cn("text-lg font-black", active ? 'text-primary' : 'text-foreground')}>{date.getDate()}</p>
+                      <p className={cn("text-2xl font-black mt-1 leading-none", active ? 'text-[#38BDF8]' : 'text-white')}>
+                        {date.getDate()}
+                      </p>
                     </th>
                   );
                 })}
@@ -286,55 +337,77 @@ export function CalendarView({
                 return (
                   <React.Fragment key={`week-slot-${slot}`}>
                     {isGap && (
-                      <tr className="bg-muted/10 h-8 border-y">
-                        <td colSpan={8} className="text-center">
-                            <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground/30">Midday Gap</span>
+                      <tr className="bg-slate-900/50 h-8 border-y border-slate-700">
+                        <td colSpan={8} className="text-center border-slate-700">
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">Midday Gap</span>
                         </td>
                       </tr>
                     )}
-                    <tr className="border-b last:border-0 hover:bg-muted/5 transition-colors">
-                      <td className="p-3 text-center border-r sticky left-0 bg-background z-10">
-                        <span className="text-[10px] font-black tracking-tighter text-muted-foreground">{slot}</span>
+                    <tr className="border-b border-slate-700 last:border-0 hover:bg-white/[0.02] transition-colors group">
+                      <td className="p-3 text-center border-r border-slate-700 bg-slate-900/20 group-hover:bg-slate-900/40">
+                        <span className="text-[11px] font-black tracking-tight text-slate-400">{slot}</span>
                       </td>
                       {weekDays.map((date, dIdx) => {
                         const daySessions = activeSessions.filter(s => {
                           const d = safeToDate(s.startTime);
                           const tStr = getSlotHeader(d);
-                          const tId = trainerMap[s.trainerName];
-                          const trainerMatches = selectedTrainerId === 'all' || tId === selectedTrainerId;
-                          return isSameDay(d, date) && tStr === slot && trainerMatches;
+                          return isSameDay(d, date) && tStr === slot;
                         });
+
+                        const active = isToday(date);
 
                         return (
                           <td 
                             key={`week-cell-${dIdx}-${slot}`} 
-                            className="p-1 border-r last:border-r-0 min-h-[44px] cursor-pointer"
+                            className={cn(
+                              "p-1.5 border-r border-slate-700 last:border-r-0 min-h-[60px] align-top",
+                              active && "bg-white/[0.02]"
+                            )}
                             onClick={() => {
                                 setSelectedDate(date);
                                 setViewMode('day');
                             }}
                           >
-                            <div className="flex flex-col gap-1">
-                              {daySessions.map((session, sessIdx) => (
-                                <div
-                                  key={session.id || `sess-${sessIdx}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleClientClick(session);
-                                  }}
-                                  className={cn(
-                                    "px-2 py-1 rounded-lg border text-[9px] font-bold flex flex-col gap-0.5 transition-all shadow-sm",
-                                    session.status === 'Completed' 
-                                      ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-700/60' 
-                                      : 'bg-primary/5 border-primary/20 text-primary hover:border-primary-foreground hover:bg-primary'
-                                  )}
-                                >
-                                  <span className="truncate">{session.clientName || 'Unknown Client'}</span>
-                                  {selectedTrainerId === 'all' && (
-                                    <span className="text-[7px] opacity-60 italic">{(session.trainerName || 'Unassigned').split(' ')[0]}</span>
-                                  )}
-                                </div>
-                              ))}
+                            <div className="flex flex-col gap-1.5">
+                              {daySessions.map((session, sessIdx) => {
+                                const trainer = visibleCalendarTrainers.find(t => t.id === trainerMap[session.trainerName]);
+                                const color = trainer && visibleCalendarTrainers.length > 0 ? TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length] : TRAINER_COLORS[0];
+                                
+                                const tId = trainerMap[session.trainerName];
+                                const isTrainerSelected = selectedTrainerId === 'all' || tId === selectedTrainerId;
+                                
+                                const endTimeStr = (() => {
+                                  if (!session.endTime) return '';
+                                  return getSlotHeader(safeToDate(session.endTime));
+                                })();
+
+                                return (
+                                  <div
+                                    key={session.id || `sess-${sessIdx}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleClientClick(session);
+                                    }}
+                                    className={cn(
+                                      "p-2 rounded-xl border-l-4 flex flex-col gap-1 shadow-sm transition-all cursor-pointer relative overflow-hidden bg-slate-800/80",
+                                      isTrainerSelected 
+                                        ? `${color.border} opacity-100 hover:brightness-125` 
+                                        : "border-slate-700 opacity-20 grayscale",
+                                      color.bg
+                                    )}
+                                  >
+                                    <div className="flex items-start justify-between gap-1">
+                                      <span className="text-xs font-black text-white truncate max-w-[85px]" title={session.clientName}>{session.clientName || 'Unknown'}</span>
+                                      <span className={cn("text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0", color.bg, color.text, "border border-current/20")}>
+                                        {trainer?.initials || '--'}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400 tabular-nums">
+                                      {slot} - {endTimeStr || '30m'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </td>
                         );
@@ -353,8 +426,8 @@ export function CalendarView({
   const renderDay = () => {
     const allSlots = [...AM_SLOTS, ...PM_SLOTS];
     const filteredTrainers = selectedTrainerId === 'all' 
-      ? trainers 
-      : trainers.filter(t => t.id === selectedTrainerId);
+      ? visibleCalendarTrainers 
+      : visibleCalendarTrainers.filter(t => t.id === selectedTrainerId);
 
     return (
       <div className="bg-card border-2 rounded-[32px] overflow-hidden shadow-xl">
@@ -514,7 +587,7 @@ export function CalendarView({
               </SelectTrigger>
               <SelectContent className="rounded-xl border-2">
                 {isAdmin && <SelectItem value="all" className="font-bold">Entire Team</SelectItem>}
-                {trainers.filter(t => isAdmin || t.id === authTrainer?.id).map(t => (
+                {visibleCalendarTrainers.filter(t => isAdmin || t.id === authTrainer?.id).map(t => (
                   <SelectItem key={t.id} value={t.id!} className="font-bold">{t.fullName}</SelectItem>
                 ))}
               </SelectContent>

@@ -86,7 +86,11 @@ export async function masterSync(targetTrainerId?: string, hardReset: boolean = 
     const clientMap: Record<string, string> = {};
     clientsSnap.forEach(d => {
       const data = d.data();
-      clientMap[normalizeName(`${data.firstName} ${data.lastName}`)] = d.id;
+      const fullName = normalizeName(`${data.firstName} ${data.lastName}`);
+      clientMap[fullName] = d.id;
+      if (data.mindbody_name) {
+        clientMap[normalizeName(data.mindbody_name)] = d.id;
+      }
     });
 
     const now = new Date();
@@ -156,8 +160,16 @@ export async function masterSync(targetTrainerId?: string, hardReset: boolean = 
                 createdAt: serverTimestamp()
               });
             } else {
-              const currentStatus = existingRecord.data.status;
-              if (currentStatus === 'Scheduled') {
+              const current = existingRecord.data;
+              const hasChanged = 
+                current.clientName !== docData.clientName ||
+                current.clientId !== docData.clientId ||
+                current.serviceName !== docData.serviceName ||
+                current.startTime?.toDate()?.getTime() !== docData.startTime.toDate().getTime() ||
+                current.endTime?.toDate()?.getTime() !== docData.endTime.toDate().getTime();
+
+              if (hasChanged && current.status === 'Scheduled') {
+                console.log(`[Sync-${syncId}] Updating record for ${clientName} - details changed.`);
                 await updateDoc(doc(db, 'schedules', existingRecord.id), docData);
               }
             }

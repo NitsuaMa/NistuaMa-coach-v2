@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -136,52 +137,51 @@ export function ClientHistoryCalendar({
     }
   };
 
-  const renderCalendar = () => {
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const firstDay = firstDayOfMonth(year, month);
-    const totalDays = daysInMonth(year, month);
-    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-
-    const matrix: (Date | null)[] = [];
-    for (let i = 0; i < firstDay; i++) matrix.push(null);
-    for (let i = 1; i <= totalDays; i++) matrix.push(new Date(year, month, i));
-
-    return (
-      <div className="flex flex-col h-full bg-[#0A2E46] p-6 text-white overflow-hidden">
-        <div className="flex items-center justify-between mb-4 shrink-0">
+  return (
+    <div className="flex flex-col h-full bg-[#0A2E46] overflow-hidden rounded-[40px] border border-white/10 shadow-2xl p-2 sm:p-6 text-white">
+        <div className="flex items-center justify-between mb-8 shrink-0">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-[#F06C22]/10 rounded-2xl flex items-center justify-center border border-[#F06C22]/20 shadow-[0_0_15px_rgba(240,108,34,0.1)]">
-              <CalendarIcon className="w-5 h-5 text-[#F06C22]" />
+            <div className="w-14 h-14 bg-[#F06C22]/10 rounded-2xl flex items-center justify-center border border-[#F06C22]/20 shadow-[0_0_15px_rgba(240,108,34,0.1)]">
+              <CalendarIcon className="w-7 h-7 text-[#F06C22]" />
             </div>
             <div>
-              <h2 className="text-xl font-black italic uppercase tracking-tighter leading-none">
+              <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">
                 {viewDate.toLocaleString('default', { month: 'long' })}
               </h2>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#68717A] mt-1">{year}</p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#68717A] mt-1">{viewDate.getFullYear()}</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="icon" onClick={handlePrevMonth} className="text-white hover:bg-white/10 rounded-xl h-9 w-9">
-              <ChevronLeft className="w-5 h-5" />
+            <Button variant="ghost" size="icon" onClick={handlePrevMonth} className="text-[#68717A] hover:text-white hover:bg-white/10 rounded-2xl h-12 w-12 transition-all">
+              <ChevronLeft className="w-8 h-8" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleNextMonth} className="text-white hover:bg-white/10 rounded-xl h-9 w-9">
-              <ChevronRight className="w-5 h-5" />
+            <Button variant="ghost" size="icon" onClick={handleNextMonth} className="text-[#68717A] hover:text-white hover:bg-white/10 rounded-2xl h-12 w-12 transition-all">
+              <ChevronRight className="w-8 h-8" />
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px mb-1 shrink-0">
-          {dayNames.map(d => (
+        <div className="grid grid-cols-7 gap-2 mb-2 shrink-0">
+          {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
             <div key={d} className="text-center pb-2">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#68717A]">{d}</span>
+              <span className="text-xs font-black uppercase tracking-widest text-[#68717A]">{d}</span>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1 flex-1 min-h-0 overflow-y-auto pr-1">
-          {matrix.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="h-14" />;
+        <div className="grid grid-cols-7 gap-2 flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar pb-6">
+          {(() => {
+            const year = viewDate.getFullYear();
+            const month = viewDate.getMonth();
+            const firstDay = firstDayOfMonth(year, month);
+            const totalDays = daysInMonth(year, month);
+
+            const matrix: (Date | null)[] = [];
+            for (let i = 0; i < firstDay; i++) matrix.push(null);
+            for (let i = 1; i <= totalDays; i++) matrix.push(new Date(year, month, i));
+
+            return matrix.map((date, idx) => {
+            if (!date) return <div key={`empty-${idx}`} className="min-h-[100px]" />;
             
             const daySessions = sessionsOnDay(date);
             const isSelected = selectedSession && isSameDay(new Date(selectedSession.date + 'T12:00:00'), date);
@@ -196,15 +196,15 @@ export function ClientHistoryCalendar({
                   }
                 }}
                 className={cn(
-                  "min-h-[56px] p-2 rounded-2xl border transition-all cursor-pointer relative group flex flex-col items-center justify-between",
-                  isSelected ? "bg-[#F06C22]/10 border-[#F06C22] shadow-[0_0_20px_rgba(240,108,34,0.1)]" : "bg-white/[0.03] border-white/5 hover:border-white/20",
-                  today && !isSelected && "bg-primary/5 border-primary/20",
-                  daySessions.length === 0 && "cursor-default hover:border-white/5"
+                  "min-h-[100px] p-4 rounded-3xl border transition-all relative group flex flex-col items-center justify-between",
+                  daySessions.length > 0 ? "cursor-pointer" : "cursor-default",
+                  isSelected ? "bg-[#F06C22]/10 border-[#F06C22] shadow-[0_0_30px_rgba(240,108,34,0.15)]" : "bg-white/[0.02] border-white/5 hover:border-white/10",
+                  today && !isSelected && "bg-[#115E8D]/10 border-[#115E8D]/30"
                 )}
               >
                 <span className={cn(
-                  "text-xs font-black leading-none",
-                  isSelected ? "text-[#F06C22]" : today ? "text-primary" : "text-white/60"
+                  "text-xl font-black leading-none",
+                  isSelected ? "text-[#F06C22]" : today ? "text-[#38BDF8]" : daySessions.length > 0 ? "text-white" : "text-white/20"
                 )}>
                   {date.getDate()}
                 </span>
@@ -214,138 +214,131 @@ export function ClientHistoryCalendar({
                     <div 
                       key={s.id || sIdx} 
                       className={cn(
-                        "h-3.5 sm:h-4 rounded-lg px-1 flex items-center justify-between border shadow-sm",
+                        "h-6 rounded-xl px-2 flex items-center justify-between border shadow-sm",
                         s.routineName?.toUpperCase().includes('B') 
                           ? "bg-[#F06C22]/20 border-[#F06C22]/30 text-[#F06C22]" 
                           : "bg-[#115E8D]/20 border-[#115E8D]/30 text-[#38BDF8]"
                       )}
                     >
-                      <span className="text-[7px] sm:text-[8px] font-black italic">
+                      <span className="text-[10px] font-black italic">
                         {s.routineName?.toUpperCase().includes('B') ? 'B' : s.routineName?.toUpperCase().includes('A') ? 'A' : 'S'}
                       </span>
-                      <span className="text-[6px] sm:text-[7px] font-bold opacity-80">{s.trainerInitials || '--'}</span>
+                      <span className="text-[9px] font-bold opacity-80">{s.trainerInitials || '--'}</span>
                     </div>
                   ))}
                 </div>
               </div>
             );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-[#0A2E46] overflow-hidden rounded-[40px] border border-white/10 shadow-2xl">
-      {/* Top Half: Calendar */}
-      <div className="h-[45%] border-b border-white/5 overflow-hidden">
-        {renderCalendar()}
-      </div>
-
-      {/* Bottom Half: Editor */}
-      <div className="h-[55%] flex flex-col bg-white overflow-hidden">
-        <div className="p-6 border-b shrink-0 bg-slate-50 flex items-center justify-between">
-          {selectedSession ? (
-            <div className="flex items-center gap-4">
-              <div className={cn(
-                "w-12 h-12 rounded-2xl flex flex-col items-center justify-center border shadow-sm",
-                selectedSession.routineName?.includes('B') 
-                  ? "bg-[#F06C22]/10 border-[#F06C22]/20 text-[#F06C22]" 
-                  : "bg-[#115E8D]/10 border-[#115E8D]/20 text-[#115E8D]"
-              )}>
-                <span className="text-[14px] font-black italic uppercase leading-none">{selectedSession.routineName?.split(' ')[1] || 'S'}</span>
-                <span className="text-[8px] font-bold opacity-60 mt-1">{selectedSession.trainerInitials}</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-black uppercase italic tracking-tighter leading-none text-slate-900">
-                  {new Date(selectedSession.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                </h3>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
-                  Routine {selectedSession.routineName || 'Special'} • {selectedSessionLogs.length} Units Logged
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 opacity-30">
-              <AlertCircle className="w-6 h-6" />
-              <p className="text-sm font-black uppercase tracking-widest text-[#68717A]">Select a session above to view details</p>
-            </div>
-          )}
-
-          {Object.keys(editedLogs).length > 0 && (
-            <Button 
-              onClick={handleBatchUpdate}
-              disabled={isSaving}
-              className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase italic text-[11px] tracking-widest h-11 px-6 rounded-2xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] animate-pulse"
-            >
-              {isSaving ? "Updating..." : "Update session record"}
-            </Button>
-          )}
+          });
+          })()}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-3">
-          {selectedSessionLogs.length > 0 ? selectedSessionLogs.map((log) => {
-            const machine = machines.find(m => m.id === log.machineId);
-            const isEdited = !!editedLogs[log.id!];
-            const currentData = { ...log, ...editedLogs[log.id!] };
+      <Dialog open={!!selectedSession} onOpenChange={(open) => !open && setSelectedSession(null)}>
+        <DialogContent className="max-w-4xl bg-[#0A2E46] border border-[#115E8D]/30 rounded-[40px] p-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+          {selectedSession && (
+            <>
+              <DialogHeader className="p-8 border-b border-white/10 shrink-0 relative overflow-hidden bg-white/5">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                  <Dumbbell className="w-32 h-32 text-white" />
+                </div>
+                <div className="flex items-center gap-6 relative z-10">
+                  <div className={cn(
+                    "w-16 h-16 rounded-3xl flex flex-col items-center justify-center border-2 shadow-[0_0_30px_rgba(0,0,0,0.2)]",
+                    selectedSession.routineName?.includes('B') 
+                      ? "bg-[#F06C22]/10 border-[#F06C22]/50 text-[#F06C22]" 
+                      : "bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]"
+                  )}>
+                    <span className="text-2xl font-black italic uppercase leading-none">{selectedSession.routineName?.split(' ')[1] || 'S'}</span>
+                    <span className="text-[10px] font-bold opacity-60 mt-1">{selectedSession.trainerInitials}</span>
+                  </div>
+                  <div>
+                    <DialogTitle className="text-3xl font-black uppercase italic tracking-tighter text-white leading-none">
+                      {new Date(selectedSession.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </DialogTitle>
+                    <DialogDescription className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-2">
+                      Routine {selectedSession.routineName || 'Special'} • {selectedSessionLogs.length} Units Logged
+                    </DialogDescription>
+                  </div>
+                </div>
 
-            return (
-              <div 
-                key={log.id} 
-                className={cn(
-                  "p-4 rounded-3xl border-2 flex items-center gap-4 transition-all",
-                  isEdited ? "border-[#F06C22]/30 bg-[#F06C22]/[0.02]" : "border-slate-100 bg-white"
+                {Object.keys(editedLogs).length > 0 && (
+                  <Button 
+                    onClick={handleBatchUpdate}
+                    disabled={isSaving}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase italic text-sm tracking-widest h-14 px-8 rounded-2xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] animate-pulse"
+                  >
+                    {isSaving ? "Updating..." : "Update session record"}
+                  </Button>
                 )}
-              >
-                <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
-                  <Dumbbell className="w-5 h-5 text-slate-400" />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black uppercase tracking-tight text-slate-900 truncate">{machine?.name || 'Unknown Machine'}</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Unit Log Entry</p>
-                </div>
+              </DialogHeader>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-black uppercase text-slate-400 text-center">Weight</span>
-                    <Input 
-                      value={currentData.weight}
-                      onChange={(e) => handleLogEdit(log.id!, 'weight', e.target.value)}
-                      className="w-20 h-10 rounded-xl text-center font-black bg-slate-50 border-slate-200 focus:border-[#F06C22] focus:bg-white transition-all shadow-sm"
-                    />
+              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                {selectedSessionLogs.length > 0 ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {selectedSessionLogs.map((log) => {
+                      const machine = machines.find(m => m.id === log.machineId);
+                      const isEdited = !!editedLogs[log.id!];
+                      const currentData = { ...log, ...editedLogs[log.id!] };
+
+                      return (
+                        <div 
+                          key={log.id} 
+                          className={cn(
+                            "flex flex-col p-5 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md transition-all gap-4",
+                            isEdited ? "border-[#F06C22]/50 shadow-[0_0_20px_rgba(240,108,34,0.1)]" : "hover:border-white/20"
+                          )}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                              <Dumbbell className="w-6 h-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="text-lg font-black uppercase tracking-tight text-white leading-none mb-1 truncate">{machine?.name || 'Unknown Machine'}</h4>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unit Log Data</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                              <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Weight (lbs)</span>
+                              <Input 
+                                value={currentData.weight}
+                                onChange={(e) => handleLogEdit(log.id!, 'weight', e.target.value)}
+                                className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                              <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Reps</span>
+                              <Input 
+                                value={currentData.reps}
+                                onChange={(e) => handleLogEdit(log.id!, 'reps', e.target.value)}
+                                className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                              <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Hold (s)</span>
+                              <Input 
+                                value={currentData.seconds || '0'}
+                                onChange={(e) => handleLogEdit(log.id!, 'seconds', e.target.value)}
+                                className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-black uppercase text-slate-400 text-center">Reps</span>
-                    <Input 
-                      value={currentData.reps}
-                      onChange={(e) => handleLogEdit(log.id!, 'reps', e.target.value)}
-                      className="w-16 h-10 rounded-xl text-center font-black bg-slate-50 border-slate-200 focus:border-[#F06C22] focus:bg-white transition-all shadow-sm"
-                    />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center gap-6">
+                    <Clock className="w-16 h-16 text-white" />
+                    <p className="text-lg font-black uppercase tracking-widest text-[#68717A]">No exercise logs found for this session</p>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-black uppercase text-slate-400 text-center">Hold (s)</span>
-                    <Input 
-                      value={currentData.seconds || '0'}
-                      onChange={(e) => handleLogEdit(log.id!, 'seconds', e.target.value)}
-                      className="w-16 h-10 rounded-xl text-center font-black bg-slate-50 border-slate-200 focus:border-[#F06C22] focus:bg-white transition-all shadow-sm"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
-            );
-          }) : selectedSession ? (
-            <div className="flex flex-col items-center justify-center p-12 opacity-30 text-center gap-4">
-              <Clock className="w-12 h-12" />
-              <p className="text-sm font-black uppercase tracking-widest">No exercise logs found for this session</p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full p-12 opacity-5 text-center gap-4">
-              <CalendarIcon className="w-24 h-24" />
-            </div>
+            </>
           )}
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

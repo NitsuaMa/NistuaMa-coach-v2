@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { MACHINE_LIST, MachineKnowledge } from '../data/machine-database';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, X, ChevronRight, Activity, Users, TrendingUp } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { PlayCircle, X, ChevronRight, Activity, Users, TrendingUp, Wand2, Loader2, CheckCircle, Target, ShieldCheck, Settings2, UserCog } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CATEGORIES = [
@@ -18,6 +21,45 @@ export function MachineKnowledgeDashboard() {
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [activeMachineId, setActiveMachineId] = useState<string | null>(null);
 
+  // Wizard State
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardSelectedMachine, setWizardSelectedMachine] = useState<string>('');
+  const [wizardConstraints, setWizardConstraints] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [generatedGuide, setGeneratedGuide] = useState<any>(null);
+
+  const handleGenerateGuide = async () => {
+    if (!wizardSelectedMachine) return;
+    setIsGenerating(true);
+    setGeneratedGuide(null);
+    
+    // Mock AI generation delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setGeneratedGuide({
+      targetMuscles: ["Chest (Pectoralis Major)", "Triceps", "Anterior Deltoid"],
+      initialAdjustments: [
+        "Empty the weight stack to ensure zero active resistance during entry.",
+        "Set seat height to standard (setting 4 typically) as baseline.",
+        "Ensure back pad is at the standard 20-degree incline."
+      ],
+      entryAndSafety: [
+        "Assist client into the seat smoothly, guiding their elbows.",
+        "Check that head is neutral and not pushed forward.",
+        "Fasten seatbelt securely across the pelvis."
+      ],
+      alignmentAndPosture: [
+        "Chest up, sternum proud.",
+        "Check joint stacking: wrists neutral, elbows slightly flared."
+      ],
+      clientModifications: wizardConstraints 
+        ? "Applied constraint adjustment: Checked ROM and modified starting point to avoid pain points mentioned."
+        : "Standard MSF setup applies."
+    });
+    
+    setIsGenerating(false);
+  };
+
   const filteredMachines = activeCategory === "All" 
     ? MACHINE_LIST 
     : MACHINE_LIST.filter(m => m.category === activeCategory);
@@ -30,9 +72,111 @@ export function MachineKnowledgeDashboard() {
       
       {/* Header & Filters */}
       <div className="pt-8 px-6 pb-6 bg-[#0A2E46] border-b border-white/10 shrink-0 z-10 w-full relative">
-        <h1 className="text-3xl lg:text-4xl font-black uppercase tracking-tighter text-white mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-[#68717A]">
-          Equipment Arsenal
-        </h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h1 className="text-3xl lg:text-4xl font-black uppercase tracking-tighter text-white bg-clip-text text-transparent bg-gradient-to-r from-white to-[#68717A]">
+            Equipment Arsenal
+          </h1>
+          
+          <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+            <DialogTrigger render={
+              <Button className="bg-gradient-to-r from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 text-white font-black uppercase tracking-widest text-[10px] md:text-xs">
+                <Wand2 className="w-4 h-4 mr-2" />
+                AI Setup Wizard
+              </Button>
+            } />
+            <DialogContent className="sm:max-w-[600px] bg-[#0A2E46] text-white border-slate-700">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-widest">
+                  <Wand2 className="w-5 h-5 text-emerald-400" />
+                  AI Setup Wizard
+                </DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <Select value={wizardSelectedMachine} onValueChange={setWizardSelectedMachine}>
+                  <SelectTrigger className="w-full bg-[#0e171e] border-slate-700 focus:ring-emerald-500 text-white">
+                    <SelectValue placeholder="Select a machine..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#0e171e] text-white border-slate-700 max-h-[300px]">
+                    {MACHINE_LIST.map((m) => (
+                      <SelectItem key={m.id} value={m.id} className="focus:bg-[#115E8D] focus:text-white flex-1 cursor-pointer">
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div>
+                  <Textarea 
+                    placeholder="Client Constraints (e.g., knee pain, short arms)..."
+                    value={wizardConstraints}
+                    onChange={(e) => setWizardConstraints(e.target.value)}
+                    className="min-h-[100px] bg-[#0e171e] border-slate-700 focus-visible:ring-emerald-500 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <Button 
+                  onClick={handleGenerateGuide}
+                  disabled={!wizardSelectedMachine || isGenerating}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold tracking-widest uppercase"
+                >
+                  {isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</> : "Generate Custom Setup Guide"}
+                </Button>
+
+                {generatedGuide && (
+                  <div className="mt-4 p-4 bg-[#0e171e] border border-slate-700 rounded-xl max-h-[400px] overflow-y-auto space-y-4">
+                    <div className="space-y-2">
+                       <h4 className="text-[10px] font-black uppercase tracking-widest text-[#38BDF8]">Target Muscles</h4>
+                       <div className="flex flex-wrap gap-2">
+                         {generatedGuide.targetMuscles.map((t: string) => (
+                            <Badge key={t} className="bg-white/10 text-white hover:bg-white/20 border-0">{t}</Badge>
+                         ))}
+                       </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-[#F06C22]">Initial Adjustments</h4>
+                      <ul className="space-y-1">
+                        {generatedGuide.initialAdjustments.map((a: string, i: number) => (
+                           <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                             <Settings2 className="w-4 h-4 text-[#F06C22] shrink-0 mt-0.5" /> <span>{a}</span>
+                           </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Entry & Safety</h4>
+                      <ul className="space-y-1">
+                        {generatedGuide.entryAndSafety.map((a: string, i: number) => (
+                           <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" /> <span>{a}</span>
+                           </li>
+                        ))}
+                      </ul>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-[#115E8D]">Alignment & Posture</h4>
+                      <ul className="space-y-1">
+                        {generatedGuide.alignmentAndPosture.map((a: string, i: number) => (
+                           <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                             <Target className="w-4 h-4 text-[#115E8D] shrink-0 mt-0.5" /> <span>{a}</span>
+                           </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-500">Client Modifications</h4>
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-200 flex items-start gap-2">
+                         <UserCog className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                         <span>{generatedGuide.clientModifications}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
         
         {/* Stationary Filter Tabs */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full max-w-5xl">
@@ -65,8 +209,7 @@ export function MachineKnowledgeDashboard() {
                 className="group relative bg-[#0e171e] border border-slate-700/50 rounded-xl cursor-pointer hover:border-[#38BDF8]/50 hover:shadow-[0_8px_30px_rgba(56,189,248,0.15)] hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden"
               >
                 {/* Image Section (16:9 Aspect Ratio) */}
-                <div className="relative aspect-video w-full overflow-hidden bg-slate-800 shrink-0">
-                  <div className="absolute inset-0 bg-[#0A2E46]/60 group-hover:bg-[#0A2E46]/20 transition-colors duration-500 z-10 pointer-events-none mix-blend-multiply" />
+                <div className="relative aspect-video w-full overflow-hidden bg-slate-900 shrink-0">
                   <img 
                     src={
                       machine.id === 'leg_press' ? '/regenerated_image_1777418510296.png' :
@@ -76,7 +219,7 @@ export function MachineKnowledgeDashboard() {
                       `https://picsum.photos/seed/${machine.name.replace(/\s+/g, '-')}/400/250`
                     } 
                     alt={machine.name}
-                    className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 scale-100 group-hover:scale-105"
+                    className="w-full h-full object-cover brightness-105 transition-all duration-700 ease-out scale-100 group-hover:scale-110"
                   />
                   <div className="absolute top-2 left-2 z-20">
                     <span className="text-[9px] font-black tracking-widest text-[#38BDF8] uppercase bg-[#0A2E46]/80 backdrop-blur-sm px-1.5 py-0.5 rounded shadow-sm border border-[#38BDF8]/20">

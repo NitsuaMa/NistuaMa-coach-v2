@@ -16,8 +16,8 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Background Task: Run Master Sync every 15 minutes
-  const SYNC_INTERVAL = 15 * 60 * 1000;
+  // Background Task: Run Master Sync every 60 minutes
+  const SYNC_INTERVAL = 60 * 60 * 1000;
   setInterval(async () => {
     try {
       await masterSync();

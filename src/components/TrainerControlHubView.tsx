@@ -10,15 +10,18 @@ import {
   getDocs,
   doc,
   setDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, CheckCircle2, AlertCircle, Loader2, Database, Link, RefreshCcw, ShieldCheck, LogOut } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Upload, CheckCircle2, AlertCircle, Loader2, Database, Link, RefreshCcw, ShieldCheck, LogOut, Plus, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Switch } from '@/components/ui/switch';
+import { CreateTrainerModal } from './CreateTrainerModal';
 import { Machine, Client, Trainer, WorkoutSession, ScheduleEntry } from '../types';
 import { findMatchingTrainer, normalizeName } from '../lib/sync-utils';
 
@@ -54,6 +57,41 @@ export function TrainerControlHubView({
   const [editingIcalId, setEditingIcalId] = useState<string | null>(null);
   const [newIcalUrl, setNewIcalUrl] = useState('');
   const [isUpdatingIcal, setIsUpdatingIcal] = useState(false);
+
+  // New states for Create/Delete overrides
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [trainerToDelete, setTrainerToDelete] = useState<Trainer | null>(null);
+  
+  const handleCreateTrainer = async (data: any) => {
+    try {
+      await addDoc(collection(db, 'trainers'), {
+        ...data,
+        createdAt: serverTimestamp()
+      });
+    } catch (e: any) {
+      alert("Error creating trainer: " + e.message);
+    }
+  };
+
+  const handleDeleteTrainer = async () => {
+    if (!trainerToDelete?.id) return;
+    try {
+      await deleteDoc(doc(db, 'trainers', trainerToDelete.id));
+      setTrainerToDelete(null);
+    } catch (e: any) {
+      alert("Error deleting trainer: " + e.message);
+    }
+  };
+
+  const handleToggleVisibility = async (trainerId: string, currentVal: boolean) => {
+    try {
+      await updateDoc(doc(db, 'trainers', trainerId), {
+        isVisibleOnCalendar: !currentVal
+      });
+    } catch (e: any) {
+      alert("Error updating visibility: " + e.message);
+    }
+  };
 
   const visibleTrainers = isAdmin 
     ? trainers 
@@ -399,99 +437,130 @@ export function TrainerControlHubView({
       </div>
 
       <Card className="border-2 shadow-xl rounded-3xl overflow-hidden border-orange-200">
-        <CardHeader className="bg-orange-50/50 pb-8">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center">
-              <ShieldCheck className="w-6 h-6 text-orange-600" />
+        <CardHeader className="bg-slate-900 pb-8 border-b border-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#0A2E46] flex items-center justify-center border border-slate-700 shadow-inner">
+                <ShieldCheck className="w-6 h-6 text-[#38BDF8]" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-black text-white italic">Team Management</CardTitle>
+                <CardDescription className="text-slate-400 font-medium uppercase text-xs">Manage individual Schedule Sync URLs.</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-2xl font-black text-orange-950 italic">Team Management</CardTitle>
-              <CardDescription className="text-orange-800/70 font-medium uppercase text-xs">Manage individual Schedule Sync URLs.</CardDescription>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Button 
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="rounded-xl bg-[#F06C22] hover:bg-[#d95b16] text-white h-10 px-4 font-black uppercase text-[10px] tracking-widest gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add New Trainer
+                </Button>
+              )}
+              {isAdmin && onReorderTrainers && (
+                <Button 
+                  variant="outline" 
+                  onClick={onReorderTrainers}
+                  className="rounded-xl border-slate-700 text-slate-300 hover:bg-slate-800 h-10 px-4 font-black uppercase text-[10px] tracking-widest gap-2"
+                >
+                  <RefreshCcw className="w-3 h-3" />
+                  Sort Display Order
+                </Button>
+              )}
             </div>
           </div>
-          {isAdmin && onReorderTrainers && (
-            <Button 
-              variant="outline" 
-              onClick={onReorderTrainers}
-              className="rounded-2xl border-orange-300 text-orange-700 hover:bg-orange-100 h-10 px-4 font-black uppercase text-[10px] tracking-widest gap-2"
-            >
-              <RefreshCcw className="w-3 h-3" />
-              Sort Display Order
-            </Button>
-          )}
         </CardHeader>
         <CardContent className="p-8">
           <div className="space-y-6">
             {visibleTrainers.length === 0 ? (
               <p className="text-center py-8 text-muted-foreground font-medium italic">No matching trainer records found.</p>
             ) : (
-              <div className="grid gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {visibleTrainers.map((t) => (
-                  <div key={t.id} className="p-6 bg-orange-50/30 rounded-3xl border border-orange-100/50 space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl ${t.isOwner ? 'bg-amber-100 text-amber-700' : 'bg-orange-100 text-orange-700'} flex items-center justify-center font-black text-xl italic`}>
-                          {t.initials}
+                  <div key={t.id} className="p-6 bg-slate-800/90 rounded-[24px] border border-slate-700/50 space-y-6 flex flex-col justify-between shadow-lg relative overflow-hidden group">
+                    {/* Delete Toggle (Top Right) */}
+                    {isAdmin && (
+                      <button 
+                        onClick={() => setTrainerToDelete(t)}
+                        className="absolute top-4 right-4 p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                        title="Delete Trainer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  
+                    <div className="flex items-start gap-4">
+                      <div className={`w-14 h-14 rounded-2xl ${t.isOwner ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-300'} flex items-center justify-center font-black text-xl italic mt-1 shrink-0`}>
+                        {t.initials}
+                      </div>
+                      <div className="flex flex-col flex-1 pr-8">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-lg font-black text-white uppercase italic leading-none">{t.fullName}</p>
+                          {t.isOwner && <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded text-[8px] font-black uppercase">Owner</span>}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-lg font-black text-orange-950 uppercase italic">{t.fullName}</p>
-                            {t.isOwner && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[8px] font-black uppercase">Owner</span>}
-                          </div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-orange-600/60 leading-none mt-1">
-                            {t.isOwner ? 'System Admin' : 'Performance Trainer'}
-                          </p>
-                        </div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-none mt-2">
+                          {t.isOwner ? 'System Admin' : 'Performance Trainer'}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Mindbody Schedule Sync Section */}
-                    <div className="pt-6 border-t border-orange-100">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <RefreshCcw className="w-4 h-4 text-orange-600" />
-                          <h4 className="font-black text-orange-950 uppercase text-xs tracking-widest leading-none">Personal MindBody Feed</h4>
-                        </div>
-                        {t.mindbody_ical_url && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            disabled={syncingTrainerId === t.id}
-                            onClick={() => handleTrainerSync(t.id!)}
-                            className="h-8 text-[10px] font-black uppercase text-orange-600 hover:text-orange-700 hover:bg-orange-100/50 rounded-lg"
-                          >
-                            {syncingTrainerId === t.id ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <RefreshCcw className="w-3 h-3 mr-2" />}
-                            Sync Now
-                          </Button>
-                        )}
-                      </div>
+                    <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-2xl border border-slate-700/50">
+                      <Label className="text-xs font-bold text-slate-300 cursor-pointer">Show on Hub Calendar</Label>
+                      <Switch 
+                        checked={t.isVisibleOnCalendar !== false} 
+                        onCheckedChange={() => handleToggleVisibility(t.id!, t.isVisibleOnCalendar ?? true)}
+                      />
+                    </div>
 
-                      {editingIcalId === t.id ? (
-                        <div className="flex gap-2">
-                          <Input 
-                            placeholder="https://mindbody.com/export/..." 
-                            value={newIcalUrl}
-                            onChange={e => setNewIcalUrl(e.target.value)}
-                            className="h-11 rounded-xl bg-white border-orange-200 text-xs"
-                          />
-                          <Button 
-                            onClick={() => handleUpdateIcalUrl(t.id!, newIcalUrl)}
-                            disabled={isUpdatingIcal}
-                            className="bg-orange-600 h-11 px-4 rounded-xl font-black uppercase text-[10px]"
-                          >
-                            {isUpdatingIcal ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-                          </Button>
-                          <Button variant="ghost" onClick={() => setEditingIcalId(null)} className="h-11 px-4 font-bold rounded-xl">Cancel</Button>
+                    {/* Mindbody Schedule Sync Section */}
+                    <div className="pt-4 border-t border-slate-700">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-slate-400">
+                            <RefreshCcw className="w-3.5 h-3.5" />
+                            <h4 className="font-bold uppercase text-[9px] tracking-widest leading-none">MindBody Sync URL</h4>
+                          </div>
+                          {t.mindbody_ical_url && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              disabled={syncingTrainerId === t.id}
+                              onClick={() => handleTrainerSync(t.id!)}
+                              className="h-6 text-[9px] flex items-center px-2 py-0 font-black uppercase text-[#38BDF8] hover:text-[#38BDF8] hover:bg-[#38BDF8]/10 rounded-md"
+                            >
+                              {syncingTrainerId === t.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                              Sync Now
+                            </Button>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between p-4 bg-white/50 border border-orange-100 rounded-2xl">
-                          {t.mindbody_ical_url ? (
-                            <>
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <Link className="w-4 h-4 text-orange-400 shrink-0" />
-                                <span className="text-xs font-medium text-orange-800 truncate">{t.mindbody_ical_url}</span>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0 ml-4">
+
+                        {editingIcalId === t.id ? (
+                          <div className="flex flex-col gap-2">
+                            <Input 
+                              placeholder="https://..." 
+                              value={newIcalUrl}
+                              onChange={e => setNewIcalUrl(e.target.value)}
+                              className="h-8 rounded-lg bg-slate-900 border-slate-700 text-xs text-slate-300 px-2"
+                            />
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => setEditingIcalId(null)} className="h-6 px-2 font-bold rounded-md text-xs text-slate-400 hover:text-white">Cancel</Button>
+                              <Button 
+                                size="sm"
+                                onClick={() => handleUpdateIcalUrl(t.id!, newIcalUrl)}
+                                disabled={isUpdatingIcal}
+                                className="bg-[#10B981] h-6 px-3 rounded-md font-black uppercase text-[9px] hover:bg-[#10B981]/80 text-white"
+                              >
+                                {isUpdatingIcal ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 overflow-hidden group/link bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                            {t.mindbody_ical_url ? (
+                              <>
+                                <Link className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span className="text-[10px] text-slate-300 font-medium truncate flex-1">{t.mindbody_ical_url}</span>
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
@@ -499,42 +568,30 @@ export function TrainerControlHubView({
                                     setEditingIcalId(t.id!);
                                     setNewIcalUrl(t.mindbody_ical_url || '');
                                   }}
-                                  className="h-8 w-8 p-0 text-orange-600 hover:bg-orange-100 rounded-lg"
+                                  className="h-6 w-6 p-0 rounded-md shrink-0 opacity-0 group-hover/link:opacity-100 border border-slate-600 text-slate-400 hover:text-white"
                                 >
                                   <RefreshCcw className="w-3 h-3" />
                                 </Button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-[10px] text-slate-500 font-medium italic select-none">No feed configured</span>
                                 <Button 
-                                  variant="ghost" 
+                                  variant="outline" 
                                   size="sm" 
                                   onClick={() => {
-                                    if(confirm("Stop syncing this trainer's schedule?")) {
-                                      handleUpdateIcalUrl(t.id!, null);
-                                    }
+                                    setEditingIcalId(t.id!);
+                                    setNewIcalUrl('');
                                   }}
-                                  className="h-8 w-8 p-0 text-red-500 hover:bg-red-50 rounded-lg"
+                                  className="h-6 border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md px-3 font-black uppercase text-[9px]"
                                 >
-                                  <AlertCircle className="w-3 h-3" />
+                                  Add Link
                                 </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-xs font-bold text-orange-600/50 uppercase tracking-widest italic">No Link Provided</span>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => {
-                                  setEditingIcalId(t.id!);
-                                  setNewIcalUrl('');
-                                }}
-                                className="h-9 border-orange-200 text-orange-700 hover:bg-orange-100 rounded-xl px-4 font-black uppercase text-[10px] gap-2"
-                              >
-                                Add Link
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -543,6 +600,41 @@ export function TrainerControlHubView({
           </div>
         </CardContent>
       </Card>
+
+      <CreateTrainerModal 
+        isOpen={isCreateModalOpen} 
+        onOpenChange={setIsCreateModalOpen} 
+        onSubmit={handleCreateTrainer}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {trainerToDelete && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center space-y-6"
+          >
+            <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-500">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-white italic tracking-tighter uppercase">Delete Trainer?</h3>
+              <p className="text-slate-400 mt-2 text-sm">
+                Are you sure you want to remove <strong className="text-white">{trainerToDelete.fullName}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3 w-full">
+              <Button onClick={() => setTrainerToDelete(null)} variant="outline" className="flex-1 rounded-xl h-12 bg-slate-800 border-slate-700 text-white hover:bg-slate-700 font-bold">
+                Cancel
+              </Button>
+              <Button onClick={handleDeleteTrainer} variant="destructive" className="flex-1 rounded-xl h-12 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest shadow-[0_0_15px_rgba(225,29,72,0.3)] border-none">
+                Confirm Deletion
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       <Card className="border-2 shadow-xl rounded-3xl overflow-hidden border-indigo-200">
         <CardHeader className="bg-indigo-50/50 pb-8">
