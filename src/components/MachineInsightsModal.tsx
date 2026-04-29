@@ -6,11 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Activity, TrendingUp, Save, Clock, Dumbbell, AlertCircle, History } from 'lucide-react';
+import { Activity, TrendingUp, Save, Clock, Dumbbell, AlertCircle, History, Wand2, LineChart as LineChartIcon, Zap } from 'lucide-react';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, setDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Machine, Client, ExerciseLog, ClientMachineSetting, MachineNote } from '../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { MachineSetupWizard } from './MachineSetupWizard';
+import { MachineExecutionCoach } from './MachineExecutionCoach';
+import { MachineClinicalStrategist } from './MachineClinicalStrategist';
 
 interface Props {
   client: Client;
@@ -48,6 +51,7 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isImportantNote, setIsImportantNote] = useState(false);
+  const [activeTab, setActiveTab] = useState<'insights' | 'setup' | 'execution' | 'clinical'>('setup');
 
   useEffect(() => {
     if (!client.id || !machine?.id) {
@@ -189,20 +193,70 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
           <>
             {/* Fixed Header */}
             <div className="bg-white p-6 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center">
-                  <Activity className="w-6 h-6 text-slate-600" />
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center">
+                    <Activity className="w-6 h-6 text-slate-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 leading-none uppercase">{machine.name}</h2>
+                    <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Client Machine Intelligence</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 leading-none uppercase">{machine.name}</h2>
-                  <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Client Machine Insights</p>
-                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex bg-slate-100 p-1 rounded-xl">
+                <button
+                  onClick={() => setActiveTab('setup')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                    activeTab === 'setup' ? 'bg-white text-[#F06C22] shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  Setup Wizard
+                </button>
+                <button
+                  onClick={() => setActiveTab('execution')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                    activeTab === 'execution' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Execution
+                </button>
+                <button
+                  onClick={() => setActiveTab('clinical')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                    activeTab === 'clinical' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  Clinical
+                </button>
+                <button
+                  onClick={() => setActiveTab('insights')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                    activeTab === 'insights' ? 'bg-white text-[#115E8D] shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <LineChartIcon className="w-3.5 h-3.5" />
+                  Data Insights
+                </button>
               </div>
             </div>
             
             {/* Scrollable Content */}
             <div className="flex-1 max-h-[80vh] overflow-y-auto p-6 space-y-6 custom-scrollbar pr-4">
-               {/* Top Stats */}
+               {activeTab === 'setup' ? (
+                 <MachineSetupWizard client={client} machine={machine} />
+               ) : activeTab === 'execution' ? (
+                 <MachineExecutionCoach machine={machine} />
+               ) : activeTab === 'clinical' ? (
+                 <MachineClinicalStrategist client={client} machine={machine} />
+               ) : (
+                 <>
+                   {/* Top Stats */}
                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                  <Card className="rounded-2xl border-none shadow-sm shadow-slate-200/50 bg-white">
                     <CardContent className="p-4 flex flex-col justify-center items-center h-full">
@@ -450,7 +504,8 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
                    </div>
                  </CardContent>
                </Card>
-
+               </>
+             )}
             </div>
           </>
         )}
