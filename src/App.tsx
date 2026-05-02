@@ -3915,8 +3915,7 @@ function PerformanceEntryDialog({
   currentNextWeight,
   currentReps,
   currentQuality,
-  prevWeight,
-  prevReps,
+  pastMachineLogs,
   isStaticHold,
   onSave,
   onClose
@@ -3926,12 +3925,15 @@ function PerformanceEntryDialog({
   currentNextWeight: string;
   currentReps: string;
   currentQuality: number;
-  prevWeight: string;
-  prevReps: string;
+  pastMachineLogs: { log: ExerciseLog; session: WorkoutSession }[];
   isStaticHold?: boolean;
   onSave: (weight: string, target: string, repsOrSeconds: string, quality: number, isHold: boolean) => void;
   onClose: () => void;
 }) {
+  const prevLog = pastMachineLogs[0]?.log;
+  const prevWeight = prevLog?.weight || '0';
+  const prevReps = prevLog?.isStaticHold ? (prevLog.seconds || '0') : (prevLog?.reps || '0');
+
   const initialWeight = parseFloat(currentWeight) > 0 ? parseFloat(currentWeight) : (parseFloat(prevWeight) || 0);
   const initialReps = parseFloat(currentReps) > 0 ? parseFloat(currentReps) : (parseFloat(prevReps) || 0);
   
@@ -4048,6 +4050,42 @@ function PerformanceEntryDialog({
               </button>
             </div>
           </div>
+
+          {/* Trend History */}
+          {pastMachineLogs.length > 0 && (
+            <div className="bg-slate-900/50 border border-slate-700 rounded-md p-3 flex flex-col gap-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Trend History</span>
+              {pastMachineLogs.map((entry, idx) => {
+                const isHoldLog = entry.log.isStaticHold;
+                const metrics = isHoldLog ? `${entry.log.seconds}s` : `${entry.log.reps} REPS`;
+                
+                // Compare to the previous entry chronologically (idx + 1)
+                const olderEntry = pastMachineLogs[idx + 1];
+                let arrow = null;
+                if (olderEntry && olderEntry.log.weight) {
+                  const currW = parseFloat(entry.log.weight || '0');
+                  const oldW = parseFloat(olderEntry.log.weight || '0');
+                  if (currW > oldW) {
+                    arrow = <span className="text-emerald-400 font-bold ml-1">↑</span>;
+                  } else if (currW < oldW) {
+                    arrow = <span className="text-rose-400 font-bold ml-1">↓</span>;
+                  }
+                }
+
+                return (
+                  <div key={idx} className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">
+                      {new Date(entry.session.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className="font-bold text-white flex items-center">
+                      {entry.log.weight} LBS | {metrics}
+                      {arrow}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Quality Rating Segmented Control */}
           <div className="bg-slate-800 border border-slate-700 rounded-3xl p-4 sm:p-5 flex flex-col items-center shadow-lg relative">
@@ -5454,8 +5492,14 @@ function WorkoutTrackerView({
           currentNextWeight={logs[`${currentSession.id}_${editingWeightMachineId}`]?.targetWeight || ''}
           currentReps={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold ? (logs[`${currentSession.id}_${editingWeightMachineId}`]?.seconds || '0') : (logs[`${currentSession.id}_${editingWeightMachineId}`]?.reps || '0')}
           currentQuality={logs[`${currentSession.id}_${editingWeightMachineId}`]?.repQuality || 0}
-          prevWeight={previousSession && logs[`${previousSession.id}_${editingWeightMachineId}`]?.weight ? logs[`${previousSession.id}_${editingWeightMachineId}`].weight : '0'}
-          prevReps={previousSession && logs[`${previousSession.id}_${editingWeightMachineId}`]?.isStaticHold ? (logs[`${previousSession.id}_${editingWeightMachineId}`]?.seconds || '0') : (logs[`${previousSession.id}_${editingWeightMachineId}`]?.reps || '0')}
+          pastMachineLogs={sessions
+            .filter(s => currentSession ? s.id !== currentSession.id : true)
+            .map(s => {
+              const log = logs[`${s.id}_${editingWeightMachineId}`];
+              return log && log.weight ? { log, session: s } : null;
+            })
+            .filter((x): x is { log: ExerciseLog; session: WorkoutSession } => Boolean(x))
+            .slice(0, 3)}
           isStaticHold={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold}
           onClose={() => setEditingWeightMachineId(null)}
           onSave={async (weight, target, repsOrSeconds, quality, isHold) => {
@@ -5785,9 +5829,16 @@ function WorkoutTrackerView({
                         const isActive = activeMachineIds.includes(machine.id!);
                         const isCompleted = currentLog?.weight && (currentLog?.reps || currentLog?.seconds) && currentLog?.repQuality;
                         const seqPosition = isActive ? activeMachineIds.indexOf(machine.id!) + 1 : null;
-                        const historySessions = currentSession ? sessions.slice(1, 2) : sessions.slice(0, 1);
-                        const prevSession = historySessions[0];
-                        const prevLog = prevSession ? logs[`${prevSession.id}_${machine.id}`] : null;
+                        const pastMachineLogs = sessions
+                          .filter(s => currentSession ? s.id !== currentSession.id : true)
+                          .map(s => {
+                            const log = logs[`${s.id}_${machine.id}`];
+                            return log && log.weight ? { log, session: s } : null;
+                          })
+                          .filter((x): x is { log: ExerciseLog; session: WorkoutSession } => Boolean(x))
+                          .slice(0, 3);
+                        const prevLog = pastMachineLogs[0]?.log || null;
+                        const prevSession = pastMachineLogs[0]?.session || null;
                         const isFocusMachine = activeFocusMachineId === machine.id;
 
                         // Parse Settings

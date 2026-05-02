@@ -45,6 +45,8 @@ import {
 import axios from 'axios';
 import { Client, Trainer, Machine, WorkoutSession, ExerciseLog } from '../types';
 
+import { LegacyChartImporter } from './LegacyChartImporter';
+
 export function OwnerDashboardView({ 
   clients, 
   trainers, 
@@ -60,6 +62,7 @@ export function OwnerDashboardView({
   newClientsCount?: number,
   onShowNewClients?: () => void
 }) {
+  const [activeTab, setActiveTab] = useState<'analytics' | 'importer'>('analytics');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);
@@ -128,23 +131,44 @@ export function OwnerDashboardView({
           <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">High-level capacity & performance metrics.</p>
         </div>
         
-        {newClientsCount !== undefined && onShowNewClients && (
-          <div 
-            className="bg-primary/5 px-4 py-2 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-primary/10 transition-all border border-primary/20 group h-12"
-            onClick={onShowNewClients}
-          >
-            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Users className="w-4 h-4 text-primary" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-primary/60 uppercase leading-none tracking-tighter">New This Month</span>
-              <span className="text-sm font-black text-primary leading-tight">{newClientsCount} Clients</span>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
+            <button 
+              onClick={() => setActiveTab('analytics')}
+              className={cn("px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-widest transition-all", activeTab === 'analytics' ? "bg-primary text-primary-foreground" : "text-slate-400 hover:text-slate-200")}
+            >
+              Analytics
+            </button>
+            <button 
+              onClick={() => setActiveTab('importer')}
+              className={cn("px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-widest transition-all", activeTab === 'importer' ? "bg-orange-600 text-white" : "text-slate-400 hover:text-slate-200")}
+            >
+              Legacy Importer
+            </button>
           </div>
-        )}
+
+          {newClientsCount !== undefined && onShowNewClients && (
+            <div 
+              className="bg-primary/5 px-4 py-2 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-primary/10 transition-all border border-primary/20 group h-12"
+              onClick={onShowNewClients}
+            >
+              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Users className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-primary/60 uppercase leading-none tracking-tighter">New This Month</span>
+                <span className="text-sm font-black text-primary leading-tight">{newClientsCount} Clients</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      {activeTab === 'importer' ? (
+        <LegacyChartImporter clients={clients} machines={machines} />
+      ) : (
+        <>
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card className="rounded-3xl border-2 shadow-sm bg-primary/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Active Capacity</CardTitle>
@@ -301,6 +325,8 @@ export function OwnerDashboardView({
            </div>
         </CardContent>
       </Card>
+      </>
+      )}
     </motion.div>
   );
 }
