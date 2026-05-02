@@ -53,16 +53,18 @@ export function OwnerDashboardView({
   machines, 
   sessions,
   newClientsCount,
-  onShowNewClients
+  onShowNewClients,
+  initialTab = 'analytics'
 }: { 
   clients: Client[], 
   trainers: Trainer[], 
   machines: Machine[], 
   sessions: WorkoutSession[],
   newClientsCount?: number,
-  onShowNewClients?: () => void
+  onShowNewClients?: () => void,
+  initialTab?: 'analytics' | 'importer'
 }) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'importer'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'importer'>(initialTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);

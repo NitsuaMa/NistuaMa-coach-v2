@@ -9,6 +9,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent
@@ -49,17 +50,15 @@ function SortableMachineItem({ id, machine, onRemove }: { id: string, machine: M
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+      {...attributes}
+      {...listeners}
+      className={`flex items-center gap-4 p-4 rounded-2xl border transition-all select-none touch-none cursor-grab active:cursor-grabbing ${
         isDragging 
-          ? 'bg-slate-800 border-[#38BDF8] shadow-[0_0_20px_rgba(56,189,248,0.2)] scale-105 z-50 relative' 
+          ? 'bg-slate-800 border-[#38BDF8] shadow-[0_0_30px_rgba(56,189,248,0.3)] scale-[1.02] z-50 relative' 
           : 'bg-slate-800 border-slate-700 hover:border-slate-600'
       }`}
     >
-      <div 
-        {...attributes} 
-        {...listeners} 
-        className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-slate-500 hover:text-white transition-colors"
-      >
+      <div className="p-1 -ml-1 text-slate-500 transition-colors select-none touch-none">
         <GripVertical className="w-6 h-6" />
       </div>
       
@@ -70,7 +69,8 @@ function SortableMachineItem({ id, machine, onRemove }: { id: string, machine: M
       
       <button 
         onClick={onRemove} 
-        className="p-2 text-rose-400 hover:text-rose-100 hover:bg-rose-500/20 rounded-xl transition-colors shrink-0"
+        onPointerDown={(e) => e.stopPropagation()}
+        className="p-2 text-rose-400 hover:text-rose-100 hover:bg-rose-500/20 rounded-xl transition-colors shrink-0 relative z-[60]"
       >
         <Trash2 className="w-5 h-5" />
       </button>
@@ -84,6 +84,7 @@ export function SessionRoutineManagerModal({ isOpen, onOpenChange, currentMachin
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })

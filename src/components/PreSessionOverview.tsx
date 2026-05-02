@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { SessionRoutineManagerModal } from './SessionRoutineManagerModal';
 import { Textarea } from '@/components/ui/textarea';
 import { MACHINE_LIST } from '../data/machine-database';
 import { Client, Machine, ExerciseLog, Routine, WorkoutSession, TrainerFocus, SessionNote } from '../types';
@@ -52,6 +53,7 @@ export function PreSessionOverview({
   const [adjustedMachineIds, setAdjustedMachineIds] = useState<string[]>([]);
   const [adjustmentNote, setAdjustmentNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isRoutineManagerOpen, setIsRoutineManagerOpen] = useState(false);
 
   const routineA = routines.find(r => r.name.includes('Routine A'));
   const routineB = routines.find(r => r.name.includes('Routine B'));
@@ -88,7 +90,7 @@ export function PreSessionOverview({
   const orthopedics = client.medicalHistory;
   const globalNotes = client.globalNotes;
   
-  const selectedRoutineIds = selectedRoutineType === 'Create_B' || selectedRoutineType === 'Create_A' || selectedRoutineType === 'Free' 
+  const selectedRoutineIds = isAdjusting || selectedRoutineType === 'Create_B' || selectedRoutineType === 'Create_A' || selectedRoutineType === 'Free' 
     ? adjustedMachineIds 
     : (selectedRoutineType === 'A' ? (routineA?.machineIds || []) : (routineB?.machineIds || []));
 
@@ -303,11 +305,32 @@ export function PreSessionOverview({
                    <span className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Execution List</span>
                    <h3 className="text-2xl font-black text-white mt-1">Routine Overview</h3>
                  </div>
-                 <Badge className="bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/30 uppercase font-black tracking-widest text-[9px] flex items-center gap-1.5 px-3 py-1">
-                   <Dumbbell className="w-3 h-3" />
-                   {selectedRoutineIds.length} Machines
-                 </Badge>
+                 <div className="flex flex-col items-end gap-2">
+                    <Badge className="bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/30 uppercase font-black tracking-widest text-[9px] flex items-center gap-1.5 px-3 py-1">
+                      <Dumbbell className="w-3 h-3" />
+                      {selectedRoutineIds.length} Machines
+                    </Badge>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsRoutineManagerOpen(true)}
+                      className="h-8 px-3 text-[9px] font-black uppercase tracking-widest border-slate-600 text-white hover:bg-white/10"
+                    >
+                      <Settings2 className="w-3 h-3 mr-1.5" />
+                      Edit Machine Order
+                    </Button>
+                 </div>
               </div>
+              
+              <SessionRoutineManagerModal 
+                isOpen={isRoutineManagerOpen}
+                onOpenChange={setIsRoutineManagerOpen}
+                currentMachineIds={selectedRoutineIds}
+                machines={machines}
+                onSave={(newIds) => {
+                  setAdjustedMachineIds(newIds);
+                  setIsAdjusting(true);
+                }}
+              />
               
               <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                  {selectedRoutineType === 'A' && (!routineA || (routineA.machineIds || []).length === 0) ? (

@@ -34,6 +34,8 @@ import {
   TrendingUp,
   PlusCircle,
   PlayCircle,
+  Pause,
+  LayoutList,
   ChevronDown,
   ChevronUp,
   Zap,
@@ -96,6 +98,7 @@ import { ClientProgressReportView } from './components/ClientProgressReportView'
 import { SessionRoutineManagerModal } from './components/SessionRoutineManagerModal';
 import { MachineKnowledgeDashboard } from './components/MachineKnowledgeDashboard';
 import { MaxStrengthLogo } from './components/MaxStrengthLogo';
+import { ActiveSessionTimer } from './components/ActiveSessionTimer';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -156,6 +159,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<View>('clients');
   const [newClientOnboardingName, setNewClientOnboardingName] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [dashboardInitialTab, setDashboardInitialTab] = useState<'analytics' | 'importer'>('analytics');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [selectedProfileTrainerId, setSelectedProfileTrainerId] = useState<string | null>(null);
@@ -166,7 +170,6 @@ export default function App() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [trainerFocuses, setTrainerFocuses] = useState<TrainerFocus[]>([]);
   const [isAddingTrainer, setIsAddingTrainer] = useState(false);
-  const [isAddingClient, setIsAddingClient] = useState(false);
   const [showNewClientsDialog, setShowNewClientsDialog] = useState(false);
   const [isReorderingTrainers, setIsReorderingTrainers] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -256,7 +259,7 @@ export default function App() {
       medicalHistory: client.medicalHistory || '',
       globalNotes: client.globalNotes || ''
     });
-    setIsAddingClient(true);
+    // setIsAddingClient removed as we use editingClient state or the new modal for creation
   };
 
   const handleClientSubmit = async (e: React.FormEvent) => {
@@ -305,7 +308,6 @@ export default function App() {
         remainingSessions: 10,
         mindbody_name: ''
       });
-      setIsAddingClient(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'clients');
     }
@@ -935,10 +937,15 @@ export default function App() {
     return (
       <CreateClientModal 
         initialName={newClientOnboardingName}
-        onClientCreated={(clientId) => {
+        onClientCreated={(clientId, routeToImporter) => {
           setSelectedClientId(clientId);
           setNewClientOnboardingName(null);
-          setCurrentView('profile');
+          if (routeToImporter) {
+            setDashboardInitialTab('importer');
+            setCurrentView('dashboard');
+          } else {
+            setCurrentView('profile');
+          }
         }}
         onClose={() => setNewClientOnboardingName(null)}
       />
@@ -1089,8 +1096,6 @@ export default function App() {
                 trainers={trainers}
                 sortedTrainers={sortedTrainers}
                 isAdmin={user?.email === "jurgensaj@gmail.com"}
-                isAdding={isAddingClient} 
-                setIsAdding={setIsAddingClient} 
                 onSelectClient={(id) => {
                   setSelectedClientId(id);
                   setCurrentView('profile');
@@ -1137,7 +1142,7 @@ export default function App() {
                 setSelectedClientId={setSelectedClientId}
                 showClientPicker={showClientPicker}
                 setShowClientPicker={setShowClientPicker}
-                setIsAddingClient={setIsAddingClient}
+                onStartNewClientOnboarding={setNewClientOnboardingName}
                 setClientFormData={setClientFormData}
                 onOpenInfo={(m) => {
                   setInfoMachineId(m.id!);
@@ -1213,12 +1218,14 @@ export default function App() {
             )}
             {currentView === 'dashboard' && (
               <OwnerDashboardView 
+                key={`dashboard-${dashboardInitialTab}`}
                 clients={clients} 
                 trainers={trainers} 
                 machines={machines} 
                 sessions={sessions}
                 newClientsCount={newClientsThisMonth.length}
                 onShowNewClients={() => setShowNewClientsDialog(true)}
+                initialTab={dashboardInitialTab}
               />
             )}
             {currentView === 'calendar' && (
@@ -2433,8 +2440,6 @@ function ClientsView({
   trainers,
   sortedTrainers,
   isAdmin,
-  isAdding, 
-  setIsAdding, 
   onSelectClient, 
   onStartNewClientOnboarding,
   setView, 
@@ -2454,8 +2459,6 @@ function ClientsView({
   trainers: Trainer[],
   sortedTrainers: Trainer[],
   isAdmin: boolean,
-  isAdding: boolean, 
-  setIsAdding: (v: boolean) => void, 
   onSelectClient: (id: string) => void, 
   onStartNewClientOnboarding?: (name: string) => void,
   setView: (v: View) => void, 
@@ -2658,8 +2661,6 @@ function ClientsView({
             onClick={() => {
               if (onStartNewClientOnboarding) {
                 onStartNewClientOnboarding("");
-              } else {
-                setIsAdding(!isAdding);
               }
             }} 
             size="lg" 
@@ -2672,8 +2673,8 @@ function ClientsView({
       </div>
 
       <AnimatePresence>
-        {/* Registration form remains same as before but wrapped for consistency */}
-        {isAdding && (
+        {/* Registration form removed for unified modal; only editing is kept here for now or until unified */}
+        {editingClient && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -2682,9 +2683,9 @@ function ClientsView({
           >
             <Card className="border-2 border-primary/20 shadow-2xl rounded-3xl overflow-hidden">
               <CardHeader>
-                <CardTitle>{editingClient ? 'Edit Client Profile' : 'New Client Registration'}</CardTitle>
+                <CardTitle>Edit Client Profile</CardTitle>
                 <CardDescription>
-                  {editingClient ? `Updating information for ${editingClient.firstName}` : 'Set up a new client profile for tracking.'}
+                  Updating information for {editingClient.firstName}
                 </CardDescription>
               </CardHeader>
               <form onSubmit={onSubmit}>
@@ -2898,10 +2899,9 @@ function ClientsView({
                 </CardContent>
                 <CardFooter className="flex gap-4">
                   <Button type="submit" className="flex-1 h-14 text-lg font-bold uppercase tracking-widest">
-                    {editingClient ? 'Update Profile' : 'Register Client'}
+                    Update Profile
                   </Button>
                   <Button type="button" variant="outline" onClick={() => {
-                    setIsAdding(false);
                     setEditingClient(null);
                   }} className="h-14 px-8">Cancel</Button>
                 </CardFooter>
@@ -4519,7 +4519,7 @@ function WorkoutTrackerView({
   setSelectedClientId, 
   showClientPicker, 
   setShowClientPicker,
-  setIsAddingClient,
+  onStartNewClientOnboarding,
   setClientFormData,
   onOpenInfo,
   authTrainer,
@@ -4536,7 +4536,7 @@ function WorkoutTrackerView({
   setSelectedClientId: (id: string | null) => void, 
   showClientPicker: boolean, 
   setShowClientPicker: (v: boolean) => void,
-  setIsAddingClient: (v: boolean) => void,
+  onStartNewClientOnboarding: (v: string) => void,
   setClientFormData: (v: any) => void,
   onOpenInfo: (m: Machine) => void,
   authTrainer: Trainer | null,
@@ -4569,6 +4569,7 @@ function WorkoutTrackerView({
   const [adjustedMachineIds, setAdjustedMachineIds] = useState<string[]>([]);
   const [preSessionSelectedRoutine, setPreSessionSelectedRoutine] = useState<RoutineType>('A');
   const [targetRoutine, setTargetRoutine] = useState<Routine | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   const [historicalLifts, setHistoricalLifts] = useState<Record<string, { last: ExerciseLog; previous: ExerciseLog | null }>>({});
 
   // Fetch all exercise logs for analysis (limited to last 1000 for performance)
@@ -4977,7 +4978,8 @@ function WorkoutTrackerView({
         sessionNumber: nextNum, 
         date, 
         trainerInitials: trainer,
-        status: 'In-Progress'
+        status: 'In-Progress',
+        startTime: new Date()
       };
       
       lastMachineLoggedAt.current = Date.now();
@@ -5023,6 +5025,21 @@ function WorkoutTrackerView({
           createdAt: serverTimestamp()
         });
       }
+      const newSession = {
+        id: docRef.id,
+        isUnassigned: true,
+        sessionType: 'Standard',
+        sessionNumber: 0,
+        date,
+        trainerInitials: authTrainer.initials,
+        status: 'In-Progress',
+        startTime: new Date(),
+        createdAt: new Date()
+      };
+      
+      setCurrentSession(newSession as WorkoutSession);
+      lastMachineLoggedAt.current = Date.now();
+      
     } catch (error) {
       console.error("Error starting unassigned session:", error);
     }
@@ -5452,34 +5469,81 @@ function WorkoutTrackerView({
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-[calc(100vh-80px)] flex flex-col gap-1 overflow-hidden">
-      {/* Persistent Active Client Header */}
-      {selectedClient && (
-        <div className="bg-card border-b px-4 py-2 flex items-center justify-between sticky top-0 z-40">
+      {/* Persistent Active Header - Minimalist Refactor */}
+      {(selectedClient || currentSession) && (
+        <div className="bg-[#0A2E46] border-b border-slate-800 px-4 flex items-center justify-between sticky top-0 z-40 h-16 shadow-lg backdrop-blur-xl shrink-0">
+          {/* Left: Client & Trainer Identity */}
           <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-white shadow-lg ${currentSession?.routineId ? 'bg-primary' : 'bg-muted-foreground/50'}`}>
-              <UserCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest leading-none">Active Client</p>
-              <h3 className="text-sm font-black uppercase italic tracking-tight text-primary">
-                {selectedClient.firstName} {selectedClient.lastName}
-              </h3>
+            <h3 className="text-lg font-bold tracking-tight text-white">
+              {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : (currentSession?.isUnassigned ? 'Unassigned Tracking' : 'Initializing...')}
+            </h3>
+            
+            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shadow-inner">
+              <span className="text-xs font-bold text-slate-400 uppercase">
+                {authTrainer?.initials || currentSession?.trainerInitials || '??'}
+              </span>
             </div>
           </div>
-          
+
+          {/* Center: Minimalist Mission Clock */}
           <div className="flex items-center gap-2">
-            {!currentSession && (
-              <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest border-2 py-0.5 px-2 text-muted-foreground">
-                Awaiting Start
-              </Badge>
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse" />
+            {currentSession && currentSession.startTime && (
+              <div className="text-sm text-slate-400 font-mono tabular-nums tracking-wider uppercase">
+                <ActiveSessionTimer startTime={currentSession.startTime} paused={isPaused} />
+              </div>
             )}
+          </div>
+
+          {/* Right: Tactical Controls & Hard Stop */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-950/40 rounded-xl p-1 border border-slate-800/50 mr-2">
+              <Button 
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-9 px-3 rounded-lg font-bold uppercase text-[9px] tracking-[0.15em] transition-all",
+                  isPaused ? "text-orange-500 bg-orange-500/10" : "text-slate-400 hover:text-white"
+                )}
+                onClick={() => setIsPaused(!isPaused)}
+              >
+                {isPaused ? <Play className="w-3.5 h-3.5 mr-1.5" /> : <Pause className="w-3.5 h-3.5 mr-1.5" />}
+                {isPaused ? "Resume" : "Pause"}
+              </Button>
+
+              <div className="w-px h-4 bg-slate-800 mx-1" />
+
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className={cn(
+                  "h-9 px-3 rounded-lg font-bold uppercase text-[9px] tracking-[0.15em] transition-all",
+                  !showAllMachines ? "text-[#F06C22] bg-[#F06C22]/10" : "text-slate-400 hover:text-white"
+                )}
+                onClick={() => setShowAllMachines(!showAllMachines)}
+              >
+                <LayoutList className="w-3.5 h-3.5 mr-1.5" />
+                Focus
+              </Button>
+
+              <div className="w-px h-4 bg-slate-800 mx-1" />
+
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="h-9 px-3 rounded-lg font-bold uppercase text-[9px] tracking-[0.15em] text-slate-400 hover:text-white transition-all"
+                onClick={() => setIsSessionRoutineManagerOpen(true)}
+              >
+                <Settings2 className="w-3.5 h-3.5 mr-1.5 text-[#F06C22]" />
+                Routine
+              </Button>
+            </div>
+
             <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8 rounded-xl font-black uppercase text-[9px] border-2 group hover:text-red-600 hover:border-red-200"
-              onClick={cancelActiveSession}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold uppercase tracking-widest text-[10px] px-6 h-10 rounded-xl shadow-[0_4px_15px_rgba(220,38,38,0.3)] active:scale-95 transition-all"
+              onClick={handleEndSessionPress}
             >
-              <Trash2 className="w-3 h-3 mr-1.5 group-hover:animate-pulse" /> {currentSession ? 'Cancel Session' : 'Change Client'}
+              End Session
             </Button>
           </div>
         </div>
@@ -5610,13 +5674,10 @@ function WorkoutTrackerView({
                   className="w-full h-14 rounded-2xl font-black italic uppercase tracking-widest text-sm border-2"
                   onClick={() => {
                     setShowEndConfirmation(false);
-                    setClientFormData({ 
-                      firstName: '', lastName: '', gender: 'Male', height: '', weight: '', occupation: '',
-                      phone: '', email: '', address: '', emergencyContactName: '', emergencyContactPhone: '',
-                      isActive: true, medicalHistory: '', globalNotes: '', remainingSessions: 10, mindbody_name: ''
-                    });
                     setPendingAssignSession(currentSession);
-                    setIsAddingClient(true);
+                    onStartNewClientOnboarding("");
+                    // We don't necessarily need to setView('clients') if the modal is global, 
+                    // but it helps if user cancels modal to be in a logical place.
                     setView('clients');
                   }}
                 >

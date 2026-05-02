@@ -41,6 +41,8 @@ export interface Client {
   activity?: string;
   goals?: string;
   globalNotes?: string;
+  leadSource?: string;
+  notes?: string;
   isRoutineBActive?: boolean;
   remainingSessions: number;
   legacy_filemaker_id?: string;
