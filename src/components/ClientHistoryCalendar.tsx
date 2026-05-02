@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { WorkoutSession, ExerciseLog, Machine, Trainer } from '../types';
 import { cn } from '../lib/utils';
@@ -45,6 +46,9 @@ export function ClientHistoryCalendar({
   const [selectedSessionLogs, setSelectedSessionLogs] = useState<ExerciseLog[]>([]);
   const [editedLogs, setEditedLogs] = useState<Record<string, Partial<ExerciseLog>>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedSessionNotes, setEditedSessionNotes] = useState<string>('');
 
   // Fetch all sessions for calendar
   useEffect(() => {
@@ -67,8 +71,11 @@ export function ClientHistoryCalendar({
     if (!selectedSession) {
       setSelectedSessionLogs([]);
       setEditedLogs({});
+      setIsEditMode(false);
+      setEditedSessionNotes('');
       return;
     }
+    setEditedSessionNotes(selectedSession.notes || '');
     const q = query(
       collection(db, 'exerciseLogs'),
       where('sessionId', '==', selectedSession.id),
@@ -128,8 +135,17 @@ export function ClientHistoryCalendar({
           updatedAt: Timestamp.now()
         });
       });
+      if (selectedSession && editedSessionNotes !== selectedSession.notes) {
+        const sessionRef = doc(db, 'sessions', selectedSession.id!);
+        batch.update(sessionRef, {
+          notes: editedSessionNotes,
+          updatedAt: Timestamp.now()
+        });
+        setSelectedSession(prev => prev ? { ...prev, notes: editedSessionNotes } : null);
+      }
       await batch.commit();
       setEditedLogs({});
+      setIsEditMode(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'exerciseLogs');
     } finally {
@@ -261,72 +277,144 @@ export function ClientHistoryCalendar({
                   </div>
                 </div>
 
-                {Object.keys(editedLogs).length > 0 && (
-                  <Button 
-                    onClick={handleBatchUpdate}
-                    disabled={isSaving}
-                    className="absolute right-8 top-1/2 -translate-y-1/2 bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase italic text-sm tracking-widest h-14 px-8 rounded-2xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] animate-pulse"
+                <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (isEditMode) {
+                        setEditedLogs({});
+                        setEditedSessionNotes(selectedSession.notes || '');
+                      }
+                      setIsEditMode(!isEditMode);
+                    }}
+                    className={cn(
+                      "font-black uppercase tracking-widest text-xs h-10 px-4 rounded-xl border-white/20 transition-all",
+                      isEditMode ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"
+                    )}
                   >
-                    {isSaving ? "Updating..." : "Update session record"}
+                    {isEditMode ? "Cancel Edit" : "Edit Data"}
                   </Button>
-                )}
+                  {isEditMode && (
+                    <Button 
+                      onClick={handleBatchUpdate}
+                      disabled={isSaving}
+                      className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase italic text-sm tracking-widest h-14 px-8 rounded-2xl shadow-[0_4px_20px_rgba(240,108,34,0.3)]"
+                    >
+                      {isSaving ? "Updating..." : "Save Changes"}
+                    </Button>
+                  )}
+                </div>
               </DialogHeader>
 
               <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 {selectedSessionLogs.length > 0 ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {selectedSessionLogs.map((log) => {
-                      const machine = machines.find(m => m.id === log.machineId);
-                      const isEdited = !!editedLogs[log.id!];
-                      const currentData = { ...log, ...editedLogs[log.id!] };
+                  <div className="space-y-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {selectedSessionLogs.map((log) => {
+                        const machine = machines.find(m => m.id === log.machineId);
+                        const isEdited = !!editedLogs[log.id!];
+                        const currentData = { ...log, ...editedLogs[log.id!] };
+                        const quality = currentData.repQuality || 0;
+                        
+                        let borderClass = "border-white/10";
+                        if (quality >= 4.5) borderClass = "border-l-4 border-l-emerald-500 border-white/10";
+                        else if (quality >= 3) borderClass = "border-l-4 border-l-amber-500 border-white/10";
+                        else if (quality > 0) borderClass = "border-l-4 border-l-rose-500 border-white/10";
 
-                      return (
-                        <div 
-                          key={log.id} 
-                          className={cn(
-                            "flex flex-col p-5 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md transition-all gap-4",
-                            isEdited ? "border-[#F06C22]/50 shadow-[0_0_20px_rgba(240,108,34,0.1)]" : "hover:border-white/20"
-                          )}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
-                              <Dumbbell className="w-6 h-6 text-white" />
+                        return (
+                          <div 
+                            key={log.id} 
+                            className={cn(
+                              "flex flex-col p-5 rounded-3xl bg-slate-800 transition-all gap-4",
+                              borderClass,
+                              isEdited && isEditMode ? "shadow-[0_0_20px_rgba(240,108,34,0.1)] ring-1 ring-[#F06C22]/50" : "hover:border-white/20"
+                            )}
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                                <Dumbbell className="w-6 h-6 text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="text-lg font-black uppercase tracking-tight text-white leading-none mb-1 truncate">{machine?.name || 'Unknown Machine'}</h4>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unit Log Data</p>
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <h4 className="text-lg font-black uppercase tracking-tight text-white leading-none mb-1 truncate">{machine?.name || 'Unknown Machine'}</h4>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unit Log Data</p>
+
+                            <div className="grid grid-cols-4 gap-2">
+                              <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                                <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Weight</span>
+                                {isEditMode ? (
+                                  <Input 
+                                    value={currentData.weight || ''}
+                                    onChange={(e) => handleLogEdit(log.id!, 'weight', e.target.value)}
+                                    className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                                  />
+                                ) : (
+                                  <div className="h-10 flex items-center justify-center font-black text-xl text-white">{currentData.weight || '-'}</div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                                <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Reps</span>
+                                {isEditMode ? (
+                                  <Input 
+                                    value={currentData.reps || ''}
+                                    onChange={(e) => handleLogEdit(log.id!, 'reps', e.target.value)}
+                                    className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                                  />
+                                ) : (
+                                  <div className="h-10 flex items-center justify-center font-black text-xl text-white">{currentData.reps || '-'}</div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                                <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Hold/s</span>
+                                {isEditMode ? (
+                                  <Input 
+                                    value={currentData.seconds || ''}
+                                    onChange={(e) => handleLogEdit(log.id!, 'seconds', e.target.value)}
+                                    className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                                  />
+                                ) : (
+                                  <div className="h-10 flex items-center justify-center font-black text-xl text-white">{currentData.seconds || '-'}</div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
+                                <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Quality</span>
+                                {isEditMode ? (
+                                  <Input 
+                                    type="number"
+                                    min="0"
+                                    max="5"
+                                    step="0.5"
+                                    value={currentData.repQuality || ''}
+                                    onChange={(e) => handleLogEdit(log.id!, 'repQuality', parseFloat(e.target.value) || 0)}
+                                    className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
+                                  />
+                                ) : (
+                                  <div className="h-10 flex items-center justify-center font-black text-xl text-white">{currentData.repQuality || '-'}</div>
+                                )}
+                              </div>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
 
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
-                              <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Weight (lbs)</span>
-                              <Input 
-                                value={currentData.weight}
-                                onChange={(e) => handleLogEdit(log.id!, 'weight', e.target.value)}
-                                className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
-                              <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Reps</span>
-                              <Input 
-                                value={currentData.reps}
-                                onChange={(e) => handleLogEdit(log.id!, 'reps', e.target.value)}
-                                className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
-                              <span className="text-[9px] font-black uppercase text-slate-500 text-center tracking-widest">Hold (s)</span>
-                              <Input 
-                                value={currentData.seconds || '0'}
-                                onChange={(e) => handleLogEdit(log.id!, 'seconds', e.target.value)}
-                                className="h-10 border-0 bg-transparent text-center font-black text-xl text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0"
-                              />
-                            </div>
-                          </div>
+                    {/* Session Notes Section */}
+                    <div className="mt-8 flex flex-col gap-4 p-6 rounded-3xl bg-slate-800 border border-white/10">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#68717A]">Session Notes</h4>
+                      {isEditMode ? (
+                        <Textarea
+                          value={editedSessionNotes}
+                          onChange={(e) => setEditedSessionNotes(e.target.value)}
+                          placeholder="Add notes about this session..."
+                          className="min-h-[120px] bg-slate-900 border-white/10 text-white placeholder:text-slate-500 resize-none focus-visible:ring-1 focus-visible:ring-[#F06C22] font-medium"
+                        />
+                      ) : (
+                        <div className="min-h-[120px] whitespace-pre-wrap text-slate-300 font-medium">
+                          {selectedSession.notes || <span className="text-slate-500 italic">No notes recorded for this session.</span>}
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center gap-6">

@@ -81,6 +81,7 @@ import {
 import { db, auth } from './firebase';
 import { Trainer, TrainerAvailability, Client, View, Machine, WorkoutSession, ExerciseLog, Routine, ClientMachineSetting, SessionType, SessionNote, TrainerFocus } from './types';
 import { OperationType, handleFirestoreError } from './lib/firestore-errors';
+// Removing duplicate cn import
 import { hashPin } from './lib/auth-utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TrainerControlHubView } from './components/TrainerControlHubView';
@@ -89,6 +90,7 @@ import { ClientProfileView } from './components/ClientProfileView';
 import { CalendarView } from './components/CalendarView';
 import { PinLoginView } from './components/PinLoginView';
 import { ProfilesView } from './components/ProfilesView';
+import { ClientDirectoryView } from './components/ClientDirectoryView';
 import { TrainerProfileView } from './components/TrainerProfileView';
 import { PreSessionOverview } from './components/PreSessionOverview';
 import { ConsultationSetupWizard } from './components/ConsultationSetupWizard';
@@ -173,6 +175,49 @@ export default function App() {
   const [showNewClientsDialog, setShowNewClientsDialog] = useState(false);
   const [isReorderingTrainers, setIsReorderingTrainers] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+  const startUnassignedSession = async () => {
+    if (!authTrainer) return;
+    
+    // Default machines as requested
+    const defaultMachineNames = ["Hip Abduction", "Hip Adduction", "Leg Press", "Compound Row", "Chest Press", "Lumbar"];
+    const activeMachines = defaultMachineNames.map(name => 
+      machines.find(m => m.name === name || m.fullName === name)?.id
+    ).filter(Boolean) as string[];
+
+    const date = new Date().toISOString().split('T')[0];
+
+    try {
+      const docRef = await addDoc(collection(db, 'sessions'), {
+        isUnassigned: true,
+        sessionType: 'Standard',
+        sessionNumber: 0,
+        date,
+        trainerInitials: authTrainer.initials,
+        trainerName: authTrainer.fullName,
+        trainerId: authTrainer.id,
+        status: 'In-Progress',
+        startTime: serverTimestamp(),
+        createdAt: serverTimestamp()
+      });
+
+      // Populate logs
+      for (const mid of activeMachines) {
+        await addDoc(collection(db, 'exerciseLogs'), {
+          sessionId: docRef.id,
+          machineId: mid,
+          weight: '0',
+          reps: '',
+          createdAt: serverTimestamp()
+        });
+      }
+
+      setSelectedClientId(null);
+      setCurrentView('workouts');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'sessions');
+    }
+  };
 
   const newClientsThisMonth = useMemo(() => {
     return clients.filter(c => {
@@ -793,21 +838,24 @@ export default function App() {
     };
   }, [isAuthReady, user]);
 
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
       const provider = new GoogleAuthProvider();
+      // Using signInWithPopup with explicit resolver can help with assertion failures
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-        // Ignore this error, it's normal if the user closes the popup
         return;
       }
-      // Check for internal assertion failure about pending promise
       if (error.message && error.message.includes('INTERNAL ASSERTION FAILED: Pending promise was never set')) {
         return;
       }
       console.error("Login failed:", error);
-      alert(`Login failed: ${error.message}`);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -891,7 +939,11 @@ export default function App() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleLogin}
-              className="relative overflow-hidden group w-full max-w-[320px] rounded-[40px] p-[2px] shadow-[0_15px_30px_rgba(0,0,0,0.5)]"
+              disabled={isLoggingIn}
+              className={cn(
+                "relative overflow-hidden group w-full max-w-[320px] rounded-[40px] p-[2px] shadow-[0_15px_30px_rgba(0,0,0,0.5)] transition-opacity",
+                isLoggingIn ? "opacity-50 cursor-not-allowed" : "opacity-100"
+              )}
             >
               {/* Outer Metallic Ring */}
               <div className="absolute inset-0 bg-gradient-to-b from-[#8b9bb4] via-[#33465e] to-[#1a2b41] rounded-[40px]"></div>
@@ -1059,7 +1111,7 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        <main className={`flex-1 w-full max-w-full mx-auto relative ${currentView === 'workouts' ? 'p-2 pb-24 overflow-y-auto' : currentView === 'clients' ? 'h-[calc(100vh-5rem)] overflow-hidden bg-[#0A2E46] p-0 flex flex-col' : 'p-6 pb-24 overflow-y-auto'}`}>
+        <main className={`flex-1 w-full max-w-full mx-auto relative ${currentView === 'workouts' ? 'p-2 pb-24 overflow-y-auto' : (currentView === 'clients' || currentView === 'client-directory') ? 'h-[calc(100vh-5rem)] overflow-hidden bg-[#0A2E46] p-0 flex flex-col' : 'p-6 pb-24 overflow-y-auto'}`}>
           <AnimatePresence mode="wait">
             {currentView === 'consultation-wizard' && selectedClientId && (
               <ConsultationWizard 
@@ -1088,6 +1140,16 @@ export default function App() {
                 authTrainer={authTrainer}
                 onTrainerLogin={handleTrainerLogin}
                 isAdmin={user.email === "jurgensaj@gmail.com"}
+              />
+            )}
+            {currentView === 'client-directory' && (
+              <ClientDirectoryView
+                clients={clients}
+                onSelectClient={(id) => {
+                  setSelectedClientId(id);
+                  setCurrentView('workouts');
+                }}
+                onStartOpenSession={startUnassignedSession}
               />
             )}
             {currentView === 'clients' && (
@@ -1218,7 +1280,6 @@ export default function App() {
             )}
             {currentView === 'dashboard' && (
               <OwnerDashboardView 
-                key={`dashboard-${dashboardInitialTab}`}
                 clients={clients} 
                 trainers={trainers} 
                 machines={machines} 
@@ -1252,12 +1313,12 @@ export default function App() {
             label="Hub"
           />
           <NavButton 
-            active={['profile', 'history', 'progress-report'].includes(currentView)} 
+            active={['profile', 'history', 'progress-report', 'client-directory'].includes(currentView)} 
             onClick={() => {
               if (selectedClientId) {
                 setCurrentView('profile');
               } else {
-                setCurrentView('clients');
+                setCurrentView('client-directory');
               }
             }}
             icon={<ClipboardList className="w-6 h-6" />}
@@ -1265,7 +1326,13 @@ export default function App() {
           />
           <NavButton 
             active={currentView === 'workouts'} 
-            onClick={() => setCurrentView('workouts')}
+            onClick={() => {
+              if (currentSession || selectedClientId) {
+                setCurrentView('workouts');
+              } else {
+                setCurrentView('client-directory');
+              }
+            }}
             icon={<PlayCircle className="w-6 h-6" />}
             label={currentSession ? "Active Session" : "Start Session"}
             activeColor={currentSession ? 'text-[#F06C22]' : undefined}
@@ -3273,7 +3340,9 @@ function ClientsView({
                     lastName: names.slice(1).join(' ') || '',
                     mindbody_name: linkingSession?.clientName || ''
                   });
-                  setIsAdding(true);
+                  if (onStartNewClientOnboarding) {
+                    onStartNewClientOnboarding(linkingSession?.clientName || '');
+                  }
                   setIsLinking(false);
                 }}
               >
@@ -3725,7 +3794,7 @@ function ClientHistoryView({
       </div>
 
       {activeNotesSession && (
-        <SessionNotesDetailDialog
+        <SessionNotesSidebar
           session={activeNotesSession}
           userTrainers={trainers}
           onClose={() => setActiveNotesSession(null)}
@@ -4397,7 +4466,7 @@ function ExerciseHistoryDialog({
   );
 }
 
-function SessionNotesDetailDialog({ 
+function SessionNotesSidebar({ 
   session, 
   onClose,
   userTrainers
@@ -4410,7 +4479,6 @@ function SessionNotesDetailDialog({
   const [history, setHistory] = useState<SessionNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Identify current trainer
   const currentUser = auth.currentUser;
   const currentTrainer = userTrainers.find(t => t.pin === localStorage.getItem('trainer_pin') || t.fullName === currentUser?.displayName);
   const trainerInitials = currentTrainer?.initials || '??';
@@ -4451,61 +4519,99 @@ function SessionNotesDetailDialog({
   };
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] rounded-3xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-black flex items-center gap-2">
-            <MessageSquare className="w-6 h-6 text-primary" /> Session #{session.sessionNumber} Notes
-          </DialogTitle>
-          <DialogDescription className="font-bold flex items-center gap-2">
-            {new Date(session.date + 'T00:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-            <Badge variant="outline" className="text-[10px] py-0 h-4">{session.trainerInitials}</Badge>
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto space-y-4 py-4 pr-2 custom-scrollbar">
-          {history.length > 0 ? (
-            history.map((note) => (
-              <div key={note.id} className="bg-muted/30 p-4 rounded-2xl border border-border/50 space-y-2">
-                <div className="flex justify-between items-start">
-                  <Badge variant="secondary" className="font-black text-[9px] uppercase tracking-widest bg-primary/10 text-primary border-none">
-                    {note.trainerInitials}
-                  </Badge>
-                  <span className="text-[9px] font-bold text-muted-foreground">
-                    {note.createdAt?.toDate?.() ? note.createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Now'}
-                  </span>
-                </div>
-                <p className="text-sm font-medium leading-relaxed text-foreground/90 whitespace-pre-wrap">
-                  {note.content}
-                </p>
-              </div>
-            ))
-          ) : (
-            <div className="py-8 text-center bg-muted/20 rounded-2xl border border-dashed border-muted-foreground/20">
-              <StickyNote className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">No session-specific notes yet.</p>
-            </div>
-          )}
+    <div className="fixed inset-0 z-[100] flex justify-end overflow-hidden">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+      />
+      
+      <motion.div 
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className="relative w-full max-w-sm bg-[#0A2E46] border-l border-slate-800 shadow-2xl flex flex-col h-full"
+      >
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex flex-col">
+            <h2 className="text-xl font-black text-white uppercase tracking-tighter flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-[#F06C22]" /> Session Notes
+            </h2>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+              HUD Communication Panel
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-white/10">
+            <X className="w-5 h-5 text-slate-400" />
+          </Button>
         </div>
 
-        <form onSubmit={handleAddNote} className="pt-4 border-t space-y-3">
-          <Textarea 
-            placeholder="Add context (injury, performance tweak, mood)..."
-            value={noteContent}
-            onChange={(e) => setNoteContent(e.target.value)}
-            className="min-h-[100px] rounded-2xl border-2 focus-visible:ring-primary/20 transition-all resize-none"
-          />
-          <div className="flex justify-between items-center">
-            <p className="text-[9px] font-bold text-muted-foreground uppercase italic px-2">
-              Signed as: <span className="text-primary">{trainerInitials}</span>
-            </p>
-            <Button type="submit" className="rounded-xl px-6 font-black uppercase tracking-widest gap-2 bg-action text-action-foreground hover:bg-action/90 shadow-lg shadow-action/20">
-              <Save className="w-4 h-4" /> Save Note
-            </Button>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-slate-950/20">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <History className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Note History</span>
+            </div>
+            
+            {history.length > 0 ? (
+              history.map((note) => (
+                <div key={note.id} className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
+                        <span className="text-[8px] font-black text-[#F06C22]">{note.trainerInitials}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Active Trainer</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-slate-600">
+                      {note.createdAt?.toDate?.() ? note.createdAt.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Now'}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium leading-relaxed text-slate-300 whitespace-pre-wrap">
+                    {note.content}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="py-12 text-center bg-slate-900/20 rounded-3xl border border-dashed border-slate-800">
+                <StickyNote className="w-8 h-8 text-slate-800 mx-auto mb-3" />
+                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">No active communications found.</p>
+              </div>
+            )}
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+
+        <div className="p-6 border-t border-slate-800 bg-[#0A2E46] shrink-0">
+          <form onSubmit={handleAddNote} className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <Edit3 className="w-3.5 h-3.5 text-[#F06C22]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tactical Update</span>
+              </div>
+              <Textarea 
+                placeholder="Injury notes, performance tweaks, or mood updates..."
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                className="min-h-[120px] rounded-2xl bg-slate-950/50 border-slate-800 text-white placeholder:text-slate-700 focus:border-[#F06C22] shadow-inner resize-none"
+              />
+            </div>
+            
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-600">Authenticated:</span>
+                <span className="text-[10px] font-bold text-[#F06C22]">{trainerInitials}</span>
+              </div>
+              <Button type="submit" className="flex-1 h-12 bg-[#F06C22] hover:bg-[#F06C22]/90 text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-xl shadow-xl shadow-orange-950/20 transition-all active:scale-95">
+                Save Tactical Note
+              </Button>
+            </div>
+          </form>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -4552,6 +4658,7 @@ function WorkoutTrackerView({
   const [activeMachineIds, setActiveMachineIds] = useState<string[]>([]);
   const [clientMachineSettings, setClientMachineSettings] = useState<Record<string, ClientMachineSetting>>({});
   const [sessionNotes, setSessionNotes] = useState<SessionNote[]>([]);
+  const [activeSessionNotes, setActiveSessionNotes] = useState<string>('');
   const lastMachineLoggedAt = React.useRef<number>(Date.now());
   const [isEditingRoutine, setIsEditingRoutine] = useState(false);
   const [showRoutinePicker, setShowRoutinePicker] = useState(false);
@@ -4571,6 +4678,16 @@ function WorkoutTrackerView({
   const [targetRoutine, setTargetRoutine] = useState<Routine | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [historicalLifts, setHistoricalLifts] = useState<Record<string, { last: ExerciseLog; previous: ExerciseLog | null }>>({});
+
+  const [machineTimeElapsed, setMachineTimeElapsed] = useState<number>(0);
+
+  useEffect(() => {
+    if (!currentSession || isPaused) return;
+    const interval = setInterval(() => {
+      setMachineTimeElapsed(Math.floor((Date.now() - lastMachineLoggedAt.current) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentSession, isPaused]);
 
   // Fetch all exercise logs for analysis (limited to last 1000 for performance)
   const [isShowingSessionNotes, setIsShowingSessionNotes] = useState(false);
@@ -4872,7 +4989,9 @@ function WorkoutTrackerView({
     const nextNum = sessions.length > 0 ? Math.max(...sessions.map(s => s.sessionNumber)) + 1 : 1;
     
     // Auto-populate trainer and date
-    const trainer = trainers[0]?.initials || '??';
+    const trainerInitials = authTrainer?.initials || trainers[0]?.initials || '??';
+    const trainerName = authTrainer ? authTrainer.fullName : '';
+    const trainerId = authTrainer?.id || '';
     const date = new Date().toISOString().split('T')[0];
     
     try {
@@ -4913,7 +5032,9 @@ function WorkoutTrackerView({
         sessionType,
         sessionNumber: nextNum,
         date,
-        trainerInitials: trainer,
+        trainerInitials,
+        trainerName,
+        trainerId,
         status: 'In-Progress',
         startTime: serverTimestamp(),
         createdAt: serverTimestamp()
@@ -4977,7 +5098,9 @@ function WorkoutTrackerView({
         sessionType,
         sessionNumber: nextNum, 
         date, 
-        trainerInitials: trainer,
+        trainerInitials,
+        trainerName,
+        trainerId,
         status: 'In-Progress',
         startTime: new Date()
       };
@@ -4988,60 +5111,6 @@ function WorkoutTrackerView({
       setIsPreSessionMode(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'sessions');
-    }
-  };
-
-  const startUnassignedSession = async () => {
-    if (!authTrainer) return;
-    
-    // Default machines as requested
-    const defaultMachineNames = ["Hip Abduction", "Hip Adduction", "Leg Press", "Compound Row", "Chest Press", "Lumbar"];
-    const activeMachines = defaultMachineNames.map(name => 
-      machines.find(m => m.name === name || m.fullName === name)?.id
-    ).filter(Boolean) as string[];
-
-    const date = new Date().toISOString().split('T')[0];
-
-    try {
-      const docRef = await addDoc(collection(db, 'sessions'), {
-        isUnassigned: true,
-        sessionType: 'Standard',
-        sessionNumber: 0,
-        date,
-        trainerInitials: authTrainer.initials,
-        status: 'In-Progress',
-        startTime: serverTimestamp(),
-        createdAt: serverTimestamp()
-      });
-
-      // Populate logs
-      for (const mid of activeMachines) {
-        await addDoc(collection(db, 'exerciseLogs'), {
-          sessionId: docRef.id,
-          machineId: mid,
-          weight: '0',
-          reps: '',
-          repQuality: 0,
-          createdAt: serverTimestamp()
-        });
-      }
-      const newSession = {
-        id: docRef.id,
-        isUnassigned: true,
-        sessionType: 'Standard',
-        sessionNumber: 0,
-        date,
-        trainerInitials: authTrainer.initials,
-        status: 'In-Progress',
-        startTime: new Date(),
-        createdAt: new Date()
-      };
-      
-      setCurrentSession(newSession as WorkoutSession);
-      lastMachineLoggedAt.current = Date.now();
-      
-    } catch (error) {
-      console.error("Error starting unassigned session:", error);
     }
   };
 
@@ -5122,10 +5191,14 @@ function WorkoutTrackerView({
       
       // 1. Update session status
       const sessionRef = doc(db, 'sessions', currentSession.id);
-      batch.update(sessionRef, {
+      const updateData: any = {
         status: 'Completed',
         endTime: serverTimestamp()
-      });
+      };
+      if (activeSessionNotes.trim()) {
+        updateData.notes = activeSessionNotes.trim();
+      }
+      batch.update(sessionRef, updateData);
 
       // 2. Sync all local logs
       const sessionLogs = Object.values(logs).filter((l: any) => l.sessionId === currentSession.id);
@@ -5162,6 +5235,7 @@ function WorkoutTrackerView({
       await batch.commit();
 
       setCurrentSession(null);
+      setActiveSessionNotes('');
       setShowEndConfirmation(false);
       setView('profile');
     } catch (error) {
@@ -5239,19 +5313,6 @@ function WorkoutTrackerView({
       : [...activeMachineIds, machineId];
     
     setActiveMachineIds(newActiveIds);
-
-    // Auto-save to routine if a session is active
-    if (currentSession?.routineId) {
-      try {
-        await updateDoc(doc(db, 'routines', currentSession.routineId), {
-          machineIds: newActiveIds,
-          updatedBy: user.uid,
-          updatedAt: serverTimestamp()
-        });
-      } catch (error) {
-        console.error("Error auto-saving routine:", error);
-      }
-    }
   };
 
   const cancelActiveSession = async () => {
@@ -5288,93 +5349,7 @@ function WorkoutTrackerView({
   };
 
   if (!selectedClient && !currentSession) {
-    const filteredClients = clients
-      .filter(c => c.isActive && (`${c.firstName} ${c.lastName}`.toLowerCase().includes(debouncedSearchTerm.toLowerCase())))
-      .sort((a,b) => a.lastName.localeCompare(b.lastName));
-
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-background p-6 max-w-xl mx-auto w-full pb-24">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }} 
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full space-y-8"
-        >
-          <div className="text-center space-y-2">
-            <div className="w-20 h-20 bg-primary/10 rounded-[32px] flex items-center justify-center mx-auto mb-4 border-2 border-primary/20">
-              <Search className="w-10 h-10 text-primary" />
-            </div>
-            <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Client Focus</h2>
-            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] opacity-60">Idle State • Search to begin session</p>
-          </div>
-
-          <Card className="rounded-[40px] border-2 shadow-2xl overflow-hidden p-2 bg-card/50 backdrop-blur-sm">
-            <div className="p-4 space-y-4">
-              <div className="relative">
-                <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-40" />
-                <Input 
-                  placeholder="Type client name..." 
-                  className="pl-14 h-16 rounded-[28px] border-2 border-muted hover:border-primary/30 focus:border-primary transition-all font-black uppercase italic tracking-tight"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid gap-2 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar">
-                {filteredClients.length > 0 ? (
-                  filteredClients.slice(0, 10).map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => setSelectedClientId(c.id!)}
-                      className="flex justify-between items-center p-5 rounded-[24px] bg-muted/30 hover:bg-primary hover:text-white border-2 border-transparent transition-all group"
-                    >
-                      <div className="text-left">
-                        <p className="font-black uppercase italic tracking-tighter text-lg leading-none group-hover:translate-x-1 transition-transform">{c.firstName} {c.lastName}</p>
-                        <p className="text-[9px] font-bold uppercase opacity-60 mt-1 tracking-widest group-hover:text-white/70">
-                          {sessions.find(s => s.clientId === c.id)?.date ? `Last Session: ${sessions.find(s => s.clientId === c.id)?.date}` : 'Ready for Initial Intake'}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-5 h-5 opacity-30 group-hover:opacity-100 transition-all group-hover:translate-x-1" />
-                    </button>
-                  ))
-                ) : (
-                  <div className="text-center p-12 bg-muted/10 rounded-[32px] border-2 border-dashed border-muted/50">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-40">No active matches found</p>
-                  </div>
-                )}
-              </div>
-
-              <Button 
-                variant="ghost"
-                className="w-full h-14 rounded-[24px] font-black uppercase italic tracking-widest text-[10px] text-muted-foreground hover:text-primary transition-all"
-                onClick={() => setView('clients')}
-              >
-                Go to Full Client Directory
-              </Button>
-            </div>
-          </Card>
-
-          <div className="relative py-4">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-dashed" /></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-black"><span className="bg-background px-6 text-muted-foreground/30 font-bold tracking-widest leading-none">Station Workflow</span></div>
-          </div>
-
-          <div className="space-y-4">
-            <Button 
-              size="lg" 
-              className="w-full h-20 rounded-[32px] text-xl font-black italic uppercase tracking-widest shadow-2xl shadow-primary/20 transition-all active:scale-95 bg-primary hover:bg-primary/90 flex items-center justify-center gap-4 group"
-              onClick={startUnassignedSession}
-            >
-              <PlayCircle className="w-8 h-8 fill-white" />
-              <span>Open Session</span>
-            </Button>
-            <p className="text-[9px] text-center font-bold text-muted-foreground/50 uppercase tracking-widest px-8 leading-relaxed">
-              Start ad-hoc tracking immediately<br/>(Can assign to client at checkout)
-            </p>
-          </div>
-        </motion.div>
-      </div>
-    );
+    return null; // The app routing will ensure this is never reached by redirecting to ClientDirectoryView instead
   }
 
   if (clientId && isPreSessionMode && selectedClient && !currentSession) {
@@ -5524,6 +5499,18 @@ function WorkoutTrackerView({
               >
                 <LayoutList className="w-3.5 h-3.5 mr-1.5" />
                 Focus
+              </Button>
+
+              <div className="w-px h-4 bg-slate-800 mx-1" />
+
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="h-9 px-3 rounded-lg font-bold uppercase text-[9px] tracking-[0.15em] text-slate-400 hover:text-white transition-all"
+                onClick={() => setIsShowingSessionNotes(true)}
+              >
+                <MessageSquare className="w-3.5 h-3.5 mr-1.5 text-[#F06C22]" />
+                Notes
               </Button>
 
               <div className="w-px h-4 bg-slate-800 mx-1" />
@@ -5697,25 +5684,36 @@ function WorkoutTrackerView({
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <Button 
-                  variant="outline" 
-                  className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs border-2"
-                  onClick={() => setShowEndConfirmation(false)}
-                >
-                  Keep Training
-                </Button>
-                <Button 
-                  className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary/20"
-                  onClick={finalizeEndSession}
-                  disabled={isSyncing}
-                >
-                  {isSyncing ? (
-                    <>
-                      <RotateCcw className="w-4 h-4 mr-2 animate-spin" /> Syncing...
-                    </>
-                  ) : "Confirm End"}
-                </Button>
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500">Session Notes</label>
+                  <Textarea
+                    value={activeSessionNotes}
+                    onChange={(e) => setActiveSessionNotes(e.target.value)}
+                    placeholder="Log general observations here..."
+                    className="min-h-[100px] border-2 border-slate-200 bg-white resize-none text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#F06C22] focus-visible:border-[#F06C22]"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs border-2"
+                    onClick={() => setShowEndConfirmation(false)}
+                  >
+                    Keep Training
+                  </Button>
+                  <Button 
+                    className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary/20"
+                    onClick={finalizeEndSession}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <RotateCcw className="w-4 h-4 mr-2 animate-spin" /> Syncing...
+                      </>
+                    ) : "Confirm End"}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -5752,75 +5750,6 @@ function WorkoutTrackerView({
           </div>
         </DialogContent>
       </Dialog>
-      <div className="flex items-center justify-between bg-white border border-slate-200 p-2 rounded-xl shadow-sm shrink-0 h-[48px]">
-        <div className="flex items-center gap-3 pl-2">
-          <div 
-            className="flex items-baseline gap-2 cursor-pointer hover:opacity-70 transition-opacity group/tracker-name"
-            onClick={() => selectedClient && setView('profile')}
-          >
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none">ACTIVE CLIENT:</span>
-            <h2 className="text-lg sm:text-xl font-black leading-none group-hover/tracker-name:text-[#115E8D] transition-colors uppercase tracking-tighter text-slate-800">
-              {clientNameDisplay}
-            </h2>
-          </div>
-          <div className="flex items-baseline gap-2 cursor-pointer hover:opacity-70 transition-opacity pl-2 sm:pl-4 border-l border-slate-200 group/trainer-name">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none">TRAINER:</span>
-            <h2 className="text-lg sm:text-xl font-black leading-none group-hover/trainer-name:text-[#115E8D] transition-colors uppercase tracking-tighter text-slate-800">
-              {authTrainer?.fullName || currentSession?.trainerInitials || 'SELECT'}
-            </h2>
-          </div>
-          {currentSession?.isUnassigned && (
-            <Badge variant="outline" className="text-[8px] font-black py-0 h-4 bg-red-500/10 text-red-600 border-red-500/20 leading-none">OPEN</Badge>
-          )}
-          {selectedClient?.globalNotes && !currentSession?.isUnassigned && (
-             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[8px] font-black py-0 h-4 animate-pulse leading-none">CAUTION</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {currentSession ? (
-            <Button 
-              size="sm" 
-              className="h-7 px-4 font-black bg-[#F06C22] hover:bg-[#F06C22]/90 text-white rounded-lg uppercase tracking-widest shadow-sm text-[9px]"
-              onClick={handleEndSessionPress}
-            >
-              End Session
-            </Button>
-          ) : (
-             <Button 
-               size="sm" 
-               className="h-7 px-4 font-black bg-[#F06C22] hover:bg-[#F06C22]/90 text-white rounded-lg uppercase tracking-widest shadow-sm text-[9px]"
-               onClick={() => {
-                 setIsPreSessionMode(true);
-               }}
-             >
-               Start Session
-             </Button>
-          )}
-          
-          <Button 
-            size="sm" 
-            variant={showAllMachines ? "outline" : "default"} 
-            onClick={() => setShowAllMachines(!showAllMachines)} 
-            className="h-7 px-3 font-bold text-[9px] rounded-lg uppercase tracking-wider text-slate-600 border-slate-200"
-          >
-            {!showAllMachines ? "View Full Floor" : "Focus Routine"}
-          </Button>
-          {currentSession && (
-            <>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={() => setIsShowingSessionNotes(true)} 
-                className="h-7 px-3 gap-1.5 font-bold text-[9px] rounded-lg uppercase tracking-wider bg-[#115E8D]/5 border-[#115E8D]/20 text-[#115E8D]"
-              >
-                <MessageSquare className="w-3 h-3" />
-                Notes
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* Workout Table Scroll Area */}
       <div className="flex-1 overflow-hidden border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col">
         <div className="w-full h-full overflow-x-auto custom-scrollbar">
@@ -6040,13 +5969,15 @@ function WorkoutTrackerView({
         </div>
       </div>
 
-      {isShowingSessionNotes && currentSession && (
-        <SessionNotesDetailDialog 
-          session={currentSession}
-          userTrainers={trainers}
-          onClose={() => setIsShowingSessionNotes(false)}
-        />
-      )}
+      <AnimatePresence>
+        {isShowingSessionNotes && currentSession && (
+          <SessionNotesSidebar 
+            session={currentSession}
+            userTrainers={trainers}
+            onClose={() => setIsShowingSessionNotes(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {currentSession && (
         <SessionRoutineManagerModal
@@ -6061,26 +5992,14 @@ function WorkoutTrackerView({
       {currentSession && (
         <div className="fixed bottom-20 left-0 right-0 z-50">
            <Stopwatch onLogTSC={handleLogTSC} />
-        </div>
+         </div>
       )}
 
-      {/* Footer Info */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 rounded-xl shrink-0">
-        <div className="flex gap-4 text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-          <div className="flex items-center gap-1">
-            <UserCircle className="w-3 h-3" />
-            <span>Trainer: {currentSession?.trainerInitials}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>Started: {currentSession?.date}</span>
-          </div>
+      {currentSession && activeMachineIds.length > 0 && (
+        <div className="fixed bottom-0 left-2 p-1 pointer-events-none opacity-20 z-50">
+          <span className="text-[8px] text-slate-800 font-mono tracking-widest">{machineTimeElapsed}s</span>
         </div>
-        <div className="flex items-center gap-2 text-[9px] font-black text-primary">
-          <ShieldCheck className="w-3 h-3" />
-          <span>Session Logged for Attendance</span>
-        </div>
-      </div>
+      )}
     </motion.div>
   );
 }

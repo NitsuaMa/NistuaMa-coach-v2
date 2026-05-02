@@ -279,4 +279,4 @@ export interface TrainerFocus {
   updatedAt: any;
 }
 
-export type View = 'trainers' | 'clients' | 'machines' | 'workouts' | 'history' | 'calendar' | 'trainer-hub' | 'dashboard' | 'profile' | 'chart' | 'trainer-profile' | 'progress-report' | 'consultation-wizard' | 'machine-knowledge';
+export type View = 'trainers' | 'clients' | 'machines' | 'workouts' | 'history' | 'calendar' | 'trainer-hub' | 'dashboard' | 'profile' | 'chart' | 'trainer-profile' | 'progress-report' | 'consultation-wizard' | 'machine-knowledge' | 'client-directory';

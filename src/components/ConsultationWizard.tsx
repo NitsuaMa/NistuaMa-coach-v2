@@ -91,6 +91,8 @@ export function ConsultationWizard({ client, machines, authTrainer, trainers, on
 
       // 4. Create Active Session
       const trainerInitials = authTrainer?.initials || trainers[0]?.initials || '??';
+      const trainerName = authTrainer ? authTrainer.fullName : '';
+      const trainerId = authTrainer?.id || '';
       const date = new Date().toISOString().split('T')[0];
       const sessionRef = await addDoc(collection(db, 'sessions'), {
         clientId: client.id,
@@ -99,6 +101,8 @@ export function ConsultationWizard({ client, machines, authTrainer, trainers, on
         sessionNumber: 1,
         date,
         trainerInitials,
+        trainerName,
+        trainerId,
         status: 'In-Progress',
         startTime: serverTimestamp(),
         createdAt: serverTimestamp()
