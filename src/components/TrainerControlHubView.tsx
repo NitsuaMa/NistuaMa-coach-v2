@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, CheckCircle2, AlertCircle, Loader2, Database, Link, RefreshCcw, ShieldCheck, LogOut, Plus, Trash2, Shield, Settings2, Building2, HardDrive, Lock, ShieldAlert, MonitorPlay, Trash, UserCog } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Loader2, Database, Link, RefreshCcw, ShieldCheck, LogOut, Plus, Trash2, Shield, Settings2, Building2, HardDrive, Lock, ShieldAlert, MonitorPlay, Trash, UserCog, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
@@ -48,7 +48,8 @@ export function TrainerControlHubView({
   onSeedDemoClient: () => void,
   onRestoreMachines: () => void,
   onLogout?: () => void,
-  onReorderTrainers?: () => void
+  onReorderTrainers?: () => void,
+  setView?: (v: string) => void
 }) {
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncingTrainerId, setSyncingTrainerId] = useState<string | null>(null);
@@ -438,16 +439,27 @@ export function TrainerControlHubView({
           </p>
         </div>
         
-        {onLogout && (
-          <Button 
-            variant="outline" 
-            onClick={onLogout}
-            className="rounded-2xl border-slate-700 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 h-12 px-6 font-black uppercase text-[10px] tracking-widest"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Switch Trainer
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {isAdmin && setView && (
+            <Button 
+              onClick={() => setView('dashboard')}
+              className="rounded-2xl bg-[#0A2E46] text-[#38BDF8] border border-[#38BDF8]/30 hover:bg-[#38BDF8] hover:text-[#0A2E46] h-12 px-6 font-black uppercase text-[10px] tracking-widest shadow-[0_0_15px_rgba(56,189,248,0.2)]"
+            >
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Open Insights
+            </Button>
+          )}
+          {onLogout && (
+            <Button 
+              variant="outline" 
+              onClick={onLogout}
+              className="rounded-2xl border-slate-700 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 h-12 px-6 font-black uppercase text-[10px] tracking-widest"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Switch Trainer
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">

@@ -1298,6 +1298,7 @@ export default function App() {
                 onRestoreMachines={handleRestoreMachines}
                 onLogout={handleLogout}
                 onReorderTrainers={() => setIsReorderingTrainers(true)}
+                setView={setCurrentView}
               />
             )}
             {currentView === 'dashboard' && (
@@ -2633,17 +2634,16 @@ function ClientsView({
   };
 
   const AM_SLOTS = [
-    '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', 
     '7:00 AM', '7:30 AM', '8:00 AM', '8:30 AM', 
     '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', 
     '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
     '1:00 PM'
   ];
   const PM_SLOTS = [
-    '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', 
+    '2:00 PM', '2:30 PM', 
     '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM', 
     '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', 
-    '7:00 PM', '7:30 PM', '8:00 PM'
+    '7:00 PM'
   ];
 
   const currentSlots = activeTab === 'morning' ? AM_SLOTS : PM_SLOTS;
@@ -2662,8 +2662,8 @@ function ClientsView({
     const h = date.getHours();
     const m = date.getMinutes();
     const totalMins = h * 60 + m;
-    const shiftStartMins = activeTab === 'morning' ? 5 * 60 : 13 * 60;
-    const shiftEndMins = activeTab === 'morning' ? 13 * 60 : 20 * 60;
+    const shiftStartMins = activeTab === 'morning' ? 7 * 60 : 14 * 60;
+    const shiftEndMins = activeTab === 'morning' ? 13 * 60 : 19 * 60;
     if (totalMins < shiftStartMins || totalMins > shiftEndMins) return null;
     const minsFromStart = totalMins - shiftStartMins;
     const totalShiftMins = shiftEndMins - shiftStartMins;

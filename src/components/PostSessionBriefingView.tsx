@@ -201,16 +201,15 @@ export function PostSessionBriefingView({
               />
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">Priority for Next Time:</span>
-                <Select value={notePriority} onValueChange={(v: any) => setNotePriority(v)}>
-                  <SelectTrigger className="w-[120px] bg-slate-900 border-slate-700 text-white font-bold h-9 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                    <SelectItem value="High" className="font-bold text-amber-500 text-xs">High</SelectItem>
-                    <SelectItem value="Medium" className="font-bold text-xs">Medium</SelectItem>
-                    <SelectItem value="Low" className="font-bold text-slate-400 text-xs">Low</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select 
+                  value={notePriority} 
+                  onChange={(e) => setNotePriority(e.target.value as any)}
+                  className="w-[120px] bg-slate-900 border border-slate-700 text-white font-bold h-9 text-xs rounded-md px-3 outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                >
+                  <option value="High" className="font-bold text-amber-500">High</option>
+                  <option value="Medium" className="font-bold">Medium</option>
+                  <option value="Low" className="font-bold text-slate-400">Low</option>
+                </select>
               </div>
             </div>
           </div>

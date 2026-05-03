@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Filter, Loader2, AlertCircle } from 'lucide-react';
+import { Filter, Loader2, AlertCircle, BarChart3, Activity, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PhysicalStressProfile } from '../data/occupational-matrix';
@@ -8,6 +8,7 @@ import { DemographicRetentionChart } from './DemographicRetentionChart';
 import { MachineEfficacyChart } from './MachineEfficacyChart';
 import { TimeToTrendChart } from './TimeToTrendChart';
 import { useInsightsData } from '../hooks/useInsightsData';
+import { MaxStrengthLogo } from './MaxStrengthLogo';
 
 export function InsightsDashboardView(props: any) {
   const [filters, setFilters] = useState<InsightsFilterState>({
@@ -40,71 +41,128 @@ export function InsightsDashboardView(props: any) {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-            <Select defaultValue="30days">
-              <SelectTrigger className="bg-slate-800 border-slate-700 text-white font-bold h-12 rounded-xl">
-                <SelectValue placeholder="Date Range" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                <SelectItem value="30days">Last 30 Days</SelectItem>
-                <SelectItem value="90days">Last 90 Days</SelectItem>
-                <SelectItem value="ytd">Year to Date</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select defaultValue="all">
-              <SelectTrigger className="bg-slate-800 border-slate-700 text-white font-bold h-12 rounded-xl">
-                <SelectValue placeholder="Age Bracket" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                <SelectItem value="all">All Ages</SelectItem>
-                <SelectItem value="18-35">18 - 35</SelectItem>
-                <SelectItem value="36-55">36 - 55</SelectItem>
-                <SelectItem value="56+">56+</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select defaultValue="all">
-              <SelectTrigger className="bg-slate-800 border-slate-700 text-white font-bold h-12 rounded-xl">
-                <SelectValue placeholder="Gender" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                <SelectItem value="all">All Genders</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select 
-              defaultValue="all" 
-              onValueChange={(val) => setFilters(prev => ({ 
-                ...prev, 
-                physicalStressProfiles: val === 'all' ? [] : [val as PhysicalStressProfile] 
-              }))}
+            <select 
+              defaultValue="30days"
+              className="bg-slate-800 border border-slate-700 text-white font-bold h-12 rounded-xl px-4 appearance-none outline-none focus:ring-2 focus:ring-[#38BDF8] w-full"
             >
-              <SelectTrigger className="bg-slate-800 border-slate-700 text-white font-bold h-12 rounded-xl">
-                <SelectValue placeholder="Stress Profile" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                <SelectItem value="all">All Profiles</SelectItem>
-                <SelectItem value={PhysicalStressProfile.SEDENTARY_DESK}>Sedentary Desk</SelectItem>
-                <SelectItem value={PhysicalStressProfile.PROLONGED_STANDING}>Prolonged Standing</SelectItem>
-                <SelectItem value={PhysicalStressProfile.MANUAL_LABOR}>Manual Labor</SelectItem>
-                <SelectItem value={PhysicalStressProfile.HEALTHCARE_CLINICAL}>Healthcare / Clinical</SelectItem>
-                <SelectItem value={PhysicalStressProfile.DYNAMIC_MIXED}>Dynamic / Mixed</SelectItem>
-                <SelectItem value={PhysicalStressProfile.TRANSPORTATION}>Transportation</SelectItem>
-                <SelectItem value={PhysicalStressProfile.RETIRED_ACTIVE}>Retired (Active)</SelectItem>
-                <SelectItem value={PhysicalStressProfile.RETIRED_INACTIVE}>Retired (Inactive)</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="30days">Last 30 Days</option>
+              <option value="90days">Last 90 Days</option>
+              <option value="ytd">Year to Date</option>
+              <option value="all">All Time</option>
+            </select>
+
+            <select 
+              defaultValue="all"
+              onChange={(e) => setFilters(prev => ({
+                ...prev,
+                ageBrackets: e.target.value === 'all' ? [] : [{ min: parseInt(e.target.value.split('-')[0]) || 56, max: parseInt(e.target.value.split('-')[1]) || 120, label: e.target.value }]
+              }))}
+              className="bg-slate-800 border border-slate-700 text-white font-bold h-12 rounded-xl px-4 appearance-none outline-none focus:ring-2 focus:ring-[#38BDF8] w-full"
+            >
+              <option value="all">All Ages</option>
+              <option value="18-35">18 - 35</option>
+              <option value="36-55">36 - 55</option>
+              <option value="56+">56+</option>
+            </select>
+
+            <select 
+              defaultValue="all"
+              onChange={(e) => setFilters(prev => ({
+                ...prev,
+                genders: e.target.value === 'all' ? [] : [e.target.value as any]
+              }))}
+              className="bg-slate-800 border border-slate-700 text-white font-bold h-12 rounded-xl px-4 appearance-none outline-none focus:ring-2 focus:ring-[#38BDF8] w-full"
+            >
+              <option value="all">All Genders</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+
+            <select 
+              defaultValue="all" 
+              onChange={(e) => setFilters(prev => ({ 
+                ...prev, 
+                physicalStressProfiles: e.target.value === 'all' ? [] : [e.target.value as PhysicalStressProfile] 
+              }))}
+              className="bg-slate-800 border border-slate-700 text-white font-bold h-12 rounded-xl px-4 appearance-none outline-none focus:ring-2 focus:ring-[#38BDF8] w-full"
+            >
+              <option value="all">All Profiles</option>
+              <option value={PhysicalStressProfile.SEDENTARY_DESK}>Sedentary Desk</option>
+              <option value={PhysicalStressProfile.PROLONGED_STANDING}>Prolonged Standing</option>
+              <option value={PhysicalStressProfile.MANUAL_LABOR}>Manual Labor</option>
+              <option value={PhysicalStressProfile.HEALTHCARE_CLINICAL}>Healthcare / Clinical</option>
+              <option value={PhysicalStressProfile.DYNAMIC_MIXED}>Dynamic / Mixed</option>
+              <option value={PhysicalStressProfile.TRANSPORTATION}>Transportation</option>
+              <option value={PhysicalStressProfile.RETIRED_ACTIVE}>Retired (Active)</option>
+              <option value={PhysicalStressProfile.RETIRED_INACTIVE}>Retired (Inactive)</option>
+            </select>
           </div>
         </div>
       </div>
 
       {loading && (
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-           <Loader2 className="w-8 h-8 animate-spin mb-4 text-[#38BDF8]" />
-           <p className="text-sm font-black uppercase tracking-widest text-[#38BDF8]">Loading Global Insights...</p>
+        <div className="flex-1 grid grid-cols-1 gap-8 content-start pb-12 animate-pulse mb-8">
+          
+          {/* Card 1 Skeleton */}
+          <Card className="bg-[#F8F9FA]/60 border-slate-200/30 rounded-[32px] shadow-lg flex flex-col h-[400px]">
+            <CardHeader className="border-b border-slate-200/50 p-6 shrink-0 flex flex-row items-center justify-between">
+              <div>
+                <div className="h-6 bg-slate-300 rounded w-64 mb-2"></div>
+                <div className="h-4 bg-slate-200 rounded w-48"></div>
+              </div>
+              <div className="w-8 h-8 animate-spin">
+                <MaxStrengthLogo />
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 p-6 flex flex-col items-center justify-center text-center">
+              <div className="flex flex-col items-center opacity-50">
+                <BarChart3 className="w-16 h-16 text-slate-400 mb-4" />
+                <p className="text-sm font-black uppercase tracking-widest text-slate-500">Compiling Demographics...</p>
+                <p className="text-xs font-semibold text-slate-400 mt-2">Retrieving Phase 4 Visualizations</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 2 Skeleton */}
+          <Card className="bg-[#F8F9FA]/60 border-slate-200/30 rounded-[32px] shadow-lg flex flex-col h-[400px]">
+            <CardHeader className="border-b border-slate-200/50 p-6 shrink-0 flex flex-row items-center justify-between">
+              <div>
+                <div className="h-6 bg-slate-300 rounded w-72 mb-2"></div>
+                <div className="h-4 bg-slate-200 rounded w-56"></div>
+              </div>
+               <div className="w-8 h-8 animate-spin">
+                <MaxStrengthLogo />
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 p-6 flex flex-col items-center justify-center text-center">
+              <div className="flex flex-col items-center opacity-50">
+                <Activity className="w-16 h-16 text-slate-400 mb-4" />
+                <p className="text-sm font-black uppercase tracking-widest text-slate-500">Analyzing Machine Data...</p>
+                <p className="text-xs font-semibold text-slate-400 mt-2">Retrieving Phase 4 Visualizations</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3 Skeleton */}
+          <Card className="bg-[#F8F9FA]/60 border-slate-200/30 rounded-[32px] shadow-lg flex flex-col h-[400px]">
+            <CardHeader className="border-b border-slate-200/50 p-6 shrink-0 flex flex-row items-center justify-between">
+              <div>
+                <div className="h-6 bg-slate-300 rounded w-48 mb-2"></div>
+                <div className="h-4 bg-slate-200 rounded w-64"></div>
+              </div>
+               <div className="w-8 h-8 animate-spin">
+                <MaxStrengthLogo />
+              </div>
+            </CardHeader>
+             <CardContent className="flex-1 p-6 flex flex-col items-center justify-center text-center">
+              <div className="flex flex-col items-center opacity-50">
+                <TrendingUp className="w-16 h-16 text-slate-400 mb-4" />
+                <p className="text-sm font-black uppercase tracking-widest text-slate-500">Calculating Trends...</p>
+                <p className="text-xs font-semibold text-slate-400 mt-2">Retrieving Phase 4 Visualizations</p>
+              </div>
+            </CardContent>
+          </Card>
+
         </div>
       )}
 
