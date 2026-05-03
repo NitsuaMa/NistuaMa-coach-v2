@@ -493,7 +493,7 @@ export function ClientHistoryCalendar({
                   </div>
                 </div>
 
-                <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-4">
+                <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-4 z-20">
                   {isEditMode && (
                     <Button
                       variant="ghost" 

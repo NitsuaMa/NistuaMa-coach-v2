@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, History, AlertTriangle, Activity, Settings2, Check, Loader2, Dumbbell, Calendar, Target, Edit3 } from 'lucide-react';
+import { Play, History, AlertTriangle, Activity, Settings2, Check, Loader2, Dumbbell, Calendar, Target, Edit3, X } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -67,7 +67,7 @@ export function PreSessionOverview({
 
     if (selectedRoutineType !== 'Create_A') {
       setSelectedRoutineType(type);
-      if (type === 'Create_B' || type === 'Free') setAdjustedMachineIds([]);
+      if ((type as string) === 'Create_B' || (type as string) === 'Free') setAdjustedMachineIds([]);
       else setAdjustedMachineIds(targetRoutine?.machineIds || routineA?.machineIds || []);
     }
   }, [targetRoutine, routineA, routineB]);
@@ -80,7 +80,7 @@ export function PreSessionOverview({
         sessionId: 'pre-session',
         clientId: client.id,
         trainerId: authTrainer.id,
-        trainerInitials: authTrainer.initials || authTrainer.firstName.substring(0, 2).toUpperCase(),
+        trainerInitials: authTrainer.initials || authTrainer.fullName.substring(0, 2).toUpperCase(),
         content: newNoteContent.trim(),
         priority: newNotePriority,
         createdAt: serverTimestamp()
@@ -125,7 +125,7 @@ export function PreSessionOverview({
   const displayNotes = viewAllNotes ? sessionNotes : highPriorityNotes;
 
   const lastRoutineName = lastSession 
-    ? routines.find(r => r.id === lastSession.routineId)?.name || (lastSession.sessionType === 'Free' ? 'Open Session' : lastSession.sessionType)
+    ? routines.find(r => r.id === lastSession.routineId)?.name || ((lastSession.sessionType as string) === 'Free' ? 'Open Session' : lastSession.sessionType)
     : 'None';
   
   const lastSessionDate = lastSession?.endTime?.toDate() 
@@ -146,9 +146,6 @@ export function PreSessionOverview({
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-transparent border-slate-700 text-slate-300 px-3 py-1 font-bold text-sm tracking-widest uppercase shadow-sm">
-              Session #{(client.sessionsCompleted || 0) + 1}
-            </Badge>
             {hasFlags && (
               <div className="px-3 py-1 bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-full flex items-center gap-2 shadow-sm">
                 <AlertTriangle className="w-4 h-4" />
@@ -296,7 +293,8 @@ export function PreSessionOverview({
                <ul className="space-y-3">
                  {trainerFocuses.map(focus => (
                    <li key={focus.id} className="text-sm font-medium text-slate-300 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50 leading-relaxed">
-                     {focus.text}
+                     <span className="font-bold text-[#38BDF8] block mb-1">{focus.category}</span>
+                     {focus.notes}
                    </li>
                  ))}
                </ul>
@@ -394,7 +392,7 @@ export function PreSessionOverview({
       />
 
       {/* 7. The Anchor CTA */}
-      <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-50">
+      <div className="fixed bottom-[100px] right-6 md:right-8 z-50">
         <Button 
           onClick={handleStart}
           className="h-20 px-8 md:px-12 rounded-[2rem] font-black uppercase text-lg sm:text-2xl tracking-[0.2em] bg-[#F06C22] hover:bg-[#d95d18] text-white shadow-[0_10px_30px_rgba(240,108,34,0.4)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-4 border border-[#F06C22]/50"

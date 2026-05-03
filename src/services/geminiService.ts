@@ -1,6 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 
-export const AI_SETUP_PROMPT = `You are an elite MaxStrength Fitness (MSF) Master Trainer and Reference Assistant. Your role is to guide floor trainers step-by-step through setting up clients safely and effectively on specific exercise machines.
+export const AI_SETUP_PROMPT = `You are an elite MaxStrength Fitness (MSF) clinical high-intensity strength coach. Your role is to guide floor trainers step-by-step through setting up clients safely and effectively on specific exercise machines.
+
+You must cross-reference the client's specific ailments with this machine's mechanics. If the client has a condition that conflicts with this machine (e.g., Lumbar issues on a Leg Press), your FIRST priority is to generate strict safety modifications, padding setups, or suggest skipping the machine entirely. Be concise, clinical, and biomechanically precise.
 
 CORE PHILOSOPHY:
 - Emphasize practical alignment (joint stacking, continuous tension) over theoretical alignment.
@@ -161,11 +163,15 @@ export interface SetupWizardResult {
 export async function generateMachineSetupGuide(
   machineName: string, 
   clientDetails: string, 
-  referenceText: string
+  referenceText: string,
+  clientAilments: string = '',
+  machineContraindications: string = ''
 ): Promise<SetupWizardResult> {
   const ai = getGenaiClient();
   const prompt = `TARGET MACHINE: ${machineName}
 CLIENT DETAILS/CONSTRAINTS: ${clientDetails}
+CLIENT CLINICAL PROFILE (AILMENTS): ${clientAilments}
+MACHINE KNOWN CONTRAINDICATIONS: ${machineContraindications}
 
 MSF REFERENCE TEXT:
 """
@@ -173,7 +179,7 @@ ${referenceText}
 """
 
 TASK:
-Analyze the MSF Reference Text. Generate a step-by-step setup guide for the trainer to get the client safely into the ${machineName}. Ensure any specific limitations mentioned in the Client Details are addressed using rules found in the Reference Text. Return ONLY the requested JSON object.`;
+Analyze the MSF Reference Text. Generate a step-by-step setup guide for the trainer to get the client safely into the ${machineName}. Ensure any specific limitations mentioned in the Client Details and Clinical Profile are addressed using rules found in the Reference Text. Specifically check against the Machine Known Contraindications. Return ONLY the requested JSON object.`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-pro',
@@ -258,11 +264,15 @@ export interface ClinicalStrategyResult {
 export async function generateClinicalStrategy(
   machineName: string,
   clientDetails: string,
-  referenceText: string
+  referenceText: string,
+  clientAilments: string = '',
+  machineContraindications: string = ''
 ): Promise<ClinicalStrategyResult> {
   const ai = getGenaiClient();
   const prompt = `TARGET MACHINE: ${machineName}
 CLIENT DETAILS/INJURIES: ${clientDetails}
+CLIENT CLINICAL PROFILE (AILMENTS): ${clientAilments}
+MACHINE KNOWN CONTRAINDICATIONS: ${machineContraindications}
 
 MSF REFERENCE TEXT (Including Quick Reference & Substitutions):
 """
@@ -270,7 +280,7 @@ ${referenceText}
 """
 
 TASK:
-Analyze the MSF Reference Text and the specific Client Details. Generate a clinical strategy and progression guide for the trainer. If the client's condition requires a Static Hold (SH) or Timed Static Contraction (TSC), detail the exact setup. If the exercise is completely contraindicated, provide the approved substitutions. Return ONLY the requested JSON object.`;
+Analyze the MSF Reference Text, the specific Client Details, and explicitly cross-reference the Client Clinical Profile against the Machine Known Contraindications. Generate a clinical strategy and progression guide for the trainer. If the client's condition requires a Static Hold (SH) or Timed Static Contraction (TSC), detail the exact setup. If the exercise is completely contraindicated, provide the approved substitutions. Return ONLY the requested JSON object.`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-pro',

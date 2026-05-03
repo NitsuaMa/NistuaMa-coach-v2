@@ -136,7 +136,16 @@ const DEFAULT_MACHINES: Machine[] = [
   { id: "m-hip-abd", name: "Hip Abduction", order: 3, settingOptions: ["Gap", "Back Pad", "Thigh Pads"] },
   { id: "m-leg-curl", name: "Leg Curl", order: 4, settingOptions: ["Gap", "Back Pad", "Ankle Pad"] },
   { id: "m-leg-ext", name: "Leg Extension", order: 5, settingOptions: ["Gap", "Back Pad"] },
-  { id: "m-leg-press", name: "Leg Press", order: 6, settingOptions: ["Gap", "Seat Angle", "Shoulder Pads", "Seat Distance"] },
+  { 
+    id: "m-leg-press", 
+    name: "Leg Press", 
+    order: 6, 
+    settingOptions: ["Gap", "Seat Angle", "Shoulder Pads", "Seat Distance"],
+    primaryMuscles: ["Quadriceps", "Gluteus Maximus"],
+    biomechanicalNotes: "Knee angle should not exceed 90 degrees at bottom turnaround to protect patellar tendon. High shear force potential on L4/L5 if posterior pelvic tilt occurs.",
+    contraindicatedFor: ["Lumbar Issues", "Knee Replacement", "Severe Patellar Tendonitis"],
+    modifications: "For Lumbar issues: Lock seat angle to P2 or P1, limit ROM to prevent pelvic tuck. For Knee issues: Reduce gap, set end-stop earlier to prevent deep flexion."
+  },
   { id: "m-pulldown", name: "Pulldown", order: 7, settingOptions: ["Gap", "Back Pad", "Seat", "Handles"] },
   { id: "m-chest-press", name: "Chest Press", order: 8, settingOptions: ["Gap", "Back Pad", "Seat"] },
   { id: "m-compound-row", name: "Compound Row", order: 9, settingOptions: ["Gap", "Chest Pad", "Handles"] },
@@ -148,7 +157,16 @@ const DEFAULT_MACHINES: Machine[] = [
   { id: "m-bicep", name: "Bicep", order: 15, settingOptions: ["Gap", "Seat"] },
   { id: "m-chest-fly", name: "Chest/Pec Fly", order: 16, settingOptions: ["Gap", "Back Pad", "Seat"] },
   { id: "m-lateral-raise", name: "Lateral Raise", order: 17, settingOptions: ["Gap", "Seat", "Handles"] },
-  { id: "m-lumbar", name: "Lumbar", order: 18, settingOptions: ["Gap", "Seat"] },
+  { 
+    id: "m-lumbar", 
+    name: "Lumbar", 
+    order: 18, 
+    settingOptions: ["Gap", "Seat"],
+    primaryMuscles: ["Erector Spinae"],
+    biomechanicalNotes: "Ensure rotation point aligns perfectly with the iliac crest. Focuses intensely on spinal extension.",
+    contraindicatedFor: ["Spinal Stenosis", "Herniated Disc (Acute)", "Spondylolisthesis"],
+    modifications: "Limit strictly to pain-free ROM. Decrease weight if form breaks or anterior pelvic tilt is lost."
+  },
   { id: "m-abs", name: "Seated Abdominals", order: 19, settingOptions: ["Gap", "Seat"] },
   { id: "m-torso-rotation", name: "Torso Rotation", order: 20, settingOptions: ["Gap", "Arms", "Seat"] },
 ];
@@ -1201,6 +1219,7 @@ export default function App() {
                 clientId={selectedClientId} 
                 clients={clients}
                 machines={machines}
+                schedules={schedules}
                 trainers={trainers}
                 user={user}
                 setView={setCurrentView}
@@ -4643,11 +4662,13 @@ function WorkoutTrackerView({
   authTrainer,
   trainerFocuses,
   isSyncing,
-  setIsSyncing
+  setIsSyncing,
+  schedules
 }: { 
   clientId: string | null, 
   clients: Client[], 
   machines: Machine[], 
+  schedules: any[],
   trainers: Trainer[], 
   user: FirebaseUser, 
   setView: (v: View) => void, 
@@ -5202,12 +5223,22 @@ function WorkoutTrackerView({
     try {
       const batch = writeBatch(db);
       
-      // 1. Update session status
+      // 1. Update session status and Data Stamp
       const sessionRef = doc(db, 'sessions', currentSession.id);
       const updateData: any = {
         status: 'Completed',
         endTime: serverTimestamp()
       };
+      
+      // Data Stamping for Analytics
+      if (selectedClient) {
+        if (selectedClient.age !== undefined) updateData.clientAge = selectedClient.age;
+        if (selectedClient.occupation) updateData.clientOccupation = selectedClient.occupation;
+        if (selectedClient.isRetired !== undefined) updateData.clientIsRetired = selectedClient.isRetired;
+        if (selectedClient.activityLevel) updateData.clientActivityLevel = selectedClient.activityLevel;
+        if (selectedClient.clinicalProfile) updateData.clientClinicalProfile = selectedClient.clinicalProfile;
+      }
+      
       if (postData?.clientFeel) {
         updateData.clientFeel = postData.clientFeel;
       }
@@ -5223,7 +5254,7 @@ function WorkoutTrackerView({
           sessionId: currentSession.id,
           clientId: selectedClient.id,
           trainerId: authTrainer.id,
-          trainerInitials: authTrainer.initials || authTrainer.firstName.substring(0, 2).toUpperCase(),
+          trainerInitials: authTrainer.initials || authTrainer.fullName.substring(0, 2).toUpperCase(),
           content: postData.noteContent,
           priority: postData.notePriority,
           createdAt: serverTimestamp()
@@ -5439,7 +5470,7 @@ function WorkoutTrackerView({
         routines={routines}
         trainerFocuses={trainerFocuses.filter(f => f.clientId === clientId)}
         sessionNotes={sessionNotes}
-        logs={Object.values(logs).filter((l: any) => l.clientId === clientId)}
+        logs={Object.values(logs).filter((l: any) => l.clientId === clientId) as any}
       />
     );
   }
@@ -5450,7 +5481,9 @@ function WorkoutTrackerView({
         client={selectedClient}
         session={currentSession}
         logs={Object.values(logs).filter((l: any) => l.sessionId === currentSession.id) as any}
+        allLogs={Object.values(logs).filter((l: any) => l.clientId === selectedClient.id) as any}
         authTrainer={authTrainer}
+        schedules={schedules}
         isSyncing={isSyncing}
         onFinalize={finalizeEndSession}
       />

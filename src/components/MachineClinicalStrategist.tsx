@@ -32,12 +32,14 @@ export function MachineClinicalStrategist({ client, machine }: Props) {
       ].join("\n");
 
       // We explicitly pull medical history and injuries from the client object for the prompt
-      const defaultDetails = clientDetails.trim() || `Client: ${client.firstName} ${client.lastName}. Medical History/Injuries: ${client.medicalHistory || 'None noted'}. Notes: ${client.globalNotes || 'None'}`;
+      const defaultDetails = clientDetails.trim() || `Client: ${client.firstName} ${client.lastName}. Medical History/Injuries: ${client.medicalHistory || 'None noted'}. Clinical Profile: ${(client.clinicalProfile || []).join(', ') || 'None noted'}. Notes: ${client.globalNotes || 'None'}`;
 
       const generated = await generateClinicalStrategy(
         machine.name,
         defaultDetails,
-        refTextContext
+        refTextContext,
+        client.clinicalProfile?.join(', ') || '',
+        machine.contraindicatedFor?.join(', ') || ''
       );
       
       setResult(generated);

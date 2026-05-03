@@ -8,30 +8,41 @@ interface ActiveSessionTimerProps {
 
 export function ActiveSessionTimer({ startTime, paused }: ActiveSessionTimerProps) {
   const [elapsed, setElapsed] = useState<number>(0);
+  const [accumulatedPauseTime, setAccumulatedPauseTime] = useState<number>(0);
+  const [pauseStart, setPauseStart] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!startTime) return;
+    
+    // When paused state turns on, record when we paused
+    if (paused && pauseStart === null) {
+      setPauseStart(Date.now());
+    } 
+    // When paused state turns off, sum up the time spent paused
+    else if (!paused && pauseStart !== null) {
+      setAccumulatedPauseTime(prev => prev + (Date.now() - pauseStart));
+      setPauseStart(null);
+    }
+  }, [paused, startTime]);
 
   useEffect(() => {
     if (!startTime || paused) return;
 
-    // Convert Firestore Timestamp to Date if necessary
     const start = startTime?.toDate ? startTime.toDate() : new Date(startTime);
-    
-    // When unpausing, we might need to adjust start time or just calculate diff?
-    // Actually, simple elapsed diff based on start works for "global" time.
-    // If it's a "total session time", it usually includes pause? 
-    // Usually timer PAUSE means the clock stops ticking.
-    // If I want it to stop, I need to track accumulated time.
     
     const updateTime = () => {
       const now = new Date();
-      const diff = Math.floor((now.getTime() - start.getTime()) / 1000);
-      setElapsed(diff > 0 ? diff : 0);
+      // Calculate total elapsed excluding the total time we spent paused
+      let diff = Math.floor((now.getTime() - accumulatedPauseTime - start.getTime()) / 1000);
+      if (diff < 0) diff = 0;
+      setElapsed(diff);
     };
 
     updateTime();
     const interval = setInterval(updateTime, 1000);
 
     return () => clearInterval(interval);
-  }, [startTime, paused]);
+  }, [startTime, paused, accumulatedPauseTime]);
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);

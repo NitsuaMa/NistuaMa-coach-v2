@@ -82,6 +82,10 @@ export interface Machine {
   order: number;
   imageUrl?: string;
   targetMuscles?: string; // Muscle group names or short desc
+  primaryMuscles?: string[];
+  biomechanicalNotes?: string;
+  contraindicatedFor?: string[];
+  modifications?: string;
   muscleImageUrl?: string; // Image showing targeted muscles
   formVideoUrl?: string;
   cueingTips?: string; // Peer-to-peer trainer tips
