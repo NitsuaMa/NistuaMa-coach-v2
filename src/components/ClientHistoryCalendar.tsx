@@ -446,7 +446,7 @@ export function ClientHistoryCalendar({
           setEditedLogs({});
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[95vh] w-full border border-slate-700 rounded-2xl bg-[#0A2E46] p-0 overflow-hidden shadow-2xl flex flex-col">
+        <DialogContent className="max-w-4xl sm:max-w-4xl max-h-[95vh] w-full border border-slate-700 rounded-2xl bg-[#0A2E46] p-0 overflow-hidden shadow-2xl flex flex-col">
           {selectedSession && (
             <>
               {/* Header Banner */}
@@ -521,9 +521,9 @@ export function ClientHistoryCalendar({
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#0A2E46]">
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#0A2E46] min-h-0">
                 {selectedSessionLogs.length > 0 ? (
-                  <div className="max-w-7xl mx-auto space-y-6 pb-20">
+                  <div className="max-w-7xl mx-auto space-y-6 pb-6">
                     {/* Machine Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {selectedSessionLogs.map((log) => {
@@ -742,7 +742,7 @@ export function ClientHistoryCalendar({
 
       {/* Delete Confirmation Modal */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent className="max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6">
+        <DialogContent className="max-w-md sm:max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
               <AlertCircle className="w-6 h-6 text-red-500" />
@@ -767,7 +767,7 @@ export function ClientHistoryCalendar({
 
       {/* Manual Session Log Dialog */}
       <Dialog open={showManualLog} onOpenChange={setShowManualLog}>
-        <DialogContent className="max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6">
+        <DialogContent className="max-w-md sm:max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
               <PlusCircle className="w-6 h-6 text-[#F06C22]" />
