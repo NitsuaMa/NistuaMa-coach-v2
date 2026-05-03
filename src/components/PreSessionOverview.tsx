@@ -1,30 +1,17 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { 
-  Play, 
-  History, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  ChevronRight,
-  Activity,
-  Dumbbell,
-  Settings2,
-  Check,
-  X
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, History, AlertTriangle, Activity, Settings2, Check, Loader2, Dumbbell, Calendar, Target, Edit3 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { SessionRoutineManagerModal } from './SessionRoutineManagerModal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { SessionRoutineManagerModal } from './SessionRoutineManagerModal';
 import { MACHINE_LIST } from '../data/machine-database';
-import { Client, Machine, ExerciseLog, Routine, WorkoutSession, TrainerFocus, SessionNote } from '../types';
+import { Client, Machine, ExerciseLog, Routine, WorkoutSession, TrainerFocus, SessionNote, Trainer } from '../types';
 
 interface PreSessionOverviewProps {
+  authTrainer: Trainer | null;
   client: Client;
   targetRoutine: Routine | null;
   lastSession: WorkoutSession | null;
@@ -34,9 +21,11 @@ interface PreSessionOverviewProps {
   routines: Routine[];
   trainerFocuses: TrainerFocus[];
   sessionNotes: SessionNote[];
+  logs?: ExerciseLog[];
 }
 
 export function PreSessionOverview({ 
+  authTrainer,
   client, 
   targetRoutine, 
   lastSession, 
@@ -46,20 +35,25 @@ export function PreSessionOverview({
   machines,
   routines,
   trainerFocuses,
-  sessionNotes
+  sessionNotes,
+  logs = []
 }: PreSessionOverviewProps & { machines: Machine[] }) {
-  const [isAdjusting, setIsAdjusting] = useState(false);
-  const [selectedRoutineType, setSelectedRoutineType] = useState<'A' | 'B' | 'Free' | 'Create_B' | 'Create_A'>('A');
+  const [selectedRoutineType, setSelectedRoutineType] = useState<'A' | 'B' | 'Free' | 'Create_A' | 'Create_B'>('A');
   const [adjustedMachineIds, setAdjustedMachineIds] = useState<string[]>([]);
   const [adjustmentNote, setAdjustmentNote] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [isRoutineManagerOpen, setIsRoutineManagerOpen] = useState(false);
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [newNotePriority, setNewNotePriority] = useState<'High' | 'Medium' | 'Low'>('High');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [viewAllNotes, setViewAllNotes] = useState(false);
 
   const routineA = routines.find(r => r.name.includes('Routine A'));
   const routineB = routines.find(r => r.name.includes('Routine B'));
-  
-  React.useEffect(() => {
-    let type: 'A' | 'B' | 'Free' | 'Create_B' | 'Create_A' = 'Free';
+
+  useEffect(() => {
+    let type: 'A' | 'B' | 'Free' | 'Create_A' | 'Create_B' = 'Create_A';
     if (targetRoutine) {
       if (targetRoutine.name.includes('Routine A')) type = 'A';
       else if (targetRoutine.name.includes('Routine B')) type = 'B';
@@ -67,7 +61,6 @@ export function PreSessionOverview({
       type = 'A';
     }
     
-    // If target is B, but B doesn't exist, we must be creating B
     if (type === 'B' && !routineB) {
       type = 'Create_B';
     }
@@ -79,334 +72,339 @@ export function PreSessionOverview({
     }
   }, [targetRoutine, routineA, routineB]);
 
-  const handleStart = () => {
-    if (selectedRoutineType === 'Create_B') {
-      onStart('B', adjustedMachineIds, adjustmentNote);
-    } else {
-      onStart(selectedRoutineType, adjustedMachineIds, adjustmentNote);
+  const handleSaveNote = async () => {
+    if (!newNoteContent.trim() || !authTrainer) return;
+    setIsSavingNote(true);
+    try {
+      await addDoc(collection(db, 'sessionNotes'), {
+        sessionId: 'pre-session',
+        clientId: client.id,
+        trainerId: authTrainer.id,
+        trainerInitials: authTrainer.initials || authTrainer.firstName.substring(0, 2).toUpperCase(),
+        content: newNoteContent.trim(),
+        priority: newNotePriority,
+        createdAt: serverTimestamp()
+      });
+      setNewNoteContent('');
+      setNewNotePriority('High');
+    } catch (e) {
+      console.error("Failed to save note", e);
+    } finally {
+      setIsSavingNote(false);
     }
+  };
+
+  const handleStart = () => {
+    onStart(
+      selectedRoutineType === 'Create_B' ? 'B' : selectedRoutineType === 'Create_A' ? 'A' : selectedRoutineType, 
+      isAdjusting || ['Free', 'Create_A', 'Create_B'].includes(selectedRoutineType) ? adjustedMachineIds : undefined, 
+      adjustmentNote
+    );
+  };
+
+  const getAverageQuality = (machineId: string) => {
+    const machineLogs = logs.filter(l => l.machineId === machineId && l.repQuality !== undefined);
+    if (machineLogs.length === 0) return null;
+    const sum = machineLogs.reduce((acc, l) => acc + l.repQuality!, 0);
+    const avg = sum / machineLogs.length;
+    if (avg >= 2.5) return { grade: 'A+', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', label: 'Elite' };
+    if (avg >= 1.5) return { grade: 'B', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', label: 'Good' };
+    return { grade: 'C+', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30', label: 'Needs Work' };
   };
 
   const orthopedics = client.medicalHistory;
   const globalNotes = client.globalNotes;
+  const clinicalFlags = client.clinicalProfile || [];
+  const hasFlags = clinicalFlags.length > 0 || !!orthopedics || !!client.clinicalNotes;
   
-  const selectedRoutineIds = isAdjusting || selectedRoutineType === 'Create_B' || selectedRoutineType === 'Create_A' || selectedRoutineType === 'Free' 
+  const selectedRoutineIds = (isAdjusting || ['Free', 'Create_A', 'Create_B'].includes(selectedRoutineType))
     ? adjustedMachineIds 
     : (selectedRoutineType === 'A' ? (routineA?.machineIds || []) : (routineB?.machineIds || []));
 
+  const highPriorityNotes = sessionNotes.filter(n => n.priority === 'High');
+  const displayNotes = viewAllNotes ? sessionNotes : highPriorityNotes;
+
+  const lastRoutineName = lastSession 
+    ? routines.find(r => r.id === lastSession.routineId)?.name || (lastSession.sessionType === 'Free' ? 'Open Session' : lastSession.sessionType)
+    : 'None';
+  
+  const lastSessionDate = lastSession?.endTime?.toDate() 
+    ? new Date(lastSession.endTime.toDate()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Never';
+
+  const scheduledRoutineName = targetRoutine?.name || (routineA?.name || 'Routine A');
+
   return (
-    <div className="flex-1 flex flex-col gap-6 p-6 md:p-8 h-full overflow-y-auto bg-[#0A2E46] pb-24 text-[#F8F9FA] relative">
-      {/* Header & Main Action */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-[#0e171e] p-6 rounded-3xl border border-slate-700/50 shadow-lg relative z-10">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-[#115E8D]/30 rounded-2xl flex items-center justify-center border border-[#38BDF8]/30 shadow-[0_0_15px_rgba(56,189,248,0.15)]">
-            <Activity className="w-7 h-7 text-[#38BDF8]" />
-          </div>
-          <div>
-            <h2 className="text-4xl md:text-4xl lg:text-5xl font-black uppercase italic tracking-tighter text-white">
+    <div className="flex-1 flex flex-col gap-6 p-6 md:p-8 h-full overflow-y-auto bg-[#0A2E46] text-[#F8F9FA] custom-scrollbar pb-32">
+      
+      {/* 1. Header & Main Action */}
+      <div className="flex items-start justify-between">
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-black uppercase tracking-tighter text-white">
               {client.firstName} {client.lastName}
             </h2>
-            <p className="text-[#38BDF8] font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mt-1">Pre-Session Briefing • Audit Mode</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-transparent border-slate-700 text-slate-300 px-3 py-1 font-bold text-sm tracking-widest uppercase shadow-sm">
+              Session #{(client.sessionsCompleted || 0) + 1}
+            </Badge>
+            {hasFlags && (
+              <div className="px-3 py-1 bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-full flex items-center gap-2 shadow-sm">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-xs font-black uppercase tracking-widest">{clinicalFlags.join(', ')}{clinicalFlags.length > 0 && orthopedics ? ' - ' : ''}{orthopedics}</span>
+              </div>
+            )}
+            {globalNotes && (
+              <div className="px-3 py-1 bg-blue-500/20 text-[#38BDF8] border border-[#38BDF8]/30 rounded-full flex items-center gap-2 shadow-sm">
+                <History className="w-4 h-4" />
+                <span className="text-xs font-black uppercase tracking-widest max-w-[400px] truncate">{globalNotes}</span>
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <Button variant="outline" onClick={onCancel} className="flex-1 md:flex-none rounded-xl font-bold uppercase text-[10px] sm:text-xs tracking-widest px-6 bg-white/5 border-white/10 hover:bg-white/10 text-white transition-all h-14">
-            Cancel
-          </Button>
-          {selectedRoutineType !== 'Create_A' && (
-            <Button 
-              onClick={handleStart}
-              className="flex-1 md:flex-none rounded-xl font-black uppercase text-xs sm:text-sm tracking-widest px-8 bg-[#F06C22] hover:bg-[#d95d18] text-white shadow-[0_4px_20px_rgba(240,108,34,0.4)] gap-2 h-14 transition-all"
-            >
-              <Play className="w-4 h-4 fill-current" />
-              {isAdjusting ? 'Start Adjusted Session' : 'Start Session'}
-            </Button>
-          )}
-        </div>
+        <Button variant="outline" onClick={onCancel} className="px-5 rounded-2xl font-bold uppercase text-[10px] tracking-widest bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300 h-10 shadow-sm transition-all hover:text-white">
+          <X className="w-4 h-4 mr-2" /> Cancel
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
-        {/* Left Column: Alerts, Stats, Routine Selection */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Tactical Alerts */}
-          {(orthopedics || globalNotes || (sessionNotes && sessionNotes.length > 0)) && (
-            <div className="space-y-3">
-              {orthopedics && (
-                <div className="bg-amber-900/30 border-l-[6px] border-amber-500 rounded-r-2xl p-4 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none">
-                     <AlertTriangle className="w-12 h-12 text-amber-500" />
-                  </div>
-                  <div className="flex items-center gap-2 mb-2 relative z-10">
-                    <AlertTriangle className="w-4 h-4 text-amber-500" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">Orthopedic Reminders</span>
-                  </div>
-                  <p className="text-xs text-amber-100/90 font-medium leading-relaxed relative z-10">{orthopedics}</p>
-                </div>
-              )}
-              {globalNotes && (
-                <div className="bg-blue-900/30 border-l-[6px] border-[#38BDF8] rounded-r-2xl p-4 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none">
-                     <History className="w-12 h-12 text-[#38BDF8]" />
-                  </div>
-                  <div className="flex items-center gap-2 mb-2 relative z-10">
-                    <History className="w-4 h-4 text-[#38BDF8]" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#38BDF8]">Relevant Notes</span>
-                  </div>
-                  <p className="text-xs text-blue-100/90 font-medium leading-relaxed relative z-10">{globalNotes}</p>
-                </div>
-              )}
-              {sessionNotes && sessionNotes.length > 0 && !globalNotes && !orthopedics && (
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#68717A] mb-2 block">Latest Trainer Note</span>
-                  <p className="text-xs text-white/80 italic">"{sessionNotes[0].content}"</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Metric Cards */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#0e171e] border border-slate-700/50 rounded-2xl p-4 flex flex-col justify-center items-center text-center shadow-lg hover:border-[#38BDF8]/30 transition-colors">
-              <span className="text-2xl font-black text-white">{Object.keys(historicalLifts).length || '0'}</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#68717A] mt-1">Total Machines</span>
-            </div>
-            <div className="bg-[#0e171e] border border-slate-700/50 rounded-2xl p-4 flex flex-col justify-center items-center text-center shadow-lg hover:border-[#38BDF8]/30 transition-colors">
-              <span className="text-2xl font-black text-white">
-                {lastSession?.startTime && lastSession?.endTime 
-                  ? `${Math.round((lastSession.endTime.toDate().getTime() - lastSession.startTime.toDate().getTime()) / 60000)}m`
-                  : 'N/A'}
-              </span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#68717A] mt-1">Avg Time</span>
-            </div>
-            <div className="bg-[#0e171e] border border-slate-700/50 rounded-2xl p-4 flex flex-col justify-center items-center text-center shadow-lg hover:border-[#38BDF8]/30 transition-colors">
-              <span className="text-xl font-black text-white px-1 truncate w-full">
-                {Object.values(historicalLifts).reduce((acc, { last }) => acc + (parseFloat(last.weight || '0') * parseInt(last.reps || '0')), 0).toLocaleString()} 
-              </span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#68717A] mt-1">Vol (lbs)</span>
-            </div>
-          </div>
-
-          {/* Routine Selection Dashboard Feel */}
-          <div className="bg-[#0e171e] border border-slate-700/50 rounded-3xl p-5 shadow-lg space-y-4">
-             <div>
-                <span className="text-[10px] font-black text-[#68717A] uppercase tracking-widest">Sequence Intelligence</span>
-                <h3 className="text-xl font-black text-white mt-1">Today's Routine</h3>
-             </div>
-             
-             {/* Styled Tab/Dropdown equivalent */}
-             <div className="grid grid-cols-2 gap-2">
-                <button 
-                  onClick={() => { setSelectedRoutineType('A'); setAdjustedMachineIds(routineA?.machineIds || []); }}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
-                    selectedRoutineType === 'A' || selectedRoutineType === 'Create_A' ? 'bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-white/5 border-white/5 text-[#94A3B8] hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span className="font-black italic uppercase">Routine A</span>
-                </button>
-                {routineB || client.isRoutineBActive ? (
-                  <button 
-                    onClick={() => { setSelectedRoutineType('B'); setAdjustedMachineIds(routineB?.machineIds || []); }}
-                    className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
-                      selectedRoutineType === 'B' ? 'bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-white/5 border-white/5 text-[#94A3B8] hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <span className="font-black italic uppercase">Routine B</span>
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => { setSelectedRoutineType('Create_B'); setAdjustedMachineIds([]); }}
-                    className={`p-3 rounded-xl border border-dashed flex flex-col items-center justify-center text-center transition-all ${
-                      selectedRoutineType === 'Create_B' ? 'bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-white/5 border-white/10 text-[#94A3B8] hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <span className="font-black italic uppercase">Create B</span>
-                  </button>
-                )}
-                <button 
-                  onClick={() => { setSelectedRoutineType('Free'); setAdjustedMachineIds([]); }}
-                  className={`p-3 rounded-xl border col-span-2 flex flex-col items-center justify-center text-center transition-all ${
-                    selectedRoutineType === 'Free' ? 'bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]' : 'bg-white/5 border-white/5 text-[#94A3B8] hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span className="font-black italic uppercase">Open Session (Custom)</span>
-                </button>
-             </div>
-
-             {(selectedRoutineType === 'Create_B' || selectedRoutineType === 'Create_A' || selectedRoutineType === 'Free') && (
-               <div className="space-y-4 pt-4 border-t border-white/10 animate-in slide-in-from-top-2">
-                 <div className="space-y-2">
-                   <div className="flex items-center justify-between">
-                     <Label className="text-[9px] font-black uppercase tracking-widest text-[#68717A]">
-                       Adjust Machines
-                     </Label>
-                     {selectedRoutineType === 'Create_A' && adjustedMachineIds.length > 0 && (
-                       <Button 
-                         size="sm"
-                         disabled={isSaving}
-                         onClick={async () => {
-                           setIsSaving(true);
-                           try {
-                             if (routineA && routineA.id) {
-                               await updateDoc(doc(db, 'routines', routineA.id), { machineIds: adjustedMachineIds });
-                             } else {
-                               await addDoc(collection(db, 'routines'), {
-                                 clientId: client.id,
-                                 name: 'Routine A',
-                                 machineIds: adjustedMachineIds,
-                                 createdAt: serverTimestamp()
-                               });
-                             }
-                             setSelectedRoutineType('A');
-                           } finally {
-                             setIsSaving(false);
-                           }
-                         }}
-                         className="bg-[#38BDF8] hover:bg-[#0284c7] text-[#0A2E46] font-black uppercase tracking-widest h-7 text-[9px]"
-                       >
-                         Confirm Routine A
-                       </Button>
-                     )}
-                   </div>
-                   <div className="max-h-[250px] overflow-y-auto pr-2 space-y-2 bg-[#0A2E46]/50 rounded-xl p-3 border border-white/5">
-                     {machines.map(m => {
-                       const isSelected = adjustedMachineIds.includes(m.id);
-                       return (
-                         <button
-                           key={m.id}
-                           onClick={() => {
-                             setAdjustedMachineIds(prev => 
-                               prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]
-                             );
-                           }}
-                           className={`w-full flex items-center justify-between p-2.5 rounded-lg border ${
-                             isSelected ? 'bg-[#38BDF8]/10 border-[#38BDF8]/30 hover:bg-[#38BDF8]/20' : 'bg-transparent border-transparent hover:bg-white/5'
-                           }`}
-                         >
-                           <span className={`text-[10px] font-black uppercase ${isSelected ? 'text-[#38BDF8]' : 'text-[#94A3B8]'}`}>
-                             {m.name}
-                           </span>
-                           {isSelected && <Check className="w-3.5 h-3.5 text-[#38BDF8]" />}
-                         </button>
-                       );
-                     })}
-                   </div>
-                 </div>
-               </div>
-             )}
-          </div>
+      {/* 2. Routine Context Panel */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-[#0e171e] p-6 rounded-[2rem] border border-[#38BDF8]/30 shadow-[0_0_20px_rgba(56,189,248,0.1)] relative overflow-hidden">
+           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+             <Target className="w-24 h-24 text-[#38BDF8]" />
+           </div>
+           <span className="text-[10px] font-black uppercase tracking-widest text-[#38BDF8] relative z-10">Scheduled Today</span>
+           <div className="text-3xl font-black italic uppercase text-white mt-1 relative z-10 tracking-tight">
+             {scheduledRoutineName}
+           </div>
         </div>
-
-        {/* Right Column: Execution List (Routine Overview) */}
-        <div className="lg:col-span-8">
-           <div className="bg-[#0e171e] border border-slate-700/50 rounded-3xl p-6 shadow-lg h-full flex flex-col max-h-[800px]">
-              <div className="mb-6 flex items-center justify-between shrink-0">
-                 <div>
-                   <span className="text-[10px] font-black uppercase tracking-widest text-[#68717A]">Execution List</span>
-                   <h3 className="text-2xl font-black text-white mt-1">Routine Overview</h3>
-                 </div>
-                 <div className="flex flex-col items-end gap-2">
-                    <Badge className="bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/30 uppercase font-black tracking-widest text-[9px] flex items-center gap-1.5 px-3 py-1">
-                      <Dumbbell className="w-3 h-3" />
-                      {selectedRoutineIds.length} Machines
-                    </Badge>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setIsRoutineManagerOpen(true)}
-                      className="h-8 px-3 text-[9px] font-black uppercase tracking-widest border-slate-600 text-white hover:bg-white/10"
-                    >
-                      <Settings2 className="w-3 h-3 mr-1.5" />
-                      Edit Machine Order
-                    </Button>
-                 </div>
-              </div>
-              
-              <SessionRoutineManagerModal 
-                isOpen={isRoutineManagerOpen}
-                onOpenChange={setIsRoutineManagerOpen}
-                currentMachineIds={selectedRoutineIds}
-                machines={machines}
-                onSave={(newIds) => {
-                  setAdjustedMachineIds(newIds);
-                  setIsAdjusting(true);
-                }}
-              />
-              
-              <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                 {selectedRoutineType === 'A' && (!routineA || (routineA.machineIds || []).length === 0) ? (
-                   <div className="flex flex-col items-center justify-center p-12 h-full border-[3px] border-dashed border-slate-600 rounded-3xl bg-[#0A2E46]/30">
-                     <Dumbbell className="w-14 h-14 text-slate-500 mb-5" />
-                     <p className="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-8 text-center max-w-[200px] leading-relaxed">Client lacks an established A Routine</p>
-                     <Button 
-                       onClick={() => { setSelectedRoutineType('Create_A'); setAdjustedMachineIds([]); }}
-                       className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase text-xs tracking-widest px-8 py-6 rounded-xl shadow-[0_4px_20px_rgba(240,108,34,0.4)] transition-all flex items-center gap-2"
-                     >
-                       <Settings2 className="w-4 h-4" />
-                       Initialize A Routine
-                     </Button>
-                   </div>
-                 ) : selectedRoutineType === 'Create_A' && selectedRoutineIds.length === 0 ? (
-                   <div className="flex flex-col items-center justify-center p-12 h-full opacity-50">
-                     <Dumbbell className="w-12 h-12 text-[#68717A] mb-4" />
-                     <p className="text-xs font-black uppercase tracking-widest text-[#68717A] text-center max-w-[200px]">Add machines from the sequence intelligence selector</p>
-                   </div>
-                 ) : selectedRoutineIds.length === 0 ? (
-                   <div className="flex flex-col items-center justify-center p-12 h-full opacity-50">
-                     <Dumbbell className="w-12 h-12 text-[#68717A] mb-4" />
-                     <p className="text-xs font-black uppercase tracking-widest text-[#68717A]">No machines selected</p>
-                   </div>
-                 ) : (
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4">
-                     {selectedRoutineIds.map((mId, index) => {
-                       const machine = machines.find(m => m.id === mId);
-                       const knowledge = MACHINE_LIST.find(k => k.id === mId) || MACHINE_LIST.find(k => k.name === machine?.name);
-                       
-                       return (
-                         <div key={mId} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col gap-3 group hover:border-[#38BDF8]/30 hover:bg-white/10 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="w-7 h-7 rounded-lg bg-[#0A2E46] border border-white/10 flex items-center justify-center shrink-0 shadow-sm">
-                                 <span className="text-[#38BDF8] font-black text-[10px]">{index + 1}</span>
-                              </div>
-                              <h4 className="text-sm font-black uppercase text-white truncate group-hover:text-[#38BDF8] transition-colors">{machine?.name || mId}</h4>
-                            </div>
-                            
-                            {(knowledge?.setup || knowledge?.execution) && (
-                              <div className="flex flex-col gap-1.5 mt-auto">
-                                {knowledge?.setup && (
-                                  <div className="bg-[#0A2E46] px-2.5 py-2 rounded-lg border border-white/5 flex gap-2 items-center">
-                                     <span className="text-[8px] font-black uppercase tracking-widest text-[#68717A] shrink-0 min-w-[36px]">Setup</span>
-                                     <span className="text-[10px] text-white/90 font-medium truncate">{knowledge.setup}</span>
-                                  </div>
-                                )}
-                                {knowledge?.execution && (
-                                  <div className="bg-[#0A2E46] px-2.5 py-2 rounded-lg border border-white/5 flex gap-2 items-center">
-                                     <span className="text-[8px] font-black uppercase tracking-widest text-[#68717A] shrink-0 min-w-[36px]">Turn</span>
-                                     <span className="text-[10px] text-white/90 font-medium truncate">{knowledge.execution}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                         </div>
-                       );
-                     })}
-                   </div>
-                 )}
-              </div>
+        
+        <div className="bg-slate-800/50 p-6 rounded-[2rem] border border-slate-700/50 relative overflow-hidden flex flex-col justify-end">
+           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+             <Calendar className="w-24 h-24 text-white" />
+           </div>
+           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 relative z-10">Last Performed</span>
+           <div className="text-xl font-black italic uppercase text-slate-300 mt-1 relative z-10 tracking-tight flex items-center gap-3">
+             {lastRoutineName} <span className="text-sm text-slate-500 not-italic uppercase tracking-widest">on {lastSessionDate}</span>
            </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column (Main Focus) */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          
+          {/* 3. Today's Machine List & Quality Averages */}
+          <div className="bg-[#0e171e] border border-slate-700/50 rounded-[2.5rem] p-6 sm:p-8 shadow-xl relative min-h-[400px] flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black uppercase tracking-widest text-white flex items-center gap-3">
+                <Dumbbell className="w-5 h-5 text-slate-500" />
+                Execution Sequence
+              </h3>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setIsRoutineManagerOpen(true)}
+                className="bg-transparent border-slate-700 hover:bg-slate-800 text-slate-300 font-bold tracking-widest uppercase text-[10px] rounded-xl h-8"
+              >
+                <Edit3 className="w-3.5 h-3.5 mr-2" /> Adjust Today
+              </Button>
+            </div>
+            
+            <div className="flex-1 space-y-3">
+              {selectedRoutineIds.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center p-12 h-full opacity-50">
+                   <p className="text-xs font-black uppercase tracking-widest text-[#68717A]">No machines selected</p>
+                 </div>
+              ) : (
+                selectedRoutineIds.map((mId, idx) => {
+                  const machine = machines.find(m => m.id === mId);
+                  const avgQ = getAverageQuality(mId);
+                  
+                  return (
+                    <div key={mId} className="bg-slate-800/80 border border-slate-700 rounded-2xl p-4 flex items-center justify-between group hover:border-slate-500 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 shadow-inner">
+                          <span className="text-slate-400 font-black text-[10px]">{idx + 1}</span>
+                        </div>
+                        <h4 className="text-sm font-black uppercase text-white truncate max-w-[200px] sm:max-w-xs">{machine?.name || mId}</h4>
+                      </div>
+                      
+                      {avgQ ? (
+                        <div className={`px-3 py-1.5 rounded-lg border ${avgQ.color} flex items-center gap-2 shrink-0`}>
+                          <span className="text-[10px] font-black uppercase tracking-widest">Avg Qly: {avgQ.grade}</span>
+                        </div>
+                      ) : (
+                        <div className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-500 flex items-center shrink-0">
+                          <span className="text-[10px] font-black uppercase tracking-widest">No Data</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* 4. Routine Action Controls (Bottom of List) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-6 border-t border-slate-800">
+               <button 
+                 onClick={() => { setSelectedRoutineType('A'); setAdjustedMachineIds(routineA?.machineIds || []); }}
+                 className={`p-3 rounded-xl font-black italic uppercase tracking-widest text-[10px] border transition-all ${
+                   selectedRoutineType === 'A' || selectedRoutineType === 'Create_A' 
+                     ? 'bg-slate-700 border-slate-500 text-white shadow-md' 
+                     : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+                 }`}
+               >
+                 {routineA ? 'Load Routine A' : 'Initialize Routine A'}
+               </button>
+               <button 
+                 onClick={() => { setSelectedRoutineType('B'); setAdjustedMachineIds(routineB?.machineIds || []); }}
+                 className={`p-3 rounded-xl font-black italic uppercase tracking-widest text-[10px] border transition-all ${
+                   selectedRoutineType === 'B' || selectedRoutineType === 'Create_B'
+                     ? 'bg-slate-700 border-slate-500 text-white shadow-md' 
+                     : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+                 }`}
+               >
+                 {routineB ? 'Load Routine B' : 'Initialize Routine B'}
+               </button>
+               <button 
+                 onClick={() => { setSelectedRoutineType('Free'); setAdjustedMachineIds([]); }}
+                 className={`p-3 rounded-xl font-black italic uppercase tracking-widest text-[10px] border transition-all ${
+                   selectedRoutineType === 'Free' 
+                     ? 'bg-slate-700 border-slate-500 text-white shadow-md' 
+                     : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white'
+                 }`}
+               >
+                 Custom / Open Session
+               </button>
+            </div>
+          </div>
+          
+        </div>
+
+        {/* Right Column (Focus & Notes) */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          
+          {/* 5. Trainer Focuses */}
+          <div className="bg-slate-800 border border-slate-700 rounded-[2rem] p-6 shadow-lg">
+             <span className="text-[10px] font-black uppercase tracking-widest text-[#38BDF8] flex items-center gap-2 mb-4">
+               <Activity className="w-3.5 h-3.5" /> Overarching Goals
+             </span>
+             <h3 className="text-xl font-black text-white mb-4">Trainer Focuses</h3>
+             {trainerFocuses.length > 0 ? (
+               <ul className="space-y-3">
+                 {trainerFocuses.map(focus => (
+                   <li key={focus.id} className="text-sm font-medium text-slate-300 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50 leading-relaxed">
+                     {focus.text}
+                   </li>
+                 ))}
+               </ul>
+             ) : (
+               <p className="text-sm text-slate-500 italic font-medium">No active focuses set for this client.</p>
+             )}
+          </div>
+
+          {/* 6. Prioritized Notes (Moved to Bottom) */}
+          <div className="bg-[#0e171e] border border-slate-700/50 rounded-[2rem] p-6 shadow-xl flex-1 flex flex-col min-h-[400px]">
+             <div className="flex justify-between items-center mb-4">
+               <div>
+                  <span className="text-[10px] font-black text-[#68717A] uppercase tracking-widest">Knowledge Base</span>
+                  <h3 className="text-xl font-black text-white mt-1">Pre-Session Notes</h3>
+               </div>
+             </div>
+             
+             {/* Smart Filtering */}
+             <div className="flex bg-slate-800/80 p-1 rounded-xl mb-4 shrink-0">
+               <button
+                 onClick={() => setViewAllNotes(false)}
+                 className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                   !viewAllNotes ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-500 hover:text-white'
+                 }`}
+               >
+                 High Priority
+               </button>
+               <button
+                 onClick={() => setViewAllNotes(true)}
+                 className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                   viewAllNotes ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-500 hover:text-white'
+                 }`}
+               >
+                 All Notes
+               </button>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-2 mb-4">
+               {displayNotes.length === 0 ? (
+                 <p className="text-xs text-slate-500 text-center font-medium italic p-4">No notes found.</p>
+               ) : (
+                 displayNotes.map(note => (
+                   <div key={note.id || note.createdAt?.toMillis()} className={`bg-slate-800/50 p-3.5 rounded-2xl border ${note.priority === 'High' ? 'border-l-4 border-l-amber-500 border-slate-700/50 shadow-sm' : 'border-slate-700/50'}`}>
+                     <div className="flex justify-between items-start mb-2">
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{note.trainerInitials || 'System'}</span>
+                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{note.createdAt?.toDate ? new Date(note.createdAt.toDate()).toLocaleDateString() : ''}</span>
+                     </div>
+                     <p className="text-[13px] text-white/90 leading-relaxed font-medium">{note.content}</p>
+                   </div>
+                 ))
+               )}
+             </div>
+
+             {/* Entry Form */}
+             <div className="space-y-3 bg-slate-900/50 p-4 rounded-3xl border border-slate-800 shrink-0">
+               <Textarea 
+                 placeholder="Log new note..."
+                 value={newNoteContent}
+                 onChange={e => setNewNoteContent(e.target.value)}
+                 className="bg-transparent border-none focus-visible:ring-0 text-white min-h-[60px] resize-none text-sm p-0 placeholder:text-slate-600 font-medium"
+               />
+               <div className="flex gap-2">
+                 <Select value={newNotePriority} onValueChange={(v: any) => setNewNotePriority(v)}>
+                   <SelectTrigger className="w-[110px] bg-slate-800 border-slate-700 text-white font-bold h-9 text-xs rounded-xl">
+                     <SelectValue />
+                   </SelectTrigger>
+                   <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                     <SelectItem value="High" className="font-bold text-amber-500 text-xs">High</SelectItem>
+                     <SelectItem value="Medium" className="font-bold text-xs">Medium</SelectItem>
+                     <SelectItem value="Low" className="font-bold text-slate-400 text-xs">Low</SelectItem>
+                   </SelectContent>
+                 </Select>
+                 <Button 
+                   onClick={handleSaveNote}
+                   disabled={!newNoteContent.trim() || isSavingNote}
+                   className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black uppercase tracking-widest h-9 text-[10px] rounded-xl"
+                 >
+                   {isSavingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Note'}
+                 </Button>
+               </div>
+             </div>
+          </div>
+        </div>
+      </div>
+
+      <SessionRoutineManagerModal 
+        isOpen={isRoutineManagerOpen}
+        onOpenChange={setIsRoutineManagerOpen}
+        currentMachineIds={selectedRoutineIds}
+        machines={machines}
+        onSave={(newIds) => {
+          setAdjustedMachineIds(newIds);
+          setIsAdjusting(true);
+        }}
+      />
+
+      {/* 7. The Anchor CTA */}
+      <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-50">
+        <Button 
+          onClick={handleStart}
+          className="h-20 px-8 md:px-12 rounded-[2rem] font-black uppercase text-lg sm:text-2xl tracking-[0.2em] bg-[#F06C22] hover:bg-[#d95d18] text-white shadow-[0_10px_30px_rgba(240,108,34,0.4)] transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-4 border border-[#F06C22]/50"
+        >
+          <Play className="w-6 h-6 sm:w-8 sm:h-8 fill-current" />
+          Start Session
+        </Button>
+      </div>
+
     </div>
   );
 }
 
-const Zap = ({ className }: { className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 24 24" 
-    fill="currentColor" 
-    stroke="none" 
-    className={className}
-  >
-    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-  </svg>
-);

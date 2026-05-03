@@ -58,6 +58,7 @@ export interface Client {
   goals?: string;
   globalNotes?: string;
   leadSource?: string;
+  referredBy?: string;
   notes?: string;
   events?: ClientEvent[];
   isRoutineBActive?: boolean;
@@ -144,6 +145,7 @@ export interface SessionNote {
   trainerId?: string;
   trainerInitials: string;
   content: string;
+  priority?: 'High' | 'Medium' | 'Low';
   createdAt: any;
 }
 

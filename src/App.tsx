@@ -8,6 +8,7 @@ import {
   Users, 
   Plus, 
   AlertCircle,
+  AlertTriangle,
   LogOut,
   UserCircle,
   ShieldCheck,
@@ -85,7 +86,7 @@ import { OperationType, handleFirestoreError } from './lib/firestore-errors';
 import { hashPin } from './lib/auth-utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TrainerControlHubView } from './components/TrainerControlHubView';
-import { OwnerDashboardView } from './components/OwnerDashboardView';
+import { InsightsDashboardView } from './components/InsightsDashboardView';
 import { ClientProfileView } from './components/ClientProfileView';
 import { CalendarView } from './components/CalendarView';
 import { PinLoginView } from './components/PinLoginView';
@@ -93,6 +94,7 @@ import { ProfilesView } from './components/ProfilesView';
 import { ClientDirectoryView } from './components/ClientDirectoryView';
 import { TrainerProfileView } from './components/TrainerProfileView';
 import { PreSessionOverview } from './components/PreSessionOverview';
+import { PostSessionBriefingView } from './components/PostSessionBriefingView';
 import { ConsultationSetupWizard } from './components/ConsultationSetupWizard';
 import { ConsultationWizard } from './components/ConsultationWizard';
 import { CreateClientModal } from './components/CreateClientModal';
@@ -988,6 +990,7 @@ export default function App() {
   if (newClientOnboardingName !== null) {
     return (
       <CreateClientModal 
+        clients={clients}
         initialName={newClientOnboardingName}
         onClientCreated={(clientId, routeToImporter) => {
           setSelectedClientId(clientId);
@@ -1279,7 +1282,7 @@ export default function App() {
               />
             )}
             {currentView === 'dashboard' && (
-              <OwnerDashboardView 
+              <InsightsDashboardView 
                 clients={clients} 
                 trainers={trainers} 
                 machines={machines} 
@@ -3103,6 +3106,13 @@ function ClientsView({
 
                             const color = TRAINER_COLORS[tIdx % TRAINER_COLORS.length];
                             const isCompleted = session && (session.status === 'Completed' || session.startTime.toDate() < now);
+                            const clientObj = session ? findClientForSession(session) : null;
+                            const sessionNumber = clientObj ? sessions.filter(s => s.clientId === clientObj.id).length + 1 : 1;
+                            const hasAlert = clientObj && (
+                              (clientObj.clinicalProfile && clientObj.clinicalProfile.length > 0) ||
+                              !!clientObj.clinicalNotes ||
+                              !!clientObj.medicalHistory
+                            );
 
                             return (
                               <td 
@@ -3112,9 +3122,8 @@ function ClientsView({
                                 {session ? (
                                   <div
                                     onClick={() => {
-                                      const client = findClientForSession(session);
-                                      if (client) {
-                                        onSelectClient(client.id!);
+                                      if (clientObj) {
+                                        onSelectClient(clientObj.id!);
                                         setView('profile');
                                       } else {
                                         setLinkingSession(session);
@@ -3122,17 +3131,20 @@ function ClientsView({
                                       }
                                     }}
                                     className={cn(
-                                      "p-3 rounded-xl border-l-4 flex flex-col gap-0.5 hover:scale-[1.02] transition-all cursor-pointer shadow-md h-full",
-                                      isCompleted ? 'bg-slate-900/60 border-slate-700 opacity-60 grayscale' : cn("bg-slate-800", color.border)
+                                      "p-2 rounded-xl flex flex-col justify-between hover:border-[#38BDF8]/40 hover:bg-slate-700/80 transition-all cursor-pointer h-full border overflow-hidden",
+                                      isCompleted ? 'bg-slate-900/80 border-slate-700/50 opacity-60 grayscale' : "bg-slate-800 border-slate-700"
                                     )}
                                   >
-                                    <span className="text-[10px] font-bold text-slate-400 tabular-nums leading-none tracking-tight">
-                                      {slot} - {session.endTime ? get12HourStr(session.endTime.toDate()) : '30m'}
+                                    <span className="text-sm font-bold text-white leading-tight break-words line-clamp-2">
+                                      {session.clientName}
                                     </span>
-                                    <div className="flex justify-between items-start">
-                                      <span className="text-sm font-black truncate text-white leading-tight">
-                                        {session.clientName}
+                                    <div className="flex items-center justify-between mt-auto pt-1">
+                                      <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
+                                        Session #{sessionNumber}
                                       </span>
+                                      {hasAlert && (
+                                        <AlertTriangle className="w-[14px] h-[14px] text-amber-500 shrink-0" />
+                                      )}
                                     </div>
                                   </div>
                                 ) : (
@@ -4693,6 +4705,7 @@ function WorkoutTrackerView({
   const [isShowingSessionNotes, setIsShowingSessionNotes] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
+  const [isPostSessionMode, setIsPostSessionMode] = useState(false);
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [pendingAssignSession, setPendingAssignSession] = useState<WorkoutSession | null>(null);
   const [isSessionRoutineManagerOpen, setIsSessionRoutineManagerOpen] = useState(false);
@@ -5182,7 +5195,7 @@ function WorkoutTrackerView({
     setShowEndConfirmation(true);
   };
 
-  const finalizeEndSession = async () => {
+  const finalizeEndSession = async (postData?: { clientFeel: string; noteContent: string; notePriority: 'High' | 'Medium' | 'Low' }) => {
     if (!currentSession?.id) return;
     
     setIsSyncing(true);
@@ -5195,10 +5208,27 @@ function WorkoutTrackerView({
         status: 'Completed',
         endTime: serverTimestamp()
       };
+      if (postData?.clientFeel) {
+        updateData.clientFeel = postData.clientFeel;
+      }
       if (activeSessionNotes.trim()) {
         updateData.notes = activeSessionNotes.trim();
       }
       batch.update(sessionRef, updateData);
+
+      // Post-session note
+      if (postData?.noteContent && selectedClient && authTrainer) {
+        const noteRef = doc(collection(db, 'sessionNotes'));
+        batch.set(noteRef, {
+          sessionId: currentSession.id,
+          clientId: selectedClient.id,
+          trainerId: authTrainer.id,
+          trainerInitials: authTrainer.initials || authTrainer.firstName.substring(0, 2).toUpperCase(),
+          content: postData.noteContent,
+          priority: postData.notePriority,
+          createdAt: serverTimestamp()
+        });
+      }
 
       // 2. Sync all local logs
       const sessionLogs = Object.values(logs).filter((l: any) => l.sessionId === currentSession.id);
@@ -5237,7 +5267,9 @@ function WorkoutTrackerView({
       setCurrentSession(null);
       setActiveSessionNotes('');
       setShowEndConfirmation(false);
-      setView('profile');
+      setIsPostSessionMode(false);
+      setSelectedClientId(null);
+      setView('clients');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'sessions');
     } finally {
@@ -5396,6 +5428,7 @@ function WorkoutTrackerView({
 
     return (
       <PreSessionOverview 
+        authTrainer={authTrainer}
         client={selectedClient}
         targetRoutine={targetRoutine}
         lastSession={sessions.filter(s => s.status === 'Completed')[0] || null}
@@ -5406,6 +5439,20 @@ function WorkoutTrackerView({
         routines={routines}
         trainerFocuses={trainerFocuses.filter(f => f.clientId === clientId)}
         sessionNotes={sessionNotes}
+        logs={Object.values(logs).filter((l: any) => l.clientId === clientId)}
+      />
+    );
+  }
+
+  if (isPostSessionMode && currentSession && selectedClient) {
+    return (
+      <PostSessionBriefingView
+        client={selectedClient}
+        session={currentSession}
+        logs={Object.values(logs).filter((l: any) => l.sessionId === currentSession.id) as any}
+        authTrainer={authTrainer}
+        isSyncing={isSyncing}
+        onFinalize={finalizeEndSession}
       />
     );
   }
@@ -5703,15 +5750,14 @@ function WorkoutTrackerView({
                     Keep Training
                   </Button>
                   <Button 
-                    className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary/20"
-                    onClick={finalizeEndSession}
+                    className="h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-primary/20 bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => {
+                      setShowEndConfirmation(false);
+                      setIsPostSessionMode(true);
+                    }}
                     disabled={isSyncing}
                   >
-                    {isSyncing ? (
-                      <>
-                        <RotateCcw className="w-4 h-4 mr-2 animate-spin" /> Syncing...
-                      </>
-                    ) : "Confirm End"}
+                    Confirm End
                   </Button>
                 </div>
               </div>
