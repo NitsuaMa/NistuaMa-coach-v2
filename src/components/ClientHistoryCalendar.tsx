@@ -446,7 +446,7 @@ export function ClientHistoryCalendar({
           setEditedLogs({});
         }
       }}>
-        <DialogContent className="w-screen h-screen max-w-none m-0 border-0 rounded-none bg-[#0A2E46] p-0 overflow-hidden shadow-2xl flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[95vh] w-full border border-slate-700 rounded-2xl bg-[#0A2E46] p-0 overflow-hidden shadow-2xl flex flex-col">
           {selectedSession && (
             <>
               {/* Header Banner */}
@@ -477,28 +477,20 @@ export function ClientHistoryCalendar({
                     <Button
                       variant="ghost" 
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="text-red-500/50 hover:text-red-500 hover:bg-red-500/10 h-12 w-12 p-0 rounded-xl transition-all shrink-0"
+                      className="text-red-500/50 hover:text-red-500 hover:bg-red-500/10 h-10 w-10 p-0 rounded-xl transition-all shrink-0"
                       title="Delete Session"
                     >
-                      <Trash2 className="w-6 h-6" />
+                      <Trash2 className="w-5 h-5" />
                     </Button>
                   )}
-                  {isEditMode ? (
-                    <Button 
-                      onClick={handleBatchUpdate}
-                      disabled={isSaving}
-                      className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase tracking-widest h-12 px-8 rounded-xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] shrink-0"
-                    >
-                      {isSaving ? "Saving..." : "[ SAVE HISTORICAL CHANGES ]"}
-                    </Button>
-                  ) : (
+                  {!isEditMode && (
                     <Button
                       variant="outline"
                       onClick={() => {
                         setEditedSessionNotes(selectedSession.notes || '');
                         setIsEditMode(true);
                       }}
-                      className="font-black uppercase tracking-widest h-12 px-8 rounded-xl border-white/20 text-white bg-white/10 hover:bg-white/20 transition-all shrink-0"
+                      className="font-black uppercase tracking-widest h-10 px-6 rounded-xl border-white/20 text-white bg-white/10 hover:bg-white/20 transition-all shrink-0"
                     >
                       Enter Edit Mode
                     </Button>
@@ -578,10 +570,10 @@ export function ClientHistoryCalendar({
                                   </div>
 
                                   {/* Weight Stepper */}
-                                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-1.5 flex items-center justify-between">
+                                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-1.5 flex items-center justify-between shrink-0">
                                      <button 
                                        onClick={() => handleLogEdit(log.id!, 'weight', Math.max(0, wVal - 2))}
-                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                       className="w-10 h-10 shrink-0 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
                                      >
                                        <span className="text-xl font-medium leading-none mb-1">-2</span>
                                      </button>
@@ -590,23 +582,23 @@ export function ClientHistoryCalendar({
                                          type="number"
                                          value={wVal || ''}
                                          onChange={(e) => handleLogEdit(log.id!, 'weight', parseFloat(e.target.value) || 0)}
-                                         className="w-16 bg-transparent text-center text-xl font-black text-white focus:outline-none p-0"
+                                         className="w-16 min-w-[4rem] bg-transparent text-center text-xl font-black text-white focus:outline-none p-0"
                                        />
                                        <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold leading-none mt-0.5">Lbs</span>
                                      </div>
                                      <button 
                                        onClick={() => handleLogEdit(log.id!, 'weight', wVal + 2)}
-                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                       className="w-10 h-10 shrink-0 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
                                      >
                                        <span className="text-xl font-medium leading-none mb-1">+2</span>
                                      </button>
                                   </div>
 
                                   {/* Reps/Time Stepper */}
-                                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-1.5 flex items-center justify-between">
+                                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-1.5 flex items-center justify-between shrink-0">
                                      <button 
                                        onClick={() => handleLogEdit(log.id!, isCardio ? 'seconds' : 'reps', Math.max(0, rVal - 1))}
-                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                       className="w-10 h-10 shrink-0 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
                                      >
                                        <span className="text-xl font-medium leading-none mb-1">-1</span>
                                      </button>
@@ -615,14 +607,14 @@ export function ClientHistoryCalendar({
                                          type="number"
                                          value={rVal || ''}
                                          onChange={(e) => handleLogEdit(log.id!, isCardio ? 'seconds' : 'reps', parseFloat(e.target.value) || 0)}
-                                         className="w-16 bg-transparent text-center text-xl font-black text-white focus:outline-none p-0"
+                                         className="w-16 min-w-[4rem] bg-transparent text-center text-xl font-black text-white focus:outline-none p-0"
                                          disabled={isCardio && false} 
                                        />
                                        <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold leading-none mt-0.5">{isCardio ? 'Secs' : 'Reps'}</span>
                                      </div>
                                      <button 
                                        onClick={() => handleLogEdit(log.id!, isCardio ? 'seconds' : 'reps', rVal + 1)}
-                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                       className="w-10 h-10 shrink-0 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
                                      >
                                        <span className="text-xl font-medium leading-none mb-1">+1</span>
                                      </button>
@@ -730,6 +722,19 @@ export function ClientHistoryCalendar({
                   </div>
                 )}
               </div>
+              
+              {/* Fixed Footer for Save Button */}
+              {isEditMode && (
+                <div className="shrink-0 p-4 bg-slate-900 border-t border-slate-700 mt-auto flex justify-end">
+                  <Button 
+                    onClick={handleBatchUpdate}
+                    disabled={isSaving}
+                    className="w-full sm:w-auto bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase tracking-widest h-14 px-12 rounded-xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] text-lg"
+                  >
+                    {isSaving ? "Saving..." : "[ SAVE HISTORICAL CHANGES ]"}
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </DialogContent>
