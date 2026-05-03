@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { WorkoutSession, ExerciseLog, Machine, Trainer } from '../types';
 import { cn } from '../lib/utils';
 import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
@@ -445,188 +446,285 @@ export function ClientHistoryCalendar({
           setEditedLogs({});
         }
       }}>
-        <DialogContent className="max-w-4xl bg-[#0A2E46] border border-[#115E8D]/30 rounded-[40px] p-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-           {selectedDaySessions.length > 1 && (
-             <div className="bg-[#0A2E46]/90 backdrop-blur-md border-b border-white/10 px-8 py-4 flex gap-4 shrink-0 overflow-x-auto custom-scrollbar">
-                {selectedDaySessions.map((sess, i) => (
-                   <button
-                     key={sess.id}
-                     onClick={() => {
-                        setActiveSessionIndex(i);
-                        setIsEditMode(false);
-                     }}
-                     className={cn(
-                       "px-6 py-2 rounded-2xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border",
-                       activeSessionIndex === i 
-                         ? "bg-[#38BDF8]/20 border-[#38BDF8]/50 text-[#38BDF8]" 
-                         : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
-                     )}
-                   >
-                      Session {i + 1} - {new Date(sess.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                   </button>
-                ))}
-             </div>
-           )}
+        <DialogContent className="w-screen h-screen max-w-none m-0 border-0 rounded-none bg-[#0A2E46] p-0 overflow-hidden shadow-2xl flex flex-col">
           {selectedSession && (
             <>
-              <DialogHeader className="p-8 border-b border-white/10 shrink-0 relative overflow-hidden bg-white/5">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                  <Dumbbell className="w-32 h-32 text-white" />
+              {/* Header Banner */}
+              <div className="bg-slate-900 border-b border-slate-700 px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 transition-all">
+                <div>
+                  <h2 className="text-xl font-black uppercase text-white tracking-widest flex items-center gap-2">
+                    <span className="text-[#38BDF8]">
+                      {new Date(selectedSession.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </h2>
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-2">
+                     <Badge variant="outline" className="border-slate-700 text-slate-300">TR: {selectedSession.trainerInitials || 'N/A'}</Badge> 
+                     {selectedSessionLogs.length} Units Logged
+                  </p>
                 </div>
-                <div className="flex items-center gap-6 relative z-10 w-full pr-40">
-                  <div className={cn(
-                    "w-16 h-16 rounded-3xl flex flex-col items-center justify-center border-2 shadow-[0_0_30px_rgba(0,0,0,0.2)] shrink-0",
-                    selectedSession.routineName?.includes('B') 
-                      ? "bg-[#F06C22]/10 border-[#F06C22]/50 text-[#F06C22]" 
-                      : "bg-[#38BDF8]/10 border-[#38BDF8]/50 text-[#38BDF8]"
-                  )}>
-                    <span className="text-2xl font-black italic uppercase leading-none">{selectedSession.routineName?.split(' ')[1] || 'S'}</span>
-                    <span className="text-[10px] font-bold opacity-60 mt-1">{selectedSession.trainerInitials}</span>
+                
+                <div className="flex items-center gap-4">
+                  <div className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 flex items-center gap-2">
+                    <span className="text-xs font-black uppercase text-slate-500 tracking-widest">Routine:</span>
+                    <span className={cn(
+                      "text-xl font-black italic uppercase leading-none",
+                      selectedSession.routineName?.includes('B') ? "text-[#F06C22]" : "text-[#38BDF8]"
+                    )}>
+                      {selectedSession.routineName || 'Special'}
+                    </span>
                   </div>
-                  <div className="flex-1">
-                    <DialogTitle className="text-3xl font-black uppercase italic tracking-tighter text-white leading-none">
-                      {new Date(selectedSession.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                    </DialogTitle>
-                    <DialogDescription className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-2">
-                      Routine {selectedSession.routineName || 'Special'} • {selectedSessionLogs.length} Units Logged
-                    </DialogDescription>
-                  </div>
-                </div>
-
-                <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-4 z-20">
                   {isEditMode && (
                     <Button
                       variant="ghost" 
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="text-red-500/50 hover:text-red-500 hover:bg-red-500/10 h-10 w-10 p-0 rounded-xl transition-all shrink-0"
+                      className="text-red-500/50 hover:text-red-500 hover:bg-red-500/10 h-12 w-12 p-0 rounded-xl transition-all shrink-0"
                       title="Delete Session"
                     >
-                      <Trash2 className="w-5 h-5" />
+                      <Trash2 className="w-6 h-6" />
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (!isEditMode) {
-                        setEditedSessionNotes(selectedSession.notes || '');
-                      } else {
-                        setEditedLogs({});
-                        setEditedSessionNotes('');
-                      }
-                      setIsEditMode(!isEditMode);
-                    }}
-                    className={cn(
-                      "font-black uppercase tracking-widest text-xs h-10 px-4 rounded-xl border-white/20 transition-all shrink-0",
-                      isEditMode ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"
-                    )}
-                  >
-                    {isEditMode ? "Cancel Edit" : "Edit Data"}
-                  </Button>
-                  {isEditMode && (
+                  {isEditMode ? (
                     <Button 
                       onClick={handleBatchUpdate}
                       disabled={isSaving}
-                      className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase italic text-sm tracking-widest h-10 px-8 rounded-xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] shrink-0"
+                      className="bg-[#F06C22] hover:bg-[#d95d18] text-white font-black uppercase tracking-widest h-12 px-8 rounded-xl shadow-[0_4px_20px_rgba(240,108,34,0.3)] shrink-0"
                     >
-                      {isSaving ? "Updating..." : "Save Changes"}
+                      {isSaving ? "Saving..." : "[ SAVE HISTORICAL CHANGES ]"}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditedSessionNotes(selectedSession.notes || '');
+                        setIsEditMode(true);
+                      }}
+                      className="font-black uppercase tracking-widest h-12 px-8 rounded-xl border-white/20 text-white bg-white/10 hover:bg-white/20 transition-all shrink-0"
+                    >
+                      Enter Edit Mode
                     </Button>
                   )}
                 </div>
-              </DialogHeader>
+              </div>
 
-              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              {/* Multi-Session Tabs if > 1 */}
+              {selectedDaySessions.length > 1 && (
+                <div className="bg-[#0A2E46]/90 border-b border-slate-700 px-6 py-2 flex gap-2 shrink-0 overflow-x-auto hide-scrollbar">
+                   {selectedDaySessions.map((sess, i) => (
+                      <button
+                        key={sess.id}
+                        onClick={() => {
+                           setActiveSessionIndex(i);
+                           setIsEditMode(false);
+                        }}
+                        className={cn(
+                          "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border",
+                          activeSessionIndex === i 
+                            ? "bg-[#38BDF8]/20 border-[#38BDF8]/50 text-[#38BDF8]" 
+                            : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+                        )}
+                      >
+                         S{i + 1} - {new Date(sess.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </button>
+                   ))}
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#0A2E46]">
                 {selectedSessionLogs.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                  <div className="max-w-7xl mx-auto space-y-6 pb-20">
+                    {/* Machine Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {selectedSessionLogs.map((log) => {
                         const machine = machines.find(m => m.id === log.machineId);
                         const isEdited = !!editedLogs[log.id!];
                         const currentData = { ...log, ...editedLogs[log.id!] };
                         const quality = currentData.repQuality || 0;
                         
-                        let borderClass = "border-slate-700 bg-slate-800";
-                        if (quality >= 4.5) borderClass = "border-emerald-500 bg-emerald-500/10";
-                        else if (quality >= 3) borderClass = "border-amber-500 bg-amber-500/10";
-                        else if (quality > 0) borderClass = "border-rose-500 bg-rose-500/10";
+                        let displayBorder = "border-slate-700 bg-slate-800";
+                        if (quality >= 4.5) displayBorder = "border-emerald-500 bg-emerald-500/10";
+                        else if (quality >= 3) displayBorder = "border-amber-500 bg-amber-500/10";
+                        else if (quality > 0) displayBorder = "border-rose-500 bg-rose-500/10";
 
                         const isCardio = machine?.name.toLowerCase().includes('cardio') || log.type === 'Cardio';
-                        const mainMetric = currentData.weight || '-';
-                        const secMetric = isCardio ? currentData.seconds || '-' : currentData.reps || '-';
+                        const wVal = parseFloat(String(currentData.weight || '').replace(/[^0-9.]/g, '')) || 0;
+                        const rVal = isCardio ? (parseFloat(String(currentData.seconds || '').replace(/[^0-9.]/g, '')) || 0) : (parseFloat(String(currentData.reps || '').replace(/[^0-9.]/g, '')) || 0);
 
                         return (
                           <div 
                             key={log.id} 
                             className={cn(
-                              "flex flex-col p-3 rounded-2xl transition-all border-2", 
-                              borderClass,
-                              isEdited && isEditMode ? "shadow-[0_0_20px_rgba(240,108,34,0.2)] ring-1 ring-[#F06C22]/50" : ""
+                              "flex flex-col p-3 rounded-2xl border-2 transition-all",
+                              displayBorder,
+                              isEdited && isEditMode ? "shadow-[0_0_15px_rgba(56,189,248,0.2)]" : ""
                             )}
                           >
-                             {isEditMode ? (
-                               <div className="flex flex-col gap-2">
-                                  <h4 className="text-xs font-black uppercase tracking-tight text-white leading-none truncate mb-1">{machine?.name || 'Unknown'}</h4>
-                                  <div className="grid grid-cols-3 gap-1">
-                                    <Input 
-                                      type="number"
-                                      placeholder={isCardio ? "Sec" : "Wt"}
-                                      value={isCardio ? parseFloat(String(currentData.seconds || '').replace(/[^0-9.]/g, '')) || '' : parseFloat(String(currentData.weight || '').replace(/[^0-9.]/g, '')) || ''}
-                                      onChange={(e) => handleLogEdit(log.id!, isCardio ? 'seconds' : 'weight', e.target.value)}
-                                      className="h-8 border-0 bg-black/30 text-center font-black text-xs text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0 rounded-lg"
-                                    />
-                                    <Input 
-                                      type="number"
-                                      placeholder={isCardio ? "Res" : "Rep"}
-                                      value={isCardio ? 1 : parseFloat(String(currentData.reps || '').replace(/[^0-9.]/g, '')) || ''}
-                                      onChange={(e) => {
-                                        if (!isCardio) handleLogEdit(log.id!, 'reps', e.target.value);
-                                      }}
-                                      disabled={isCardio}
-                                      className="h-8 border-0 bg-black/30 text-center font-black text-xs text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0 rounded-lg disabled:opacity-50"
-                                    />
-                                    <Input 
-                                      type="number"
-                                      min="0"
-                                      max="5"
-                                      step="0.5"
-                                      placeholder="Qual"
-                                      value={currentData.repQuality || ''}
-                                      onChange={(e) => handleLogEdit(log.id!, 'repQuality', parseFloat(e.target.value) || 0)}
-                                      className="h-8 border-0 bg-black/30 text-center font-black text-xs text-white focus-visible:ring-1 focus-visible:ring-[#F06C22] p-0 rounded-lg"
-                                    />
-                                  </div>
+                             {!isEditMode ? (
+                               <div className="flex flex-col h-full justify-between">
+                                 <div>
+                                   <h4 className="text-sm font-black uppercase tracking-tight text-white leading-none truncate mb-1">{machine?.name || 'Unknown'}</h4>
+                                   <p className="text-xs font-bold text-slate-400">
+                                     {currentData.weight || '-'} lbs | {isCardio ? currentData.seconds : currentData.reps} {isCardio ? 'sec' : 'reps'}
+                                   </p>
+                                 </div>
+                                 <div className="mt-2 text-[10px] font-black tracking-widest text-[#68717A] uppercase flex gap-1">
+                                    <span>Quality: {quality > 0 ? quality : 'N/A'}</span>
+                                 </div>
                                </div>
                              ) : (
-                               <>
-                                 <h4 className="text-sm font-black uppercase tracking-tight text-white leading-none truncate mb-1">{machine?.name || 'Unknown'}</h4>
-                                 <p className="text-xs font-bold text-slate-400">
-                                   {mainMetric} lbs | {secMetric} {isCardio ? 'sec' : 'reps'}
-                                 </p>
-                               </>
+                               <div className="flex flex-col gap-3">
+                                  <div className="flex justify-between items-center bg-slate-900/50 p-2 rounded-xl">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-white leading-none truncate">{machine?.name || 'Unknown'}</h4>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{isCardio ? 'Cardio' : 'Strength'}</span>
+                                  </div>
+
+                                  {/* Weight Stepper */}
+                                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-1.5 flex items-center justify-between">
+                                     <button 
+                                       onClick={() => handleLogEdit(log.id!, 'weight', Math.max(0, wVal - 2))}
+                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                     >
+                                       <span className="text-xl font-medium leading-none mb-1">-2</span>
+                                     </button>
+                                     <div className="flex flex-col items-center flex-1">
+                                       <input 
+                                         type="number"
+                                         value={wVal || ''}
+                                         onChange={(e) => handleLogEdit(log.id!, 'weight', parseFloat(e.target.value) || 0)}
+                                         className="w-16 bg-transparent text-center text-xl font-black text-white focus:outline-none p-0"
+                                       />
+                                       <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold leading-none mt-0.5">Lbs</span>
+                                     </div>
+                                     <button 
+                                       onClick={() => handleLogEdit(log.id!, 'weight', wVal + 2)}
+                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                     >
+                                       <span className="text-xl font-medium leading-none mb-1">+2</span>
+                                     </button>
+                                  </div>
+
+                                  {/* Reps/Time Stepper */}
+                                  <div className="bg-slate-900 border border-slate-700 rounded-xl p-1.5 flex items-center justify-between">
+                                     <button 
+                                       onClick={() => handleLogEdit(log.id!, isCardio ? 'seconds' : 'reps', Math.max(0, rVal - 1))}
+                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                     >
+                                       <span className="text-xl font-medium leading-none mb-1">-1</span>
+                                     </button>
+                                     <div className="flex flex-col items-center flex-1">
+                                       <input 
+                                         type="number"
+                                         value={rVal || ''}
+                                         onChange={(e) => handleLogEdit(log.id!, isCardio ? 'seconds' : 'reps', parseFloat(e.target.value) || 0)}
+                                         className="w-16 bg-transparent text-center text-xl font-black text-white focus:outline-none p-0"
+                                         disabled={isCardio && false} 
+                                       />
+                                       <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold leading-none mt-0.5">{isCardio ? 'Secs' : 'Reps'}</span>
+                                     </div>
+                                     <button 
+                                       onClick={() => handleLogEdit(log.id!, isCardio ? 'seconds' : 'reps', rVal + 1)}
+                                       className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 hover:text-white transition-all focus:outline-none"
+                                     >
+                                       <span className="text-xl font-medium leading-none mb-1">+1</span>
+                                     </button>
+                                  </div>
+
+                                  {/* Quality Bar */}
+                                  <div>
+                                     <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1.5 block px-1">Quality Grade</span>
+                                     <div className="flex gap-1">
+                                        {[
+                                          { label: 'A/5', val: 5, activeBg: 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]' },
+                                          { label: 'B/4', val: 4, activeBg: 'bg-emerald-400/80 text-white shadow-[0_0_10px_rgba(52,211,153,0.3)]' },
+                                          { label: 'C/3', val: 3, activeBg: 'bg-amber-500 text-white shadow-[0_0_10px_rgba(245,158,11,0.5)]' },
+                                          { label: 'D/F', val: 1, activeBg: 'bg-rose-500 text-white shadow-[0_0_10px_rgba(244,63,94,0.5)]' }
+                                        ].map(btn => {
+                                          const isActive = quality === btn.val || (btn.val === 1 && quality > 0 && quality < 3) || (btn.val === 4 && quality === 4) || (btn.val === 5 && quality === 5) || (btn.val === 3 && quality === 3);
+                                          return (
+                                            <button
+                                              key={btn.label}
+                                              onClick={() => handleLogEdit(log.id!, 'repQuality', btn.val)}
+                                              className={cn(
+                                                "flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-tighter transition-all focus:outline-none",
+                                                isActive ? btn.activeBg : "bg-slate-900 border border-slate-700 text-slate-500 hover:bg-slate-800"
+                                              )}
+                                            >
+                                              {btn.label}
+                                            </button>
+                                          );
+                                        })}
+                                     </div>
+                                  </div>
+                               </div>
                              )}
                           </div>
                         );
                       })}
                     </div>
 
-                    {/* Session Notes Section */}
-                    <div className="mt-4 flex flex-col gap-2 p-4 rounded-2xl bg-slate-800 border border-white/10">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#68717A]">Session Notes</h4>
-                      {isEditMode ? (
-                        <Textarea
-                          value={editedSessionNotes}
-                          onChange={(e) => setEditedSessionNotes(e.target.value)}
-                          placeholder="Add notes about this session..."
-                          className="min-h-[80px] bg-slate-900 border-white/10 text-white placeholder:text-slate-500 resize-none focus-visible:ring-1 focus-visible:ring-[#F06C22] font-medium text-sm"
-                        />
-                      ) : (
-                        <div className="min-h-[60px] whitespace-pre-wrap text-slate-300 font-medium text-sm">
-                          {selectedSession.notes || <span className="text-slate-500 italic">No notes recorded for this session.</span>}
+                    {/* Integrated Session Briefings */}
+                    <div className="mt-8 rounded-2xl bg-slate-800/80 border border-slate-700 p-4 sm:p-6 shadow-xl">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-8 h-8 rounded-xl bg-[#F06C22]/20 border border-[#F06C22]/30 flex items-center justify-center">
+                          <span className="text-[#F06C22] font-black">N</span>
                         </div>
-                      )}
+                        <h3 className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-[#F8F9FA]">Session Briefings & Notes</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="flex flex-col gap-2">
+                           <div className="flex justify-between items-center mb-1">
+                             <h4 className="text-xs font-black uppercase tracking-widest text-[#38BDF8]">Notes Overview</h4>
+                           </div>
+                           {isEditMode ? (
+                             <Textarea
+                               value={editedSessionNotes}
+                               onChange={(e) => setEditedSessionNotes(e.target.value)}
+                               placeholder="Add or update session notes & briefings here..."
+                               className="min-h-[140px] bg-slate-900 border-slate-700 border text-white placeholder:text-slate-600 resize-none focus-visible:ring-1 focus-visible:ring-[#F06C22] font-medium text-sm leading-relaxed p-4 rounded-xl shadow-inner"
+                             />
+                           ) : (
+                             <div className="min-h-[140px] bg-slate-900 border border-slate-700 rounded-xl p-4">
+                               <p className="whitespace-pre-wrap text-slate-300 font-medium text-sm leading-relaxed">
+                                 {selectedSession.notes || <span className="text-slate-600 italic">No historical briefings recorded.</span>}
+                               </p>
+                             </div>
+                           )}
+                        </div>
+                        
+                        {/* We could add Post-Session / Client Feel inputs here if needed. 
+                            For now, using the combined notes as the primary field for this session edit interface. */}
+                        <div className="flex flex-col gap-2">
+                           <div className="flex justify-between items-center mb-1">
+                             <h4 className="text-xs font-black uppercase tracking-widest text-[#F06C22]">Client Status / Additional Context</h4>
+                             {isEditMode && (
+                               <Select defaultValue="Medium">
+                                 <SelectTrigger className="w-[100px] h-6 bg-slate-900 border-slate-700 text-[10px] uppercase font-black tracking-widest px-2 py-0 text-slate-400">
+                                   <SelectValue placeholder="Priority" />
+                                 </SelectTrigger>
+                                 <SelectContent className="bg-slate-800 border-slate-700">
+                                   <SelectItem value="High" className="text-rose-400 text-xs font-bold">High</SelectItem>
+                                   <SelectItem value="Medium" className="text-amber-400 text-xs font-bold">Medium</SelectItem>
+                                   <SelectItem value="Low" className="text-emerald-400 text-xs font-bold">Low</SelectItem>
+                                 </SelectContent>
+                               </Select>
+                             )}
+                           </div>
+                           {isEditMode ? (
+                             <Textarea
+                               placeholder="Add client feel, post-session debrief..."
+                               className="min-h-[140px] bg-slate-900 border-slate-700 border text-white placeholder:text-slate-600 resize-none focus-visible:ring-1 focus-visible:ring-[#F06C22] font-medium text-sm leading-relaxed p-4 rounded-xl shadow-inner"
+                             />
+                           ) : (
+                             <div className="min-h-[140px] bg-slate-900 border border-slate-700 rounded-xl p-4 flex items-center justify-center">
+                               <span className="text-slate-600 italic text-sm font-medium">Context stored in historical notes.</span>
+                             </div>
+                           )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center gap-6">
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center gap-6 h-full">
                     <Clock className="w-16 h-16 text-white" />
                     <p className="text-lg font-black uppercase tracking-widest text-[#68717A]">No exercise logs found for this session</p>
                   </div>

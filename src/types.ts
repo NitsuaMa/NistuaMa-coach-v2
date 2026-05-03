@@ -133,10 +133,17 @@ export interface WorkoutSession {
   sessionNumber: number;
   date: string;
   trainerInitials: string;
+  trainerId?: string;
   notes?: string; // Original notes field (deprecated in favor of sub-collection)
+  clientFeel?: string;
   startTime?: any;
   endTime?: any;
   status: 'In-Progress' | 'Completed';
+  clientAge?: number;
+  clientOccupation?: string;
+  clientIsRetired?: boolean;
+  clientActivityLevel?: string;
+  clientClinicalProfile?: string[];
   legacy_filemaker_id?: string;
   legacy_notes?: string;
   createdAt?: any;
