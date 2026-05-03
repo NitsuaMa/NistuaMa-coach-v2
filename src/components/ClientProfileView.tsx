@@ -58,6 +58,7 @@ import { Client, Machine, WorkoutSession, ExerciseLog, Routine, View, ClientMach
 import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
 import { WorkoutChartGrid } from './WorkoutChartGrid';
 import { ClientHistoryCalendar } from './ClientHistoryCalendar';
+import { cn } from '../lib/utils';
 
 export function ClientProfileView({ 
   clientId, 
@@ -104,6 +105,8 @@ export function ClientProfileView({
   const [sessionLimit, setSessionLimit] = useState(10);
   const [activeTab, setActiveTab] = useState('overview');
   const [infoForm, setInfoForm] = useState<Partial<Client>>({});
+  const [newEventForm, setNewEventForm] = useState<{date: string, title: string, type: any, notes: string}>({ date: new Date().toISOString().split('T')[0], title: '', type: 'Other', notes: '' });
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
   const [isSavingInfo, setIsSavingInfo] = useState(false);
   const [stagedMachineIds, setStagedMachineIds] = useState<Record<string, string[]>>({});
   const [isSavingRoutine, setIsSavingRoutine] = useState<Record<string, boolean>>({});
@@ -148,6 +151,47 @@ export function ClientProfileView({
       handleFirestoreError(error, OperationType.UPDATE, `clients/${clientId}`);
     } finally {
       setIsSavingInfo(false);
+    }
+  };
+
+  const handleAddEvent = async () => {
+    if (!clientId || !client || !newEventForm.title || !newEventForm.date) return;
+    setIsSavingEvent(true);
+    try {
+      let priority: 'High' | 'Medium' | 'Low' = 'Low';
+      if (newEventForm.type === 'Progress Report' || newEventForm.type === 'InBody Scan') priority = 'High';
+      else if (newEventForm.type === 'Routine Change') priority = 'Medium';
+
+      const newEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        ...newEventForm,
+        priority,
+        createdAt: new Date().toISOString()
+      };
+
+      const updatedEvents = [...(client.events || []), newEvent];
+      await updateDoc(doc(db, 'clients', clientId), {
+        events: updatedEvents,
+        updatedAt: serverTimestamp()
+      });
+      setNewEventForm({ date: new Date().toISOString().split('T')[0], title: '', type: 'Other', notes: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clients/${clientId}`);
+    } finally {
+      setIsSavingEvent(false);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!clientId || !client?.events) return;
+    try {
+      const updatedEvents = client.events.filter(e => e.id !== eventId);
+      await updateDoc(doc(db, 'clients', clientId), {
+        events: updatedEvents,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clients/${clientId}`);
     }
   };
 
@@ -1358,6 +1402,112 @@ export function ClientProfileView({
                           <Input value={infoForm.emergencyContactPhone || ''} onChange={e => setInfoForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
                         </div>
                       </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-[40px] shadow-xl bg-slate-800 border-slate-700 text-white">
+                    <CardHeader className="p-8 border-b border-slate-700 flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Events & Reminders</CardTitle>
+                        <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-[#38BDF8]">Alerts & Follow-ups</CardDescription>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-8 space-y-6">
+                      <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Event Type</Label>
+                            <Select 
+                              value={newEventForm.type} 
+                              onValueChange={(v: any) => setNewEventForm({ ...newEventForm, type: v })}
+                            >
+                              <SelectTrigger className="w-full h-12 bg-slate-800 border-slate-700 text-white font-bold rounded-2xl focus-visible:ring-[#38BDF8]">
+                                <SelectValue placeholder="Select Type..." />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-800 border-slate-700 text-white rounded-xl">
+                                <SelectItem value="Progress Report">Progress Report</SelectItem>
+                                <SelectItem value="InBody Scan">InBody Scan</SelectItem>
+                                <SelectItem value="Routine Change">Routine Change</SelectItem>
+                                <SelectItem value="Vacation">Vacation</SelectItem>
+                                <SelectItem value="Birthday/Anniversary">Birthday/Anniversary</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Date</Label>
+                            <Input 
+                              type="date"
+                              value={newEventForm.date} 
+                              onChange={e => setNewEventForm(f => ({ ...f, date: e.target.value }))} 
+                              className="h-12 rounded-2xl font-black px-4 bg-slate-800 border-slate-700 text-white focus-visible:ring-[#38BDF8]" 
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2 mb-4">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Event Title</Label>
+                          <Input 
+                            value={newEventForm.title} 
+                            onChange={e => setNewEventForm(f => ({ ...f, title: e.target.value }))} 
+                            placeholder="Brief description..."
+                            className="h-12 rounded-2xl font-bold px-4 bg-slate-800 border-slate-700 text-white focus-visible:ring-[#38BDF8]" 
+                          />
+                        </div>
+                        <div className="space-y-2 mb-6">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Notes</Label>
+                          <Textarea 
+                            value={newEventForm.notes} 
+                            onChange={e => setNewEventForm(f => ({ ...f, notes: e.target.value }))} 
+                            className="min-h-[80px] rounded-3xl font-medium p-4 bg-slate-800 border-slate-700 text-white focus-visible:ring-[#38BDF8] resize-none" 
+                            placeholder="Optional details..."
+                          />
+                        </div>
+                        <Button 
+                          onClick={handleAddEvent}
+                          disabled={!newEventForm.title || !newEventForm.date || isSavingEvent}
+                          className="w-full bg-[#38BDF8] hover:bg-[#0ea5e9] text-white font-black uppercase tracking-widest text-xs h-12 rounded-2xl transition-all"
+                        >
+                          {isSavingEvent ? "Adding..." : "Add Event"}
+                        </Button>
+                      </div>
+
+                      {client?.events && client.events.length > 0 ? (
+                        <div className="space-y-3 mt-8">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 mb-4">Scheduled Events</h4>
+                          {client.events.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(event => (
+                            <div key={event.id} className="flex flex-col gap-2 p-4 bg-slate-900 border border-slate-800 rounded-3xl group transition-all hover:bg-slate-800">
+                              <div className="flex items-center justify-between">
+                                <div className="flex flex-col">
+                                  <span className={cn(
+                                    "text-[9px] font-black uppercase tracking-widest mb-1",
+                                    event.priority === 'High' ? "text-red-400" :
+                                    event.priority === 'Medium' ? "text-amber-400" : "text-slate-400"
+                                  )}>
+                                    {event.type} • {event.priority} Priority
+                                  </span>
+                                  <span className="text-white font-bold">{event.title}</span>
+                                </div>
+                                <div className="flex flex-col items-end">
+                                  <span className="text-[10px] font-black tracking-widest uppercase text-slate-400 mb-1">
+                                    {new Date(event.date + 'T12:00:00').toLocaleDateString()}
+                                  </span>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleDeleteEvent(event.id)}
+                                    className="h-8 w-8 p-0 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              {event.notes && (
+                                <p className="text-xs text-slate-500 mt-1 font-medium bg-slate-900/50 p-3 flex rounded-xl">{event.notes}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </CardContent>
                 </Card>
              </div>

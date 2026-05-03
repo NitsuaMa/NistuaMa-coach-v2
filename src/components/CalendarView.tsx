@@ -47,6 +47,7 @@ export function CalendarView({
 }) {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   const [shiftMode, setShiftMode] = useState<'AM' | 'PM'>('AM');
+  const [filterMode, setFilterMode] = useState<'all' | 'sessions' | 'events'>('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTrainerId, setSelectedTrainerId] = useState<string>(
     isAdmin ? 'all' : (authTrainer?.id || 'all')
@@ -54,6 +55,54 @@ export function CalendarView({
   const [isSyncing, setIsSyncing] = useState(false);
 
   const visibleCalendarTrainers = trainers.filter(t => t.isVisibleOnCalendar !== false);
+
+  const allClientEvents = React.useMemo(() => {
+    const events: any[] = [];
+    if (clients) {
+      clients.forEach(c => {
+        if (c.events && Array.isArray(c.events)) {
+          c.events.forEach(e => {
+            events.push({
+              ...e,
+              isClientEvent: true, // Marker
+              clientId: c.id,
+              clientName: `${c.firstName} ${c.lastName}`
+            });
+          });
+        }
+      });
+    }
+    return events;
+  }, [clients]);
+
+  // Optimization: Group trainers by name for faster lookup
+  const trainerMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    trainers.forEach(t => {
+      map[t.fullName] = t.id!;
+    });
+    return map;
+  }, [trainers]);
+
+  // Handle trainer filtering for sessions
+  const filteredSchedules = React.useMemo(() => {
+    return schedules.filter(s => {
+      const tId = trainerMap[s.trainerName];
+      const trainerMatches = selectedTrainerId === 'all' || tId === selectedTrainerId;
+      return s.status !== 'Cancelled' && trainerMatches;
+    });
+  }, [schedules, selectedTrainerId, trainerMap]);
+
+  const filteredItems = React.useMemo(() => {
+    let items: any[] = [];
+    if (filterMode === 'all' || filterMode === 'sessions') {
+      items = [...items, ...filteredSchedules];
+    }
+    if (filterMode === 'all' || filterMode === 'events') {
+      items = [...items, ...allClientEvents];
+    }
+    return items;
+  }, [filterMode, filteredSchedules, allClientEvents]);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -65,15 +114,6 @@ export function CalendarView({
       setIsSyncing(false);
     }
   };
-
-  // Optimization: Group trainers by name for faster lookup
-  const trainerMap = React.useMemo(() => {
-    const map: Record<string, string> = {};
-    trainers.forEach(t => {
-      map[t.fullName] = t.id!;
-    });
-    return map;
-  }, [trainers]);
 
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
@@ -193,12 +233,6 @@ export function CalendarView({
         }
     }
 
-    const filteredSchedules = schedules.filter(s => {
-      const tId = trainerMap[s.trainerName];
-      const trainerMatches = selectedTrainerId === 'all' || tId === selectedTrainerId;
-      return s.status !== 'Cancelled' && trainerMatches;
-    });
-
     return (
       <div className="grid grid-cols-[40px_repeat(7,1fr)] gap-px bg-slate-700 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl">
         <div className="bg-slate-900 border-r border-b border-slate-700" />
@@ -209,9 +243,18 @@ export function CalendarView({
         ))}
         {matrix.map((day, idx) => {
           const today = isToday(day.date);
-          const daySessions = filteredSchedules.filter(s => {
-            const d = safeToDate(s.startTime);
+          const dayItems = filteredItems.filter(item => {
+            const dateStr = item.isClientEvent ? item.date : item.startTime;
+            const d = safeToDate(dateStr);
             return isSameDay(d, day.date);
+          });
+          const daySessions = dayItems.filter(i => !i.isClientEvent);
+          const dayEvents = dayItems.filter(i => i.isClientEvent);
+          
+          // Sort events: High priority first
+          const sortedEvents = [...dayEvents].sort((a,b) => {
+             const priorities: any = { 'High': 3, 'Medium': 2, 'Low': 1 };
+             return priorities[b.priority] - priorities[a.priority];
           });
 
           const isRowStart = idx % 7 === 0;
@@ -262,9 +305,36 @@ export function CalendarView({
                 
                 {day.current && (
                   <div className="flex flex-col mt-auto gap-2">
+                    {/* Render Events */}
+                    {sortedEvents.map((evt, eIdx) => (
+                      <div 
+                        key={`evt-${eIdx}`}
+                        className={cn(
+                          "px-2 py-1 rounded border shadow-sm truncate",
+                          evt.priority === 'High' ? "border-[#F06C22] bg-[#F06C22]/10 text-red-100" :
+                          "border-slate-600 bg-transparent text-slate-300"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (evt.clientId && onSelectClient && setView) {
+                             onSelectClient(evt.clientId);
+                             setView('profile');
+                          }
+                        }}
+                      >
+                        <span className={cn(
+                           "text-[9px] font-bold uppercase tracking-tighter truncate w-full inline-block",
+                           evt.priority === 'High' ? "text-[#F06C22]" : "text-slate-400"
+                        )}>
+                          {evt.type === 'Progress Report' || evt.type === 'InBody Scan' ? 'Alert' : evt.type}
+                        </span>
+                        <div className="text-xs font-black truncate">{evt.clientName}</div>
+                      </div>
+                    ))}
+                    {/* Render Sessions Heatmap Dots */}
                     {daySessions.length > 0 ? (
                       <>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-400 mt-1">
                           {daySessions.length} {daySessions.length === 1 ? 'Session' : 'Sessions'}
                         </span>
                         <div className="flex flex-wrap gap-1 items-end h-3">
@@ -278,9 +348,9 @@ export function CalendarView({
                           })}
                         </div>
                       </>
-                    ) : (
+                    ) : sortedEvents.length === 0 ? (
                       <span className="text-xs text-slate-500 pb-4">Open Day</span>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -293,16 +363,16 @@ export function CalendarView({
 
   const renderWeek = () => {
     const weekDays = getWeekDays(selectedDate);
-    const allSlots = [...AM_SLOTS, ...PM_SLOTS];
+    const allSlots = Array.from(new Set([...AM_SLOTS, ...PM_SLOTS]));
 
     // Pre-filter sessions for this week to improve performance
     const weekStart = weekDays[0];
     const weekEnd = new Date(weekDays[6]);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const activeSessions = schedules.filter(s => {
+    const activeSessions = filteredItems.filter(s => !s.isClientEvent).filter(s => {
       const d = safeToDate(s.startTime);
-      return d >= weekStart && d <= weekEnd && s.status !== 'Cancelled';
+      return d >= weekStart && d <= weekEnd;
     });
 
     return (
@@ -367,10 +437,59 @@ export function CalendarView({
               </tr>
             </thead>
             <tbody>
+              {/* All-Day Events Row */}
+              <tr className="border-b-2 border-slate-700 bg-slate-900/40">
+                <td className="p-3 text-center border-r border-slate-700">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Events</span>
+                </td>
+                {weekDays.map((date, dIdx) => {
+                  const dayEvents = filteredItems.filter(i => {
+                     return i.isClientEvent && isSameDay(safeToDate(i.date), date);
+                  });
+                  // Sort: High priority first
+                  const sortedEvents = dayEvents.sort((a,b) => {
+                     const priorities: any = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                     return priorities[b.priority] - priorities[a.priority];
+                  });
+
+                  return (
+                    <td key={`week-evt-${dIdx}`} className="p-1 border-r border-slate-700 align-top relative">
+                      <div className="flex flex-col gap-1">
+                        {sortedEvents.map((evt, eIdx) => (
+                           <div 
+                             key={`wevt-${eIdx}`}
+                             className={cn(
+                               "px-2 py-1 rounded border shadow-sm truncate cursor-pointer transition-all hover:scale-105",
+                               evt.priority === 'High' ? "border-[#F06C22] bg-[#F06C22]/10 text-red-100" :
+                               "border-slate-600 bg-transparent text-slate-300"
+                             )}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               if (evt.clientId && onSelectClient && setView) {
+                                  onSelectClient(evt.clientId);
+                                  setView('profile');
+                               }
+                             }}
+                           >
+                             <span className={cn(
+                                "text-[9px] font-bold uppercase tracking-tighter truncate w-full inline-block",
+                                evt.priority === 'High' ? "text-[#F06C22]" : "text-slate-400"
+                             )}>
+                               {evt.type === 'Progress Report' || evt.type === 'InBody Scan' ? 'Alert' : evt.type}
+                             </span>
+                             <div className="text-[10px] font-black truncate">{evt.clientName}</div>
+                           </div>
+                        ))}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+
               {allSlots.map((slot, sIdx) => {
                 const isGap = slot === '15:00' && sIdx > 0;
                 return (
-                  <React.Fragment key={`week-slot-${slot}`}>
+                  <React.Fragment key={`week-slot-${slot}-${sIdx}`}>
                     {isGap && (
                       <tr className="bg-slate-900/50 h-8 border-y border-slate-700">
                         <td colSpan={8} className="text-center border-slate-700">
@@ -570,6 +689,54 @@ export function CalendarView({
                 </tr>
                 </thead>
                 <tbody className="relative">
+                {/* Events Row */}
+                <tr className="border-b-2 border-slate-700 bg-slate-900/40">
+                  <td className="p-3 text-center border-r border-slate-700 sticky left-0 bg-[#0A2E46] z-10 text-slate-500">
+                    <span className="text-[9px] font-black uppercase tracking-widest">Events</span>
+                  </td>
+                  <td colSpan={filteredTrainers.length} className="p-1">
+                    <div className="flex flex-wrap gap-2">
+                       {(() => {
+                           const dayEvents = filteredItems.filter(i => {
+                               return i.isClientEvent && isSameDay(safeToDate(i.date), selectedDate);
+                           });
+                           const sortedEvents = dayEvents.sort((a,b) => {
+                               const priorities: any = { 'High': 3, 'Medium': 2, 'Low': 1 };
+                               return priorities[b.priority] - priorities[a.priority];
+                           });
+                           return sortedEvents.map((evt, eIdx) => (
+                             <div 
+                               key={`devt-${eIdx}`}
+                               className={cn(
+                                 "px-3 py-1.5 rounded-lg border shadow-sm flex items-center gap-2 cursor-pointer transition-all hover:scale-105",
+                                 evt.priority === 'High' ? "border-[#F06C22] bg-[#F06C22]/10 text-red-100" :
+                                 evt.priority === 'Medium' ? "border-amber-500 bg-amber-500/10 text-amber-100" :
+                                 "border-slate-600 bg-transparent text-slate-300"
+                               )}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 if (evt.clientId && onSelectClient && setView) {
+                                    onSelectClient(evt.clientId);
+                                    setView('profile');
+                                 }
+                               }}
+                             >
+                               <span className={cn(
+                                  "text-[10px] font-black uppercase tracking-widest",
+                                  evt.priority === 'High' ? "text-[#F06C22]" : 
+                                  evt.priority === 'Medium' ? "text-amber-500" :
+                                  "text-slate-400"
+                               )}>
+                                 {evt.type === 'Progress Report' || evt.type === 'InBody Scan' ? 'Alert' : evt.type}
+                               </span>
+                               <span className="text-sm font-black text-white">{evt.clientName}</span>
+                             </div>
+                           ));
+                       })()}
+                    </div>
+                  </td>
+                </tr>
+
                 {slots.map((slot, sIdx) => {
                     return (
                     <tr key={slot} className="border-b border-slate-700 last:border-0 hover:bg-white/[0.02] transition-colors group relative">
@@ -577,10 +744,11 @@ export function CalendarView({
                             <span className="text-[11px] font-black tracking-tighter group-hover:text-white transition-colors">{slot}</span>
                         </td>
                         {filteredTrainers.map((trainer) => {
-                            const session = schedules.find(s => {
+                            const session = filteredItems.find(s => {
+                            if (s.isClientEvent) return false;
                             const d = safeToDate(s.startTime);
                             const tStr = getSlotHeader(d);
-                            return isSameDay(d, selectedDate) && tStr === slot && s.trainerName === trainer.fullName && s.status !== 'Cancelled';
+                            return isSameDay(d, selectedDate) && tStr === slot && s.trainerName === trainer.fullName;
                             });
 
                             const color = TRAINER_COLORS[visibleCalendarTrainers.indexOf(trainer) % TRAINER_COLORS.length];
@@ -651,6 +819,21 @@ export function CalendarView({
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
+          <div className="flex bg-slate-800 p-1 rounded-full border border-slate-700 shadow-sm">
+             <button
+                onClick={() => setFilterMode('all')}
+                className={cn("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all", filterMode === 'all' ? "bg-[#38BDF8] text-white shadow-sm" : "text-slate-400 hover:text-white")}
+             >View All</button>
+             <button
+                onClick={() => setFilterMode('sessions')}
+                className={cn("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all", filterMode === 'sessions' ? "bg-[#38BDF8] text-white shadow-sm" : "text-slate-400 hover:text-white")}
+             >Sessions</button>
+             <button
+                onClick={() => setFilterMode('events')}
+                className={cn("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all", filterMode === 'events' ? "bg-[#38BDF8] text-white shadow-sm" : "text-slate-400 hover:text-white")}
+             >Events</button>
+          </div>
+
           <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 shadow-sm">
             <Button 
               variant="ghost" 

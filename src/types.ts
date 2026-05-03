@@ -21,6 +21,16 @@ export interface Trainer {
   isVisibleOnCalendar?: boolean;
 }
 
+export interface ClientEvent {
+  id: string;
+  date: string; // ISO date format or something similar
+  title: string;
+  type: 'Progress Report' | 'InBody Scan' | 'Routine Change' | 'Vacation' | 'Birthday/Anniversary' | 'Other';
+  priority: 'High' | 'Medium' | 'Low';
+  notes?: string;
+  createdAt?: any;
+}
+
 export interface Client {
   id?: string;
   mindbodyId?: string;
@@ -43,6 +53,7 @@ export interface Client {
   globalNotes?: string;
   leadSource?: string;
   notes?: string;
+  events?: ClientEvent[];
   isRoutineBActive?: boolean;
   remainingSessions: number;
   legacy_filemaker_id?: string;

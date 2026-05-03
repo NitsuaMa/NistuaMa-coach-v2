@@ -1111,7 +1111,7 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        <main className={`flex-1 w-full max-w-full mx-auto relative ${currentView === 'workouts' ? 'p-2 pb-24 overflow-y-auto' : (currentView === 'clients' || currentView === 'client-directory') ? 'h-[calc(100vh-5rem)] overflow-hidden bg-[#0A2E46] p-0 flex flex-col' : 'p-6 pb-24 overflow-y-auto'}`}>
+        <main className={`flex-1 w-full max-w-full mx-auto relative ${currentView === 'workouts' ? 'p-2 pb-24 overflow-y-auto' : (currentView === 'clients' || currentView === 'client-directory' || currentView === 'dashboard') ? 'h-[calc(100vh-5rem)] overflow-hidden bg-[#0A2E46] p-0 flex flex-col' : 'p-6 pb-24 overflow-y-auto'}`}>
           <AnimatePresence mode="wait">
             {currentView === 'consultation-wizard' && selectedClientId && (
               <ConsultationWizard 
