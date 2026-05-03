@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export function OwnerDashboard() {
   return (
-    <div className="h-full min-h-[calc(100vh-5rem)] w-full overflow-hidden bg-[#0A2E46] p-6 lg:p-8 flex flex-col gap-6 custom-scrollbar">
+    <div className="flex flex-col w-full h-full gap-6 custom-scrollbar p-6">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0 mb-2">
         <div>
@@ -25,20 +25,20 @@ export function OwnerDashboard() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6 pr-4 pb-12">
+      <div className="flex flex-col gap-6 pr-4 pb-12 w-full h-full">
         {/* KPI Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 shrink-0">
           {[
             { label: 'Avg Strength Gain', value: '+42%', icon: TrendingUp },
             { label: 'Active Clients', value: '184', icon: Users },
             { label: 'Avg Rep Quality', value: '92/100', icon: Activity },
             { label: 'Trainer Efficacy', value: 'Top 10%', icon: Target },
           ].map((kpi, i) => (
-            <Card key={i} className="bg-[#F8F9FA] border-0 shadow-lg text-[#0A2E46] overflow-hidden rounded-[24px]">
-              <CardContent className="p-6 flex flex-col justify-between h-full relative">
-                <kpi.icon className="w-8 h-8 text-[#115E8D] opacity-20 absolute top-4 right-4" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#475569]">{kpi.label}</span>
-                <span className="text-3xl font-black italic uppercase tracking-tighter text-[#115E8D] mt-2">{kpi.value}</span>
+            <Card key={i} className="bg-[#F8F9FA] border-0 shadow-lg text-[#0A2E46] overflow-hidden rounded-[20px] md:rounded-[24px]">
+              <CardContent className="p-4 md:p-5 flex flex-col justify-between h-full relative min-h-[110px] w-full">
+                <kpi.icon className="w-6 h-6 md:w-8 md:h-8 text-[#115E8D] opacity-20 absolute top-4 right-4" />
+                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-[#475569] pr-8 leading-tight break-words">{kpi.label}</span>
+                <span className="text-xl sm:text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-[#115E8D] mt-3 whitespace-nowrap">{kpi.value}</span>
               </CardContent>
             </Card>
           ))}
@@ -49,10 +49,10 @@ export function OwnerDashboard() {
           {/* Demographic Performance Matrix */}
           <Card className="bg-[#F8F9FA] border-0 shadow-lg rounded-[32px] flex flex-col overflow-hidden">
             <CardHeader className="border-b border-slate-200 bg-white/50 pb-4">
-              <CardTitle className="text-lg font-black uppercase tracking-tight text-[#115E8D]">
+              <CardTitle className="text-sm md:text-base lg:text-lg font-black uppercase tracking-tight text-[#115E8D] leading-tight break-words">
                 Demographic Performance Matrix
               </CardTitle>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 mt-1">
                 Avg Strength Gains by Age Group & Occupation
               </p>
             </CardHeader>
@@ -76,10 +76,10 @@ export function OwnerDashboard() {
           {/* Reverse Aging Tracker */}
           <Card className="bg-[#F8F9FA] border-0 shadow-lg rounded-[32px] flex flex-col overflow-hidden">
             <CardHeader className="border-b border-slate-200 bg-white/50 pb-4">
-              <CardTitle className="text-lg font-black uppercase tracking-tight text-[#115E8D]">
+              <CardTitle className="text-sm md:text-base lg:text-lg font-black uppercase tracking-tight text-[#115E8D] leading-tight break-words">
                 The Reverse Aging Tracker
               </CardTitle>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 mt-1">
                 Baseline vs. Current Weight (12 Mos)
               </p>
             </CardHeader>
@@ -101,10 +101,10 @@ export function OwnerDashboard() {
         </div>
 
         {/* Trainer Efficacy Grid */}
-        <Card className="bg-[#F8F9FA] border-0 shadow-lg rounded-[32px] flex flex-col shrink-0 mt-2">
-          <CardHeader className="border-b border-slate-200 bg-white/50 pb-4 flex flex-row items-center justify-between">
+        <Card className="bg-[#F8F9FA] border-0 shadow-lg rounded-[24px] md:rounded-[32px] flex flex-col shrink-0 mt-2">
+          <CardHeader className="border-b border-slate-200 bg-white/50 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-lg font-black uppercase tracking-tight text-[#115E8D]">
+              <CardTitle className="text-sm md:text-base lg:text-lg font-black uppercase tracking-tight text-[#115E8D] leading-tight break-words">
                 Trainer Efficacy
               </CardTitle>
               <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mt-1">
@@ -113,17 +113,17 @@ export function OwnerDashboard() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-             <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+             <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-slate-200">
                 {mockTrainerEfficacy.map((trainer, i) => (
-                  <div key={i} className="p-6 flex flex-col items-center justify-center text-center">
-                    <span className="text-sm font-black uppercase tracking-widest text-[#0A2E46]">{trainer.trainerName}</span>
+                  <div key={i} className="p-4 md:p-6 flex flex-col items-center justify-center text-center">
+                    <span className="text-xs md:text-sm font-black uppercase tracking-widest text-[#0A2E46] whitespace-normal break-words leading-tight">{trainer.trainerName}</span>
                     <span className={cn(
-                      "text-4xl font-black italic tracking-tighter mt-2 leading-none",
+                      "text-3xl md:text-4xl font-black italic tracking-tighter mt-1 md:mt-2 leading-none",
                       trainer.avgRepQuality >= 90 ? "text-emerald-500" : trainer.avgRepQuality >= 80 ? "text-amber-500" : "text-rose-500"
                     )}>
                       {trainer.avgRepQuality}
                     </span>
-                    <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mt-2">{trainer.clientCount} Active Clients</span>
+                    <span className="text-[9px] md:text-[10px] font-bold uppercase text-slate-400 tracking-widest mt-1 md:mt-2 text-wrap">{trainer.clientCount} Active Clients</span>
                   </div>
                 ))}
              </div>

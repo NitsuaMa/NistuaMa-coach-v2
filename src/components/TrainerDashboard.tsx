@@ -14,10 +14,10 @@ export function TrainerDashboard() {
   const importantNotes = mockTrainerNotes.filter(n => n.isImportant);
 
   return (
-    <div className="h-full min-h-[calc(100vh-5rem)] w-full overflow-hidden bg-[#0A2E46] p-6 lg:p-8 flex flex-col gap-6 custom-scrollbar">
+    <div className="flex flex-col w-full h-full gap-6 custom-scrollbar p-6">
       
       {/* Header & Benchmark */}
-      <div className="flex items-center justify-between shrink-0 mb-2 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 mb-2 gap-4">
         <div>
           <h1 className="text-3xl font-black italic uppercase tracking-tighter text-white leading-none mb-2">
             Micro Analytics
@@ -26,13 +26,13 @@ export function TrainerDashboard() {
             Client Name: Jane Doe | 55 F
           </p>
         </div>
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 max-w-sm text-right">
-           <span className="text-xs font-black uppercase tracking-widest text-emerald-400 block mb-1">Demographic Benchmark</span>
-           <span className="text-sm font-bold text-emerald-100">You are progressing <strong className="text-emerald-400 font-black">15% faster</strong> than the MSF average for a 55-year-old female.</span>
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 w-full md:max-w-sm md:text-right shrink-0">
+           <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-emerald-400 block mb-1">Demographic Benchmark</span>
+           <span className="text-xs md:text-sm font-bold text-emerald-100">You are progressing <strong className="text-emerald-400 font-black">15% faster</strong> than the MSF average for a 55-year-old female.</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6 pr-4 pb-12">
+      <div className="flex flex-col gap-6 pr-4 pb-12 w-full h-full">
         {/* Critical Alert Hub */}
         {importantNotes.length > 0 && (
           <div className="shrink-0 flex flex-col gap-2">
@@ -58,10 +58,10 @@ export function TrainerDashboard() {
           {/* Mastery of Effort Trendline */}
           <Card className="bg-[#F8F9FA] border-0 shadow-lg rounded-[32px] flex flex-col overflow-hidden">
             <CardHeader className="border-b border-slate-200 bg-white/50 pb-4">
-              <CardTitle className="text-lg font-black uppercase tracking-tight text-[#115E8D] flex items-center gap-2">
-                <Activity className="w-5 h-5 text-[#F06C22]" /> Mastery of Effort Trendline
+              <CardTitle className="text-sm md:text-base lg:text-lg font-black uppercase tracking-tight text-[#115E8D] flex items-center gap-2 leading-tight break-words flex-wrap">
+                <Activity className="shrink-0 w-4 h-4 md:w-5 md:h-5 text-[#F06C22]" /> Mastery of Effort Trendline
               </CardTitle>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 mt-1">
                 Rep Quality & 4 P's Adherence (Last 6 Sessions)
               </p>
             </CardHeader>
@@ -89,10 +89,10 @@ export function TrainerDashboard() {
           {/* Expected vs Actual TUT */}
           <Card className="bg-[#F8F9FA] border-0 shadow-lg rounded-[32px] flex flex-col overflow-hidden">
             <CardHeader className="border-b border-slate-200 bg-white/50 pb-4">
-              <CardTitle className="text-lg font-black uppercase tracking-tight text-[#115E8D] flex items-center gap-2">
-                <Dumbbell className="w-5 h-5 text-[#F06C22]" /> Time Under Tension (TUT)
+              <CardTitle className="text-sm md:text-base lg:text-lg font-black uppercase tracking-tight text-[#115E8D] flex items-center gap-2 leading-tight break-words flex-wrap">
+                <Dumbbell className="shrink-0 w-4 h-4 md:w-5 md:h-5 text-[#F06C22]" /> Time Under Tension (TUT)
               </CardTitle>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-500 mt-1">
                 Expected (90s) vs Actual
               </p>
             </CardHeader>

@@ -48,6 +48,12 @@ export interface Client {
   isActive: boolean;
   medicalHistory?: string;
   occupation?: string;
+  isRetired?: boolean;
+  clinicalProfile?: string[];
+  clinicalNotes?: string;
+  activityLevel?: 'Sedentary' | 'Light' | 'Moderate' | 'High' | 'Manual Labor';
+  trainingPedigree?: 'Novice' | 'Intermediate' | 'Advanced' | 'Protocol Veteran';
+  recoveryMetric?: 'Poor' | 'Average' | 'Optimal';
   activity?: string;
   goals?: string;
   globalNotes?: string;
