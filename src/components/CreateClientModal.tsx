@@ -12,6 +12,7 @@ import { db } from '../firebase';
 import { Client } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { cn } from '@/lib/utils';
+import { OccupationSelect } from './OccupationSelect';
 
 interface CreateClientModalProps {
   clients: Client[];
@@ -123,11 +124,11 @@ export function CreateClientModal({ clients, initialName = '', onClose, onClient
   const handleSaveClick = () => executeSave(false);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-950/90 backdrop-blur-md">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-6 bg-slate-950/90 backdrop-blur-md">
       <Card className="w-full max-w-3xl bg-slate-900 border border-slate-700 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col max-h-[95vh] rounded-[32px] overflow-hidden relative">
         
         {duplicateWarning && (
-          <div className="absolute inset-0 z-[110] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
             <div className="bg-slate-900 border border-amber-500 rounded-[24px] p-8 max-w-md w-full shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-2 bg-amber-500"></div>
               <div className="flex flex-col items-center text-center gap-6">
@@ -274,11 +275,10 @@ export function CreateClientModal({ clients, initialName = '', onClose, onClient
                     <label htmlFor="retired" className="text-[10px] font-bold text-slate-400 cursor-pointer">Unemployed/Retired</label>
                   </div>
                 </div>
-                <Input 
-                  value={occupation} onChange={e => setOccupation(e.target.value)}
+                <OccupationSelect 
+                  value={occupation} 
+                  onChange={setOccupation} 
                   disabled={isRetired}
-                  className="h-12 bg-slate-800 border-slate-700 text-white placeholder:text-slate-600 focus:border-[#F06C22] rounded-xl font-bold disabled:opacity-50"
-                  placeholder={isRetired ? "N/A" : "Software Engineer, Real Estate, etc..."}
                 />
               </div>
               <div className="space-y-2">

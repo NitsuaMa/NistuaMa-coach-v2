@@ -58,6 +58,7 @@ import { Client, Machine, WorkoutSession, ExerciseLog, Routine, View, ClientMach
 import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
 import { WorkoutChartGrid } from './WorkoutChartGrid';
 import { ClientHistoryCalendar } from './ClientHistoryCalendar';
+import { OccupationSelect } from './OccupationSelect';
 import { cn } from '../lib/utils';
 
 export function ClientProfileView({ 
@@ -1335,7 +1336,11 @@ export function ClientProfileView({
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Occupation</Label>
-                  <Input value={infoForm.occupation || ''} onChange={e => setInfoForm(f => ({ ...f, occupation: e.target.value }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
+                  <OccupationSelect 
+                    value={infoForm.occupation || ''} 
+                    onChange={v => setInfoForm(f => ({ ...f, occupation: v }))} 
+                    disabled={infoForm.isRetired}
+                  />
                 </div>
                 <div className="space-y-2 flex flex-col justify-center">
                    <div className="flex items-center gap-4 mt-2">

@@ -37,7 +37,8 @@ export function TrainerControlHubView({
   onSeedDemoClient,
   onRestoreMachines,
   onLogout,
-  onReorderTrainers
+  onReorderTrainers,
+  setView
 }: { 
   trainers: Trainer[], 
   machines: Machine[], 
