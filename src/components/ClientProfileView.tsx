@@ -821,7 +821,11 @@ export function ClientProfileView({
                                       'text-slate-500'
                                     )
                                   }`}>
-                                    {log.isStaticHold ? `${log.seconds}s` : log.reps}
+                                    {log.repsLeft !== undefined && log.repsRight !== undefined ? (
+                                      `${log.repsLeft}L|${log.repsRight}R`
+                                    ) : (
+                                      log.isStaticHold ? `${log.seconds}s` : log.reps
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -840,7 +844,11 @@ export function ClientProfileView({
                                 <span className="font-black text-[11px] sm:text-[12px] text-[#F06C22]">{targetLog.repQuality === 3 ? Number(targetLog.weight) + 5 : targetLog.weight}</span>
                              </div>
                              <span className="font-extrabold text-[9px] text-[#F06C22]/70">
-                               {targetLog.isStaticHold ? `${targetLog.seconds}s` : targetLog.reps}
+                               {targetLog.repsLeft !== undefined && targetLog.repsRight !== undefined ? (
+                                 `${targetLog.repsLeft}L|${targetLog.repsRight}R`
+                               ) : (
+                                 targetLog.isStaticHold ? `${targetLog.seconds}s` : targetLog.reps
+                               )}
                              </span>
                           </div>
                         ) : (

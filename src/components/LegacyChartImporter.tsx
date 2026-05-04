@@ -41,7 +41,9 @@ interface ValidationLog {
   id: string;
   name: string;
   weight: number;
-  reps: number;
+  reps: number | null;
+  repsLeft?: number;
+  repsRight?: number;
   isTSC: boolean;
   machineId?: string;
   isAnomalous?: boolean;
@@ -106,7 +108,7 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
       }
 
       // Map and identify anomalies
-      const mappedSessions: ValidationSession[] = allExtracted.map((s, sIdx) => {
+      let mappedSessions: ValidationSession[] = allExtracted.map((s, sIdx) => {
         // Resolve trainer
         const trainerMatch = trainers.find(t => 
           t.initials.toLowerCase() === s.trainer.toLowerCase() || 
@@ -125,14 +127,19 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
               m.name.toLowerCase().includes(mach.name.toLowerCase())
             );
 
-            // Anomaly Detection: Basic checks
+            // Initial Anomaly Detection: Basic checks
             let isAnomalous = false;
             let anomalyReason = '';
             if (m.weight > 500) {
               isAnomalous = true;
               anomalyReason = 'Extreme Weight Detected';
             }
-            if (m.reps > 30 && !m.isTSC) {
+            // Flag if both weight AND reps are 0/null
+            if ((!m.weight || m.weight === 0) && (!m.reps || m.reps === 0) && !m.repsLeft && !m.repsRight) {
+              isAnomalous = true;
+              anomalyReason = 'Missing Performance Data';
+            }
+            if (m.reps !== null && m.reps > 40 && !m.isTSC) {
               isAnomalous = true;
               anomalyReason = 'High Reps (Non-TSC)';
             }
@@ -146,6 +153,8 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
               name: m.name,
               weight: m.weight,
               reps: m.reps,
+              repsLeft: m.repsLeft,
+              repsRight: m.repsRight,
               isTSC: m.isTSC,
               machineId: machineMatch?.id,
               isAnomalous,
@@ -155,8 +164,46 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
         };
       });
 
-      // Sort by date
-      mappedSessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Sort by date before cross-session analysis
+      mappedSessions.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+      // Second pass: Weight Anomaly Detection (Comparison with previous sessions)
+      mappedSessions = mappedSessions.map((session, sIdx) => {
+        if (sIdx === 0) return session; // No previous session to compare to
+
+        return {
+          ...session,
+          machines: session.machines.map(log => {
+            if (!log.machineId) return log;
+
+            // Find this machine in previous sessions
+            let prevWeight = -1;
+            for (let i = sIdx - 1; i >= 0; i--) {
+              const prevLog = mappedSessions[i].machines.find(m => m.machineId === log.machineId);
+              if (prevLog && prevLog.weight > 0) {
+                prevWeight = prevLog.weight;
+                break;
+              }
+            }
+
+            if (prevWeight !== -1) {
+              const weightDiff = Math.abs(log.weight - prevWeight);
+              if (weightDiff > 10) {
+                return {
+                  ...log,
+                  isAnomalous: true,
+                  anomalyReason: log.anomalyReason 
+                    ? `${log.anomalyReason} | Weight Jump: ${weightDiff}lb` 
+                    : `Weight Jump: ${weightDiff}lb`
+                };
+              }
+            }
+
+            return log;
+          })
+        };
+      });
+
       setValidationSessions(mappedSessions);
       setScanProgress('OCR Pipeline Complete');
     } catch (err) {
@@ -232,8 +279,10 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
             clientId: selectedClientId,
             machineId: vLog.machineId,
             weight: String(vLog.weight),
-            reps: vLog.isTSC ? '' : String(vLog.reps),
-            seconds: vLog.isTSC ? String(vLog.reps) : '',
+            reps: vLog.isTSC ? '' : String(vLog.reps || ''),
+            repsLeft: vLog.repsLeft,
+            repsRight: vLog.repsRight,
+            seconds: vLog.isTSC ? String(vLog.reps || '') : '',
             isTSC: vLog.isTSC,
             isStaticHold: vLog.isTSC,
             repQuality: 3,
@@ -296,8 +345,8 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
           {validationSessions.length > 0 && (
             <Button 
               onClick={finalizeImport}
-              disabled={isFinalizing}
-              className="bg-[#F06C22] hover:bg-[#F06C22]/90 text-white font-black px-6 h-11 tracking-widest uppercase text-xs"
+              disabled={isFinalizing || validationSessions.some(s => !s.date)}
+              className="bg-[#F06C22] hover:bg-[#F06C22]/90 text-white font-black px-6 h-11 tracking-widest uppercase text-xs disabled:opacity-50"
             >
               {isFinalizing ? 'Committing...' : '[ Finalize & Import Data ]'}
             </Button>
@@ -433,12 +482,15 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                           </Badge>
                           <div className="flex-1 flex items-center gap-4">
                             <div className="flex items-center gap-1.5">
-                              <Calendar className="w-3 h-3 text-slate-500" />
+                              <Calendar className={cn("w-3 h-3 transition-colors", !session.date ? "text-red-500 animate-pulse" : "text-slate-500")} />
                               <input 
                                 type="date"
                                 value={session.date}
                                 onChange={e => setValidationSessions(prev => prev.map(s => s.id === session.id ? { ...s, date: e.target.value } : s))}
-                                className="bg-transparent border-none text-[10px] font-black text-[#F06C22] uppercase tracking-widest focus:ring-0"
+                                className={cn(
+                                  "bg-transparent border transition-all text-[10px] font-black uppercase tracking-widest focus:ring-0 px-2 py-1 rounded",
+                                  !session.date ? "border-red-500 text-red-500 bg-red-500/10" : "border-transparent text-[#F06C22]"
+                                )}
                               />
                             </div>
                             <div className="flex items-center gap-1.5 border-l border-slate-800 pl-4">
@@ -494,15 +546,27 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                                   <label className="text-[7px] font-black text-slate-500 uppercase block mb-1">
                                     {log.isTSC ? 'Secs (TSC)' : 'Reps (Dyn)'}
                                   </label>
-                                  <input 
-                                    type="number"
-                                    value={log.reps}
-                                    onChange={e => updateLogData(session.id, log.id, 'reps', parseInt(e.target.value) || 0)}
-                                    className={cn(
-                                      "w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs font-black focus:ring-0",
-                                      log.isTSC ? "text-emerald-400 focus:border-emerald-500" : "text-white focus:border-[#F06C22]"
+                                  <div className="space-y-1">
+                                    <input 
+                                      type="number"
+                                      value={log.reps ?? 0}
+                                      onChange={e => updateLogData(session.id, log.id, 'reps', parseInt(e.target.value) || 0)}
+                                      className={cn(
+                                        "w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs font-black focus:ring-0",
+                                        log.isTSC ? "text-emerald-400 focus:border-emerald-500" : "text-white focus:border-[#F06C22]"
+                                      )}
+                                    />
+                                    {log.isTSC && (
+                                      <Badge variant="outline" className="text-[8px] font-black bg-emerald-500/10 text-emerald-500 border-emerald-500/30 px-1 py-0 h-4">
+                                        TSC PROTOCOL (90s)
+                                      </Badge>
                                     )}
-                                  />
+                                    {log.repsLeft !== undefined && log.repsRight !== undefined && (
+                                      <div className="text-[9px] font-black text-slate-400 mt-1 uppercase border-t border-slate-800 pt-1">
+                                        L: {log.repsLeft} | R: {log.repsRight}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                               

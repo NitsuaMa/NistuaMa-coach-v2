@@ -296,8 +296,16 @@ export function WorkoutChartGrid({
                                     log.repQuality === 2 ? 'text-amber-700' : 
                                     log.repQuality === 1 ? 'text-rose-700' : 
                                     'text-white'
-                                 }`}>{log.isStaticHold ? (log.seconds || '--') : (log.reps || '--')}</span>
-                                 <span className="text-[8px] font-black uppercase text-zinc-500 italic tracking-tighter">{log.isStaticHold ? 'S' : 'R'}</span>
+                                 }`}>
+                                   {log.repsLeft !== undefined && log.repsRight !== undefined ? (
+                                      `${log.repsLeft}L|${log.repsRight}R`
+                                    ) : (
+                                      log.isStaticHold ? (log.seconds || '--') : (log.reps || '--')
+                                    )}
+                                 </span>
+                                 <span className="text-[8px] font-black uppercase text-zinc-500 italic tracking-tighter">
+                                   {log.repsLeft !== undefined && log.repsRight !== undefined ? '' : (log.isStaticHold ? 'S' : 'R')}
+                                 </span>
                               </div>
                            </div>
                          ) : (

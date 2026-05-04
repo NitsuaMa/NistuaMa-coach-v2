@@ -334,7 +334,11 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
                                    <span className="font-black text-lg text-white">{log.weight}</span>
                                  </div>
                                  <span className={`font-extrabold text-sm ${qualityColor}`}>
-                                   {log.isStaticHold ? `${log.seconds}s` : log.reps}
+                                   {log.repsLeft !== undefined && log.repsRight !== undefined ? (
+                                      `${log.repsLeft}L|${log.repsRight}R`
+                                    ) : (
+                                      log.isStaticHold ? `${log.seconds}s` : log.reps
+                                    )}
                                  </span>
                                </div>
                              </td>

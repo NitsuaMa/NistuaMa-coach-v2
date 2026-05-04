@@ -307,7 +307,9 @@ Analyze the MSF Reference Text, the specific Client Details, and explicitly cros
 export interface ExtractedMachineData {
   name: string;
   weight: number;
-  reps: number;
+  reps: number | null;
+  repsLeft?: number;
+  repsRight?: number;
   isTSC: boolean;
 }
 
@@ -333,10 +335,12 @@ export const CHART_OCR_SCHEMA = {
           properties: {
             name: { type: "string" as const },
             weight: { type: "number" as const },
-            reps: { type: "number" as const },
+            reps: { type: "number" as const, description: "Reps or seconds (if TSC). Null if bilateral decimal notation is used." },
+            repsLeft: { type: "number" as const, description: "Extracted from integer part of decimal (e.g. 10.12 -> 10)" },
+            repsRight: { type: "number" as const, description: "Extracted from decimal part (e.g. 10.12 -> 12)" },
             isTSC: { type: "boolean" as const }
           },
-          required: ["name", "weight", "reps", "isTSC"]
+          required: ["name", "weight", "isTSC"]
         }
       }
     },
@@ -351,16 +355,24 @@ export async function processLegacyChart(
   const ai = getGenaiClient();
   
   const systemInstruction = `You are a clinical data extraction engine. Analyze the provided image of a high-intensity training chart. The chart is a grid.
-Extract the data into a JSON array of sessions.
-Columns (Sessions): Look for the header row containing Session Number, Date, and Trainer Initials.
-Rows (Machines): The leftmost column contains the Machine Name. Ignore the machine settings (like seat height). 
-Special Instruction: Machines like "Torso Rotation" are performed twice (Left and Right). Ensure both are extracted as separate entries in the machines array if they appear as separate data points.
-Cells (Performance Data): Where a session column and machine row intersect, extract the performance data. The top number in the box is the \`weight\`. The bottom number is the \`reps\` or \`tsc\`. If the bottom number is greater than 20, classify it as Time Under Load / TSC, otherwise classify it as Reps.
-Ignore any circled numbers denoting the order of exercise.
-Return ONLY valid JSON matching the requested schema.`;
+Extract the data into a JSON array of sessions using THESE STRICT RULES:
+
+1. Columns (Sessions): Look for the header row containing Session Number, Date, and Trainer Initials.
+2. Rows (Machines): The leftmost column contains the Machine Name. Ignore machine settings (like seat height).
+3. Cells (Performance Data): The top number is 'weight'. The bottom number is 'reps' or performance metric.
+
+4. TSC Logic: If the bottom number is exceptionally high (e.g., > 20), or marked with 's' or 'sec', it is a Timed Static Contraction. Set isTSC: true and map numeric value to 'reps' (acting as seconds).
+
+5. Bilateral Decimal Logic (e.g. Torso Rotation): If the bottom number contains a decimal (e.g., 10.12), it represents bilateral repetitions.
+   - You MUST split this mathematically: The integer is repsLeft (10), the decimal digits are repsRight (12).
+   - Map these to 'repsLeft' and 'repsRight'.
+   - Set 'reps' to null in this specific case.
+
+6. Consistency: Ensure both sides are extracted correctly for machines like Torso Rotation.
+7. Return ONLY valid JSON matching the requested schema.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-1.5-pro',
     contents: [
       {
         parts: [

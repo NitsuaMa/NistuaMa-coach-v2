@@ -530,8 +530,8 @@ export default function App() {
       const demoClientId = demoClientRef.id;
 
       // 2. Define and Create Routines
-      const routineAIds = ["m-hip-add", "m-hip-abd", "m-leg-press", "m-compound-row", "m-dip", "m-lumbar"];
-      const routineBIds = ["m-leg-curl", "m-leg-ext", "m-pulldown", "m-overhead-press", "m-abs"];
+      const routineAIds = ["m-hip-add", "m-hip-abd", "m-leg-press", "m-compound-row", "m-dip", "m-lumbar", "m-torso-rotation"];
+      const routineBIds = ["m-leg-curl", "m-leg-ext", "m-pulldown", "m-overhead-press", "m-abs", "m-torso-rotation"];
 
       await addDoc(collection(db, 'routines'), {
         clientId: demoClientId,
@@ -578,14 +578,30 @@ export default function App() {
           const baseWeight = 50 + (mIdx * 20);
           const weightValue = baseWeight + (i * 5); 
           
-          return addDoc(collection(db, 'exerciseLogs'), {
+          const logData: any = {
             sessionId: sessionRef.id,
             clientId: demoClientId,
             machineId: mId,
             weight: weightValue.toString(),
-            reps: (8 + (i % 4)).toString(),
             createdAt: ts
-          });
+          };
+
+          // Special logic for new data properties
+          if (mId === 'm-torso-rotation') {
+            // Bilateral reps
+            logData.repsLeft = 10 + (i % 3);
+            logData.repsRight = 10 + (i % 2);
+          } else if (mId === 'm-lumbar' && i % 4 === 0) {
+            // TSC protocol test
+            logData.isTSC = true;
+            logData.reps = "90"; 
+            logData.seconds = "90"; // 90 seconds for display
+            logData.isStaticHold = true;
+          } else {
+            logData.reps = (8 + (i % 4)).toString();
+          }
+          
+          return addDoc(collection(db, 'exerciseLogs'), logData);
         });
         await Promise.all(logPromises);
       }
@@ -3770,7 +3786,13 @@ function ClientHistoryView({
                                 {log.weight}
                               </div>
                               <div className="text-[9px] font-bold text-muted-foreground leading-none">
-                                {log.isStaticHold ? (log.seconds || '--') : (log.reps || '--')}<span className="text-[7px] ml-0.5 uppercase">{log.isStaticHold ? 's' : 'r'}</span>
+                                {log.repsLeft !== undefined && log.repsRight !== undefined ? (
+                                  <span className="text-[7px] font-black">{log.repsLeft}L|{log.repsRight}R</span>
+                                ) : (
+                                  <>
+                                    {log.isStaticHold ? (log.seconds || '--') : (log.reps || '--')}<span className="text-[7px] ml-0.5 uppercase">{log.isStaticHold ? 's' : 'r'}</span>
+                                  </>
+                                )}
                               </div>
                               <div className="flex flex-wrap justify-center gap-0.5 mt-0.5 overflow-hidden max-h-[16px]">
                                 {Object.entries(log.machineSettings || {}).map(([key, val]) => (
@@ -4188,7 +4210,12 @@ function PerformanceEntryDialog({
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Trend History</span>
               {pastMachineLogs.map((entry, idx) => {
                 const isHoldLog = entry.log.isStaticHold;
-                const metrics = isHoldLog ? `${entry.log.seconds}s` : `${entry.log.reps} REPS`;
+                let metrics = "";
+                if (entry.log.repsLeft !== undefined && entry.log.repsRight !== undefined) {
+                  metrics = `${entry.log.repsLeft}L|${entry.log.repsRight}R`;
+                } else {
+                  metrics = isHoldLog ? `${entry.log.seconds}s` : `${entry.log.reps} REPS`;
+                }
                 
                 // Compare to the previous entry chronologically (idx + 1)
                 const olderEntry = pastMachineLogs[idx + 1];
@@ -6117,7 +6144,13 @@ function WorkoutTrackerView({
                                   </div>
                                 ) : isCompleted ? (
                                   <span className="font-black text-[9px] text-[#F06C22]">
-                                    {currentLog.weight} LBS | {currentLog.isStaticHold ? `${currentLog.seconds}s` : `${currentLog.reps} REPS`} | QUALITY: {currentLog.repQuality}
+                                    {currentLog.weight} LBS | {
+                                     currentLog.repsLeft !== undefined && currentLog.repsRight !== undefined ? (
+                                       `${currentLog.repsLeft}L|${currentLog.repsRight}R`
+                                     ) : (
+                                       currentLog.isStaticHold ? `${currentLog.seconds}s` : `${currentLog.reps} REPS`
+                                     )
+                                   } | QUALITY: {currentLog.repQuality}
                                   </span>
                                 ) : (
                                   settingsDisplay
@@ -6130,7 +6163,11 @@ function WorkoutTrackerView({
                                  <div className="flex flex-col items-center leading-none">
                                     <span className="font-black text-[11px] text-slate-800">{prevLog.weight}</span>
                                     <span className="font-extrabold text-[8px] text-slate-500 mt-[1px]">
-                                      {prevLog.isStaticHold ? `${prevLog.seconds}s` : `${prevLog.reps}R`}
+                                      {prevLog.repsLeft !== undefined && prevLog.repsRight !== undefined ? (
+                                       `${prevLog.repsLeft}L|${prevLog.repsRight}R`
+                                     ) : (
+                                       prevLog.isStaticHold ? `${prevLog.seconds}s` : `${prevLog.reps}R`
+                                     )}
                                     </span>
                                  </div>
                               ) : (
@@ -6214,7 +6251,13 @@ function WorkoutTrackerView({
                                   onClick={() => setEditingWeightMachineId(machine.id!)}
                                 >
                                   {currentLog.isStaticHold || currentLog.reps ? (
-                                     <span className="font-black text-[13px] text-[#115E8D]">{currentLog.isStaticHold ? currentLog.seconds : currentLog.reps}</span>
+                                     <span className="font-black text-[13px] text-[#115E8D]">
+                                      {currentLog.repsLeft !== undefined && currentLog.repsRight !== undefined ? (
+                                        `${currentLog.repsLeft}L|${currentLog.repsRight}R`
+                                      ) : (
+                                        currentLog.isStaticHold ? currentLog.seconds : currentLog.reps
+                                      )}
+                                    </span>
                                   ) : (
                                      <span className={`font-black text-[11px] ${isFocusMachine ? 'text-slate-400' : 'text-slate-300 group-hover/reps:text-[#115E8D]/50'}`}>--</span>
                                   )}

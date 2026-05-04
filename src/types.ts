@@ -168,6 +168,8 @@ export interface ExerciseLog {
   suggestedOrder?: number;
   weight?: string;
   reps?: string;
+  repsLeft?: number;
+  repsRight?: number;
   seconds?: string;
   targetWeight?: string;
   isStaticHold?: boolean;
