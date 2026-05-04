@@ -69,7 +69,8 @@ import {
   getDocs,
   limit,
   Timestamp,
-  writeBatch
+  writeBatch,
+  increment
 } from 'firebase/firestore';
 import { 
   GoogleAuthProvider, 
@@ -90,6 +91,7 @@ import { InsightsDashboardView } from './components/InsightsDashboardView';
 import { ClientProfileView } from './components/ClientProfileView';
 import { CalendarView } from './components/CalendarView';
 import { PinLoginView } from './components/PinLoginView';
+import { LegacyChartImporter } from './components/LegacyChartImporter';
 import { ProfilesView } from './components/ProfilesView';
 import { ClientDirectoryView } from './components/ClientDirectoryView';
 import { TrainerProfileView } from './components/TrainerProfileView';
@@ -1255,6 +1257,7 @@ export default function App() {
                 trainers={trainers}
                 setView={setCurrentView}
                 selectedSessionId={selectedSessionId}
+                user={user}
               />
             )}
             {currentView === 'profile' && (
@@ -1271,6 +1274,7 @@ export default function App() {
                 }}
                 setView={setCurrentView}
                 hasQuotaError={hasQuotaError}
+                user={user}
               />
             )}
             {currentView === 'progress-report' && selectedClientId && authTrainer && (
@@ -1331,6 +1335,18 @@ export default function App() {
                 onStartNewClientOnboarding={setNewClientOnboardingName}
                 setView={setCurrentView}
                 clients={clients}
+              />
+            )}
+            {currentView === 'chart-importer' && (
+              <LegacyChartImporter 
+                clients={clients}
+                machines={machines}
+                trainers={trainers}
+                initialClientId={selectedClientId || undefined}
+                onComplete={() => {
+                  if (selectedClientId) setCurrentView('profile');
+                  else setCurrentView('clients');
+                }}
               />
             )}
           </AnimatePresence>
@@ -3452,14 +3468,16 @@ function ClientHistoryView({
   machines, 
   trainers,
   setView,
-  selectedSessionId 
+  selectedSessionId,
+  user
 }: { 
   clientId: string | null, 
   clients: Client[], 
   machines: Machine[], 
   trainers: Trainer[],
   setView: (v: View) => void,
-  selectedSessionId?: string | null
+  selectedSessionId?: string | null,
+  user: any
 }) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [logs, setLogs] = useState<Record<string, ExerciseLog>>({});
@@ -3475,7 +3493,7 @@ function ClientHistoryView({
   const [allSessions, setAllSessions] = useState<WorkoutSession[]>([]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || !user) return;
 
     const fetchData = async () => {
       try {
@@ -3838,6 +3856,7 @@ function ClientHistoryView({
           session={activeNotesSession}
           userTrainers={trainers}
           onClose={() => setActiveNotesSession(null)}
+          user={user}
         />
       )}
 
@@ -4026,6 +4045,7 @@ function PerformanceEntryDialog({
   currentQuality,
   pastMachineLogs,
   isStaticHold,
+  side,
   onSave,
   onClose
 }: {
@@ -4036,7 +4056,8 @@ function PerformanceEntryDialog({
   currentQuality: number;
   pastMachineLogs: { log: ExerciseLog; session: WorkoutSession }[];
   isStaticHold?: boolean;
-  onSave: (weight: string, target: string, repsOrSeconds: string, quality: number, isHold: boolean) => void;
+  side?: 'Left' | 'Right';
+  onSave: (weight: string, target: string, repsOrSeconds: string, quality: number, isHold: boolean, side?: 'Left' | 'Right') => void;
   onClose: () => void;
 }) {
   const prevLog = pastMachineLogs[0]?.log;
@@ -4073,6 +4094,7 @@ function PerformanceEntryDialog({
             </div>
             <div>
               <h2 className="text-2xl font-black italic uppercase tracking-tight leading-none">{machine.name}</h2>
+              {side && <span className="text-[#F06C22] text-[10px] font-black uppercase tracking-widest mt-1 block">Rotation: {side}</span>}
               <p className="text-[10px] uppercase font-bold text-[#38BDF8] tracking-widest mt-1">Smart Entry HUD</p>
             </div>
           </div>
@@ -4227,7 +4249,7 @@ function PerformanceEntryDialog({
             <Button variant="outline" className="h-16 rounded-2xl font-black uppercase tracking-widest border-2 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white" onClick={onClose}>
               Cancel
             </Button>
-            <Button className="h-16 rounded-2xl font-black uppercase tracking-widest bg-[#F06C22] text-white hover:bg-[#ea580c] shadow-[0_0_20px_rgba(240,108,34,0.4)] border-none" onClick={() => onSave(current.toString(), currentNextWeight || current.toString(), reps.toString(), quality, isHold)}>
+            <Button className="h-16 rounded-2xl font-black uppercase tracking-widest bg-[#F06C22] text-white hover:bg-[#ea580c] shadow-[0_0_20px_rgba(240,108,34,0.4)] border-none" onClick={() => onSave(current.toString(), currentNextWeight || current.toString(), reps.toString(), quality, isHold, side)}>
               Save Set
             </Button>
           </div>
@@ -4390,16 +4412,19 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
 function ExerciseHistoryDialog({
   clientId,
   machine,
-  onClose
+  onClose,
+  user
 }: {
   clientId: string;
   machine: Machine;
   onClose: () => void;
+  user: any;
 }) {
   const [history, setHistory] = useState<ExerciseLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     const q = query(
       collection(db, 'exerciseLogs'),
       where('clientId', '==', clientId),
@@ -4509,21 +4534,24 @@ function ExerciseHistoryDialog({
 function SessionNotesSidebar({ 
   session, 
   onClose,
-  userTrainers
+  userTrainers,
+  user
 }: { 
   session: WorkoutSession, 
   onClose: () => void,
-  userTrainers: Trainer[]
+  userTrainers: Trainer[],
+  user: any
 }) {
   const [noteContent, setNoteContent] = useState('');
   const [history, setHistory] = useState<SessionNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const currentUser = auth.currentUser;
+  const currentUser = user;
   const currentTrainer = userTrainers.find(t => t.pin === localStorage.getItem('trainer_pin') || t.fullName === currentUser?.displayName);
   const trainerInitials = currentTrainer?.initials || '??';
 
   useEffect(() => {
+    if (!user) return;
     const q = query(
       collection(db, 'sessionNotes'),
       where('sessionId', '==', session.id),
@@ -4774,7 +4802,7 @@ function WorkoutTrackerView({
 
   // Special listener for unassigned sessions when no client is selected
   useEffect(() => {
-    if (!clientId) {
+    if (!clientId && user) {
       const unassignedQuery = query(
         collection(db, 'sessions'),
         where('isUnassigned', '==', true),
@@ -4807,7 +4835,7 @@ function WorkoutTrackerView({
   }, [clientId, clients]);
 
   useEffect(() => {
-    if (clientId) {
+    if (clientId && user) {
       // Fetch Client Machine Settings
       const settingsQuery = query(collection(db, 'clientMachineSettings'), where('clientId', '==', clientId));
       const unsubscribeSettings = onSnapshot(settingsQuery, (snapshot) => {
@@ -4896,7 +4924,8 @@ function WorkoutTrackerView({
         const logsMap: Record<string, ExerciseLog> = {};
         snapshot.docs.forEach(doc => {
           const data = { id: doc.id, ...doc.data() } as ExerciseLog;
-          logsMap[`${data.sessionId}_${data.machineId}`] = data;
+          const key = `${data.sessionId}_${data.machineId}${data.side ? '_' + data.side : ''}`;
+          logsMap[key] = data;
         });
         setLogs(logsMap);
       }, (error) => {
@@ -5029,7 +5058,10 @@ function WorkoutTrackerView({
 
   const startNewSession = async (routineType: 'A' | 'B' | 'Free', sessionType: SessionType = 'Standard', customMachines?: string[], adjustmentNote?: string, permanentSave?: boolean) => {
     if (!clientId) return;
-    const nextNum = sessions.length > 0 ? Math.max(...sessions.map(s => s.sessionNumber)) + 1 : 1;
+    const nextNum = Math.max(
+      sessions.length > 0 ? Math.max(...sessions.map(s => s.sessionNumber)) : 0,
+      selectedClient?.sessionCount || 0
+    ) + 1;
     
     // Auto-populate trainer and date
     const trainerInitials = authTrainer?.initials || trainers[0]?.initials || '??';
@@ -5120,16 +5152,42 @@ function WorkoutTrackerView({
       if (activeMachineIds && activeMachineIds.length > 0) {
         const currentSettings = clientMachineSettings;
         for (const mId of activeMachineIds) {
+          const mac = machines.find(m => m.id === mId);
+          const isTorsoMac = mac?.name.toLowerCase().includes('torso rotation');
           const prefilledWeight = machineLastWeights[mId];
+          
           if (prefilledWeight) {
-            await addDoc(collection(db, 'exerciseLogs'), {
-              sessionId: docRef.id,
-              clientId,
-              machineId: mId,
-              weight: prefilledWeight,
-              machineSettings: currentSettings[mId]?.settings || {},
-              createdAt: serverTimestamp()
-            });
+            if (isTorsoMac) {
+              // Create Left set
+              await addDoc(collection(db, 'exerciseLogs'), {
+                sessionId: docRef.id,
+                clientId,
+                machineId: mId,
+                side: 'Left',
+                weight: prefilledWeight,
+                machineSettings: currentSettings[mId]?.settings || {},
+                createdAt: serverTimestamp()
+              });
+              // Create Right set
+              await addDoc(collection(db, 'exerciseLogs'), {
+                sessionId: docRef.id,
+                clientId,
+                machineId: mId,
+                side: 'Right',
+                weight: prefilledWeight,
+                machineSettings: currentSettings[mId]?.settings || {},
+                createdAt: serverTimestamp()
+              });
+            } else {
+              await addDoc(collection(db, 'exerciseLogs'), {
+                sessionId: docRef.id,
+                clientId,
+                machineId: mId,
+                weight: prefilledWeight,
+                machineSettings: currentSettings[mId]?.settings || {},
+                createdAt: serverTimestamp()
+              });
+            }
           }
         }
       }
@@ -5272,6 +5330,17 @@ function WorkoutTrackerView({
 
       // 2. Sync all local logs
       const sessionLogs = Object.values(logs).filter((l: any) => l.sessionId === currentSession.id);
+      
+      const cleanData = (obj: any) => {
+        const cleaned: any = {};
+        Object.keys(obj).forEach(key => {
+          if (obj[key] !== undefined) {
+            cleaned[key] = obj[key];
+          }
+        });
+        return cleaned;
+      };
+
       for (const logObj of sessionLogs) {
         const log = logObj as any;
         if (log.id && log.id.toString().startsWith('temp_')) {
@@ -5279,7 +5348,7 @@ function WorkoutTrackerView({
           const newLogRef = doc(collection(db, 'exerciseLogs'));
           const { id, ...logData } = log;
           batch.set(newLogRef, {
-            ...logData,
+            ...cleanData(logData),
             updatedAt: serverTimestamp()
           });
         } else if (log.id) {
@@ -5287,19 +5356,26 @@ function WorkoutTrackerView({
           const logRef = doc(db, 'exerciseLogs', log.id);
           const { id, ...logData } = log;
           batch.update(logRef, {
-            ...logData,
+            ...cleanData(logData),
             updatedAt: serverTimestamp()
           });
         }
       }
 
-      // 3. Update client if consultation completed
-      if (selectedClient && !selectedClient.consultationCompleted) {
+      // 3. Update client if consultation completed or just increment session counters
+      if (selectedClient) {
         const clientRef = doc(db, 'clients', selectedClient.id!);
-        batch.update(clientRef, {
-          consultationCompleted: true,
+        const clientUpdates: any = {
+          completedSessions: increment(1),
+          sessionCount: currentSession.sessionNumber || increment(1),
           updatedAt: serverTimestamp()
-        });
+        };
+        
+        if (!selectedClient.consultationCompleted) {
+          clientUpdates.consultationCompleted = true;
+        }
+        
+        batch.update(clientRef, clientUpdates);
       }
 
       await batch.commit();
@@ -5318,9 +5394,10 @@ function WorkoutTrackerView({
   };
 
   const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('Standard');
+  const [editingWeightSide, setEditingWeightSide] = useState<'Left' | 'Right' | undefined>(undefined);
 
-  const updateLog = (sessionId: string, machineId: string, field: keyof ExerciseLog, value: any) => {
-    const key = `${sessionId}_${machineId}`;
+  const updateLog = (sessionId: string, machineId: string, field: keyof ExerciseLog, value: any, side?: 'Left' | 'Right') => {
+    const key = `${sessionId}_${machineId}${side ? '_' + side : ''}`;
     const currentSettings = clientMachineSettings[machineId]?.settings || {};
 
     setLogs(prev => {
@@ -5328,10 +5405,11 @@ function WorkoutTrackerView({
       const updatedLog: ExerciseLog = existing 
         ? { ...existing, [field]: value, machineSettings: currentSettings }
         : { 
-            id: `temp_${Date.now()}`, // Temporary ID for local state
+            id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, // Temporary ID for local state
             sessionId, 
             clientId, 
             machineId, 
+            ...(side ? { side } : {}),
             [field]: value, 
             machineSettings: currentSettings,
             createdAt: Timestamp.now()
@@ -5628,45 +5706,64 @@ function WorkoutTrackerView({
       {editingWeightMachineId && currentSession && (
         <PerformanceEntryDialog 
           machine={machines.find(m => m.id === editingWeightMachineId)!}
-          currentWeight={logs[`${currentSession.id}_${editingWeightMachineId}`]?.weight || '0'}
-          currentNextWeight={logs[`${currentSession.id}_${editingWeightMachineId}`]?.targetWeight || ''}
-          currentReps={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold ? (logs[`${currentSession.id}_${editingWeightMachineId}`]?.seconds || '0') : (logs[`${currentSession.id}_${editingWeightMachineId}`]?.reps || '0')}
-          currentQuality={logs[`${currentSession.id}_${editingWeightMachineId}`]?.repQuality || 0}
+          side={editingWeightSide}
+          currentWeight={logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.weight || '0'}
+          currentNextWeight={logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.targetWeight || ''}
+          currentReps={logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.isStaticHold ? (logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.seconds || '0') : (logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.reps || '0')}
+          currentQuality={logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.repQuality || 0}
           pastMachineLogs={sessions
             .filter(s => currentSession ? s.id !== currentSession.id : true)
             .map(s => {
-              const log = logs[`${s.id}_${editingWeightMachineId}`];
+              const log = logs[`${s.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`] || logs[`${s.id}_${editingWeightMachineId}`];
               return log && log.weight ? { log, session: s } : null;
             })
             .filter((x): x is { log: ExerciseLog; session: WorkoutSession } => Boolean(x))
             .slice(0, 3)}
-          isStaticHold={logs[`${currentSession.id}_${editingWeightMachineId}`]?.isStaticHold}
-          onClose={() => setEditingWeightMachineId(null)}
-          onSave={async (weight, target, repsOrSeconds, quality, isHold) => {
+          isStaticHold={logs[`${currentSession.id}_${editingWeightMachineId}${editingWeightSide ? '_' + editingWeightSide : ''}`]?.isStaticHold}
+          onClose={() => {
+            setEditingWeightMachineId(null);
+            setEditingWeightSide(undefined);
+          }}
+          onSave={async (weight, target, repsOrSeconds, quality, isHold, side) => {
             const timeDiff = Math.floor((Date.now() - lastMachineLoggedAt.current) / 1000);
 
-            await updateLog(currentSession.id!, editingWeightMachineId, 'weight', weight);
-            await updateLog(currentSession.id!, editingWeightMachineId, 'targetWeight', target);
-            await updateLog(currentSession.id!, editingWeightMachineId, 'repQuality', quality);
-            await updateLog(currentSession.id!, editingWeightMachineId, 'isStaticHold', isHold);
+            await updateLog(currentSession.id!, editingWeightMachineId, 'weight', weight, side);
+            await updateLog(currentSession.id!, editingWeightMachineId, 'targetWeight', target, side);
+            await updateLog(currentSession.id!, editingWeightMachineId, 'repQuality', quality, side);
+            await updateLog(currentSession.id!, editingWeightMachineId, 'isStaticHold', isHold, side);
             if (isHold) {
-              await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', repsOrSeconds);
-              await updateLog(currentSession.id!, editingWeightMachineId, 'reps', '0');
+              await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', repsOrSeconds, side);
+              await updateLog(currentSession.id!, editingWeightMachineId, 'reps', '0', side);
             } else {
-              await updateLog(currentSession.id!, editingWeightMachineId, 'reps', repsOrSeconds);
-              await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', '0');
+              await updateLog(currentSession.id!, editingWeightMachineId, 'reps', repsOrSeconds, side,);
+              await updateLog(currentSession.id!, editingWeightMachineId, 'seconds', '0', side);
             }
-            await updateLog(currentSession.id!, editingWeightMachineId, 'timeSpent', timeDiff.toString());
+            await updateLog(currentSession.id!, editingWeightMachineId, 'timeSpent', timeDiff.toString(), side);
             
             lastMachineLoggedAt.current = Date.now();
             
             setEditingWeightMachineId(null);
+            setEditingWeightSide(undefined);
             
             // Advance UI to the next machine automatically after a brief delay
+            // If it's Torso Rotation and we just finished Left, maybe advance to Right?
+            if (side === 'Left') {
+              setTimeout(() => {
+                setEditingWeightMachineId(editingWeightMachineId);
+                setEditingWeightSide('Right');
+              }, 150);
+              return;
+            }
+
             const currentIndex = activeMachineIds.indexOf(editingWeightMachineId);
             if (currentIndex !== -1 && currentIndex < activeMachineIds.length - 1) {
               setTimeout(() => {
-                setEditingWeightMachineId(activeMachineIds[currentIndex + 1]);
+                const nextMachineId = activeMachineIds[currentIndex + 1];
+                const nextMachine = machines.find(m => m.id === nextMachineId);
+                setEditingWeightMachineId(nextMachineId);
+                if (nextMachine?.name.toLowerCase().includes('torso rotation')) {
+                  setEditingWeightSide('Left');
+                }
               }, 150);
             }
           }}
@@ -5690,6 +5787,7 @@ function WorkoutTrackerView({
           clientId={clientId}
           machine={machines.find(m => m.id === historyMachineId)!}
           onClose={() => setHistoryMachineId(null)}
+          user={user}
         />
       )}
 
@@ -5870,11 +5968,25 @@ function WorkoutTrackerView({
                 let activeFocusMachineId: string | null = null;
                 if (currentSession) {
                   for (const mId of activeMachineIds) {
-                    const log = logs[`${currentSession.id}_${mId}`];
-                    // We consider it incomplete if weight is empty OR (reps and seconds are both empty) OR quality rating is missing
-                    if (!log || !log.weight || (!log.reps && !log.seconds) || !log.repQuality) {
-                      activeFocusMachineId = mId;
-                      break;
+                    const mac = machines.find(m => m.id === mId);
+                    const isTorsoMac = mac?.name.toLowerCase().includes('torso rotation');
+                    
+                    if (isTorsoMac) {
+                      const logL = logs[`${currentSession.id}_${mId}_Left`];
+                      const logR = logs[`${currentSession.id}_${mId}_Right`];
+                      const lComp = logL && logL.weight && (logL.reps || logL.seconds) && logL.repQuality;
+                      const rComp = logR && logR.weight && (logR.reps || logR.seconds) && logR.repQuality;
+                      
+                      if (!lComp || !rComp) {
+                        activeFocusMachineId = mId;
+                        break;
+                      }
+                    } else {
+                      const log = logs[`${currentSession.id}_${mId}`];
+                      if (!log || !log.weight || (!log.reps && !log.seconds) || !log.repQuality) {
+                        activeFocusMachineId = mId;
+                        break;
+                      }
                     }
                   }
                 }
@@ -5903,14 +6015,28 @@ function WorkoutTrackerView({
                         return a.order - b.order;
                       })
                       .map((machine, index) => {
-                        const currentLog = currentSession ? logs[`${currentSession.id}_${machine.id}`] || {} : {};
+                        const isTorso = machine.name.toLowerCase().includes('torso rotation');
+                        
+                        const logL = currentSession ? logs[`${currentSession.id}_${machine.id}_Left`] || {} : {};
+                        const logR = currentSession ? logs[`${currentSession.id}_${machine.id}_Right`] || {} : {};
+                        const logStd = currentSession ? logs[`${currentSession.id}_${machine.id}`] || {} : {};
+                        
+                        // Decide which log to show as "primary" or show both
+                        const currentLog = isTorso ? (logL.weight ? logL : logR) : logStd;
+                        
                         const isActive = activeMachineIds.includes(machine.id!);
-                        const isCompleted = currentLog?.weight && (currentLog?.reps || currentLog?.seconds) && currentLog?.repQuality;
+                        const isCompleted = isTorso 
+                          ? (logL.weight && (logL.reps || logL.seconds) && logL.repQuality) && (logR.weight && (logR.reps || logR.seconds) && logR.repQuality)
+                          : currentLog?.weight && (currentLog?.reps || currentLog?.seconds) && currentLog?.repQuality;
+                        
                         const seqPosition = isActive ? activeMachineIds.indexOf(machine.id!) + 1 : null;
                         const pastMachineLogs = sessions
                           .filter(s => currentSession ? s.id !== currentSession.id : true)
                           .map(s => {
-                            const log = logs[`${s.id}_${machine.id}`];
+                            // For historical check, favor specific side if we are in side-mode, else look for any
+                            const log = isTorso 
+                              ? (logs[`${s.id}_${machine.id}_Left`] || logs[`${s.id}_${machine.id}_Right`] || logs[`${s.id}_${machine.id}`])
+                              : logs[`${s.id}_${machine.id}`];
                             return log && log.weight ? { log, session: s } : null;
                           })
                           .filter((x): x is { log: ExerciseLog; session: WorkoutSession } => Boolean(x))
@@ -5983,7 +6109,13 @@ function WorkoutTrackerView({
                                 onClick={() => setEditingSettingsMachineId(machine.id!)}
                                 className="tracking-widest leading-none uppercase truncate mt-[2px] cursor-pointer hover:opacity-80"
                               >
-                                {isCompleted ? (
+                                {isTorso ? (
+                                  <div className="flex gap-2">
+                                    <span className={`font-black text-[9px] ${logL.weight ? 'text-[#F06C22]' : 'text-slate-400'}`}>L: {logL.weight || '--'}</span>
+                                    <span className="text-slate-300">|</span>
+                                    <span className={`font-black text-[9px] ${logR.weight ? 'text-[#F06C22]' : 'text-slate-400'}`}>R: {logR.weight || '--'}</span>
+                                  </div>
+                                ) : isCompleted ? (
                                   <span className="font-black text-[9px] text-[#F06C22]">
                                     {currentLog.weight} LBS | {currentLog.isStaticHold ? `${currentLog.seconds}s` : `${currentLog.reps} REPS`} | QUALITY: {currentLog.repQuality}
                                   </span>
@@ -6006,45 +6138,146 @@ function WorkoutTrackerView({
                               )}
                             </td>
 
-                            <td className={`w-[60px] shrink-0 cursor-pointer group/weight p-0 border-r border-slate-200/60 h-full flex items-center justify-center transition-colors ${isFocusMachine ? 'bg-white shadow-[inset_0px_2px_4px_rgba(0,0,0,0.04)] ring-1 ring-inset ring-slate-200/50' : 'bg-slate-50/50 hover:bg-[#115E8D]/10'}`} onClick={() => setEditingWeightMachineId(machine.id!)}>
-                              {currentLog.weight ? (
-                                <span className="font-black text-[13px] text-[#115E8D]">{currentLog.weight}</span>
+                            <td className={`w-[60px] shrink-0 cursor-pointer group/weight p-0 border-r border-slate-200/60 h-full flex items-center justify-center transition-colors ${isFocusMachine ? 'bg-white shadow-[inset_0px_2px_4px_rgba(0,0,0,0.04)] ring-1 ring-inset ring-slate-200/50' : 'bg-slate-50/50 hover:bg-[#115E8D]/10'}`} 
+                            >
+                              {isTorso ? (
+                                <div className="flex flex-col items-center justify-center gap-0.5 w-full h-full">
+                                  <div 
+                                    className="flex-1 w-full flex items-center justify-center hover:bg-[#F06C22]/10 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingWeightMachineId(machine.id!);
+                                      setEditingWeightSide('Left');
+                                    }}
+                                  >
+                                    <span className={`font-black text-[10px] ${logL.weight ? 'text-[#115E8D]' : 'text-slate-300'}`}>{logL.weight || '--'}</span>
+                                  </div>
+                                  <div className="w-4 h-[1px] bg-slate-200" />
+                                  <div 
+                                    className="flex-1 w-full flex items-center justify-center hover:bg-[#F06C22]/10 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingWeightMachineId(machine.id!);
+                                      setEditingWeightSide('Right');
+                                    }}
+                                  >
+                                    <span className={`font-black text-[10px] ${logR.weight ? 'text-[#115E8D]' : 'text-slate-300'}`}>{logR.weight || '--'}</span>
+                                  </div>
+                                </div>
                               ) : (
-                                <span className={`font-black text-[11px] ${isFocusMachine ? 'text-slate-400' : 'text-slate-300 group-hover/weight:text-[#115E8D]/50'}`}>--</span>
+                                <div 
+                                  className="w-full h-full flex items-center justify-center"
+                                  onClick={() => setEditingWeightMachineId(machine.id!)}
+                                >
+                                  {currentLog.weight ? (
+                                    <span className="font-black text-[13px] text-[#115E8D]">{currentLog.weight}</span>
+                                  ) : (
+                                    <span className={`font-black text-[11px] ${isFocusMachine ? 'text-slate-400' : 'text-slate-300 group-hover/weight:text-[#115E8D]/50'}`}>--</span>
+                                  )}
+                                </div>
                               )}
                             </td>
 
-                            <td className={`w-[60px] shrink-0 cursor-pointer group/reps p-0 border-r border-slate-200/60 h-full flex items-center justify-center transition-colors relative ${isFocusMachine ? 'bg-white shadow-[inset_0px_2px_4px_rgba(0,0,0,0.04)] ring-1 ring-inset ring-slate-200/50' : 'bg-slate-50/50 hover:bg-[#115E8D]/10'}`} onClick={() => setEditingWeightMachineId(machine.id!)}>
-                              {currentLog.isStaticHold || currentLog.reps ? (
-                                 <span className="font-black text-[13px] text-[#115E8D]">{currentLog.isStaticHold ? currentLog.seconds : currentLog.reps}</span>
+                            <td className={`w-[60px] shrink-0 cursor-pointer group/reps p-0 border-r border-slate-200/60 h-full flex items-center justify-center transition-colors relative ${isFocusMachine ? 'bg-white shadow-[inset_0px_2px_4px_rgba(0,0,0,0.04)] ring-1 ring-inset ring-slate-200/50' : 'bg-slate-50/50 hover:bg-[#115E8D]/10'}`} 
+                            >
+                              {isTorso ? (
+                                <div className="flex flex-col items-center justify-center gap-0.5 w-full h-full">
+                                  <div 
+                                    className="flex-1 w-full flex items-center justify-center hover:bg-[#F06C22]/10 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingWeightMachineId(machine.id!);
+                                      setEditingWeightSide('Left');
+                                    }}
+                                  >
+                                    <span className={`font-black text-[10px] ${logL.reps || logL.seconds ? 'text-[#115E8D]' : 'text-slate-300'}`}>
+                                      {logL.isStaticHold ? logL.seconds : logL.reps || '--'}
+                                    </span>
+                                  </div>
+                                  <div className="w-4 h-[1px] bg-slate-200" />
+                                  <div 
+                                    className="flex-1 w-full flex items-center justify-center hover:bg-[#F06C22]/10 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingWeightMachineId(machine.id!);
+                                      setEditingWeightSide('Right');
+                                    }}
+                                  >
+                                    <span className={`font-black text-[10px] ${logR.reps || logR.seconds ? 'text-[#115E8D]' : 'text-slate-300'}`}>
+                                      {logR.isStaticHold ? logR.seconds : logR.reps || '--'}
+                                    </span>
+                                  </div>
+                                </div>
                               ) : (
-                                 <span className={`font-black text-[11px] ${isFocusMachine ? 'text-slate-400' : 'text-slate-300 group-hover/reps:text-[#115E8D]/50'}`}>--</span>
+                                <div 
+                                  className="w-full h-full flex items-center justify-center"
+                                  onClick={() => setEditingWeightMachineId(machine.id!)}
+                                >
+                                  {currentLog.isStaticHold || currentLog.reps ? (
+                                     <span className="font-black text-[13px] text-[#115E8D]">{currentLog.isStaticHold ? currentLog.seconds : currentLog.reps}</span>
+                                  ) : (
+                                     <span className={`font-black text-[11px] ${isFocusMachine ? 'text-slate-400' : 'text-slate-300 group-hover/reps:text-[#115E8D]/50'}`}>--</span>
+                                  )}
+                                </div>
                               )}
                             </td>
 
                             <td className={`w-[60px] shrink-0 px-1 border-r border-slate-200/60 flex items-center justify-center h-full transition-colors ${isFocusMachine ? 'bg-white shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]' : 'group-hover:bg-[#115E8D]/5'}`}>
-                              <div className={`flex rounded-full p-[2px] gap-[2px] ${isFocusMachine ? 'bg-slate-100/80 border border-slate-200' : 'bg-slate-200/50'}`}>
-                                {[1, 2, 3].map((v) => {
-                                   const isSelected = currentLog.repQuality === v;
-                                   let bgClass = isFocusMachine ? 'bg-slate-300 hover:bg-[#115E8D]/20' : 'bg-slate-300/50 hover:bg-slate-400';
-                                   if (isSelected) {
-                                     if (v === 1) bgClass = 'bg-red-500 shadow-sm';
-                                     else if (v === 2) bgClass = 'bg-amber-500 shadow-sm';
-                                     else if (v === 3) bgClass = 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]';
-                                   }
-                                   return (
-                                     <button
-                                       key={v}
-                                       onClick={() => {
-                                         if (currentSession?.id) {
-                                           updateLog(currentSession.id, machine.id!, 'repQuality', v);
-                                         }
-                                       }}
-                                       className={`w-[14px] h-[14px] rounded-full transition-all ${bgClass}`}
-                                     />
-                                   );
-                                })}
-                              </div>
+                              {isTorso ? (
+                                <div className="flex flex-col gap-1 items-center">
+                                  <div className={`flex rounded-full p-[1px] gap-[1px] ${isFocusMachine ? 'bg-slate-100/80 border border-slate-200' : 'bg-slate-200/50'}`}>
+                                    {[1, 2, 3].map((v) => {
+                                      const isSelected = logL.repQuality === v;
+                                      let bgClass = isFocusMachine ? 'bg-slate-300 hover:bg-[#115E8D]/20' : 'bg-slate-300/50 hover:bg-slate-400';
+                                      if (isSelected) {
+                                        if (v === 1) bgClass = 'bg-red-500 shadow-sm';
+                                        else if (v === 2) bgClass = 'bg-amber-500 shadow-sm';
+                                        else if (v === 3) bgClass = 'bg-emerald-500';
+                                      }
+                                      return (
+                                        <button key={v} onClick={() => currentSession?.id && updateLog(currentSession.id, machine.id!, 'repQuality', v, 'Left')} className={`w-[10px] h-[10px] rounded-full transition-all ${bgClass}`} />
+                                      );
+                                    })}
+                                  </div>
+                                  <div className={`flex rounded-full p-[1px] gap-[1px] ${isFocusMachine ? 'bg-slate-100/80 border border-slate-200' : 'bg-slate-200/50'}`}>
+                                    {[1, 2, 3].map((v) => {
+                                      const isSelected = logR.repQuality === v;
+                                      let bgClass = isFocusMachine ? 'bg-slate-300 hover:bg-[#115E8D]/20' : 'bg-slate-300/50 hover:bg-slate-400';
+                                      if (isSelected) {
+                                        if (v === 1) bgClass = 'bg-red-500 shadow-sm';
+                                        else if (v === 2) bgClass = 'bg-amber-500 shadow-sm';
+                                        else if (v === 3) bgClass = 'bg-emerald-500';
+                                      }
+                                      return (
+                                        <button key={v} onClick={() => currentSession?.id && updateLog(currentSession.id, machine.id!, 'repQuality', v, 'Right')} className={`w-[10px] h-[10px] rounded-full transition-all ${bgClass}`} />
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className={`flex rounded-full p-[2px] gap-[2px] ${isFocusMachine ? 'bg-slate-100/80 border border-slate-200' : 'bg-slate-200/50'}`}>
+                                  {[1, 2, 3].map((v) => {
+                                     const isSelected = currentLog.repQuality === v;
+                                     let bgClass = isFocusMachine ? 'bg-slate-300 hover:bg-[#115E8D]/20' : 'bg-slate-300/50 hover:bg-slate-400';
+                                     if (isSelected) {
+                                       if (v === 1) bgClass = 'bg-red-500 shadow-sm';
+                                       else if (v === 2) bgClass = 'bg-amber-500 shadow-sm';
+                                       else if (v === 3) bgClass = 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]';
+                                     }
+                                     return (
+                                       <button
+                                         key={v}
+                                         onClick={() => {
+                                           if (currentSession?.id) {
+                                             updateLog(currentSession.id, machine.id!, 'repQuality', v);
+                                           }
+                                         }}
+                                         className={`w-[14px] h-[14px] rounded-full transition-all ${bgClass}`}
+                                       />
+                                     );
+                                  })}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -6063,6 +6296,7 @@ function WorkoutTrackerView({
             session={currentSession}
             userTrainers={trainers}
             onClose={() => setIsShowingSessionNotes(false)}
+            user={user}
           />
         )}
       </AnimatePresence>

@@ -83,15 +83,16 @@ export function CreateClientModal({ clients, initialName = '', onClose, onClient
     setIsSubmitting(true);
     
     try {
-      const clientData: Partial<Client> = {
+      const clientData: any = {
         firstName,
         lastName,
         phone,
         email,
         isActive: true,
         completedSessions: 0,
+        sessionCount: 0,
         remainingSessions: activeTab === 'prospect' ? 1 : 10,
-        gender: "Male",
+        gender: "Male" as "Male",
         height: "5'10\"",
         consultationCompleted: activeTab === 'existing',
         requiresConsultation: activeTab === 'prospect',
@@ -99,12 +100,14 @@ export function CreateClientModal({ clients, initialName = '', onClose, onClient
         referredBy,
         occupation,
         isRetired,
-        activityLevel: activityLevel || undefined,
-        recoveryMetric: recoveryMetric || undefined,
-        trainingPedigree: trainingPedigree || undefined,
         clinicalProfile,
         clinicalNotes
       };
+      
+      // Only include optional fields if they have values to avoid 'undefined' errors
+      if (activityLevel) clientData.activityLevel = activityLevel;
+      if (recoveryMetric) clientData.recoveryMetric = recoveryMetric;
+      if (trainingPedigree) clientData.trainingPedigree = trainingPedigree;
       
       const docRef = await addDoc(collection(db, 'clients'), {
         ...clientData,

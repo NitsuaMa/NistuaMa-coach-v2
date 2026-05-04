@@ -40,11 +40,13 @@ import { OperationType, handleFirestoreError } from '../lib/firestore-errors';
 export function ClientHistoryCalendar({ 
   clientId, 
   machines,
-  trainers 
+  trainers,
+  user
 }: { 
   clientId: string, 
   machines: Machine[],
-  trainers: Trainer[]
+  trainers: Trainer[],
+  user?: any
 }) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [viewDate, setViewDate] = useState(new Date()); // For month navigation
@@ -68,7 +70,7 @@ export function ClientHistoryCalendar({
 
   // Fetch all sessions for calendar
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || !user) return;
     const q = query(
       collection(db, 'sessions'),
       where('clientId', '==', clientId),
@@ -80,11 +82,11 @@ export function ClientHistoryCalendar({
       handleFirestoreError(error, OperationType.GET, 'sessions');
     });
     return () => unsubscribe();
-  }, [clientId]);
+  }, [clientId, user]);
 
   // Fetch logs for selected session
   useEffect(() => {
-    if (!selectedSession) {
+    if (!selectedSession || !user) {
       setSelectedSessionLogs([]);
       setEditedLogs({});
       setIsEditMode(false);
@@ -103,7 +105,7 @@ export function ClientHistoryCalendar({
       handleFirestoreError(error, OperationType.GET, 'exerciseLogs');
     });
     return () => unsubscribe();
-  }, [selectedSession]);
+  }, [selectedSession, user]);
 
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();

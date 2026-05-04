@@ -74,20 +74,38 @@ service cloud.firestore {
     }
 
     function isValidClient(data) {
-      return hasRequiredFields(['firstName', 'lastName', 'isActive', 'remainingSessions', 'gender', 'height']) &&
+      return hasRequiredFields(['firstName', 'lastName', 'isActive', 'remainingSessions']) &&
              data.firstName is string && data.firstName.size() > 0 && data.firstName.size() < 50 &&
              data.lastName is string && data.lastName.size() > 0 && data.lastName.size() < 50 &&
-             data.gender in ['Male', 'Female', 'Other'] &&
-             data.height is string &&
              data.isActive is bool &&
              data.remainingSessions is number && data.remainingSessions >= 0 &&
-             (!('age' in data) || data.age is number) &&
-             (!('occupation' in data) || data.occupation is string) &&
-             (!('medicalHistory' in data) || data.medicalHistory is string) &&
-             (!('activity' in data) || data.activity is string) &&
-             (!('goals' in data) || data.goals is string) &&
-             (!('completedSessions' in data) || data.completedSessions is number) &&
-             (!('globalNotes' in data) || (data.globalNotes is string && data.globalNotes.size() < 2000));
+             (!('gender' in data) || data.gender == null || data.gender in ['Male', 'Female', 'Other']) &&
+             (!('height' in data) || data.height == null || data.height is string) &&
+             (!('weight' in data) || data.weight == null || data.weight is string) &&
+             (!('age' in data) || data.age == null || data.age is number) &&
+             (!('phone' in data) || data.phone == null || data.phone is string) &&
+             (!('email' in data) || data.email == null || data.email is string) &&
+             (!('address' in data) || data.address == null || data.address is string) &&
+             (!('emergencyContactName' in data) || data.emergencyContactName == null || data.emergencyContactName is string) &&
+             (!('emergencyContactPhone' in data) || data.emergencyContactPhone == null || data.emergencyContactPhone is string) &&
+             (!('medicalHistory' in data) || data.medicalHistory == null || data.medicalHistory is string) &&
+             (!('occupation' in data) || data.occupation == null || data.occupation is string) &&
+             (!('isRetired' in data) || data.isRetired == null || data.isRetired is bool) &&
+             (!('clinicalProfile' in data) || data.clinicalProfile == null || data.clinicalProfile is list) &&
+             (!('clinicalNotes' in data) || data.clinicalNotes == null || data.clinicalNotes is string) &&
+             (!('activityLevel' in data) || data.activityLevel == null || data.activityLevel is string) &&
+             (!('trainingPedigree' in data) || data.trainingPedigree == null || data.trainingPedigree is string) &&
+             (!('recoveryMetric' in data) || data.recoveryMetric == null || data.recoveryMetric is string) &&
+             (!('activity' in data) || data.activity == null || data.activity is string) &&
+             (!('goals' in data) || data.goals == null || data.goals is string) &&
+             (!('globalNotes' in data) || data.globalNotes == null || (data.globalNotes is string && data.globalNotes.size() < 2000)) &&
+             (!('isRoutineBActive' in data) || data.isRoutineBActive == null || data.isRoutineBActive is bool) &&
+             (!('sessionCount' in data) || data.sessionCount == null || data.sessionCount is number) &&
+             (!('packageTier' in data) || data.packageTier == null || data.packageTier in ['6-Month', '12-Month', '18-Month', 'None']) &&
+             (!('consultationCompleted' in data) || data.consultationCompleted == null || data.consultationCompleted is bool) &&
+             (!('requiresConsultation' in data) || data.requiresConsultation == null || data.requiresConsultation is bool) &&
+             (!('events' in data) || data.events == null || data.events is list) &&
+             (!('updatedAt' in data) || data.updatedAt == null || data.updatedAt is timestamp);
     }
 
     function isValidMachine(data) {
@@ -127,8 +145,12 @@ service cloud.firestore {
              (!('weight' in data) || data.weight == null || data.weight is string) &&
              (!('reps' in data) || data.reps == null || (data.reps is string || data.reps is number)) &&
              (!('targetWeight' in data) || data.targetWeight == null || data.targetWeight is string) &&
+             (!('seconds' in data) || data.seconds == null || data.seconds is string) &&
+             (!('timeSpent' in data) || data.timeSpent == null || data.timeSpent is string) &&
              (!('isStaticHold' in data) || data.isStaticHold == null || data.isStaticHold is bool) &&
+             (!('isTSC' in data) || data.isTSC == null || data.isTSC is bool) &&
              (!('repQuality' in data) || data.repQuality == null || data.repQuality is number) &&
+             (!('side' in data) || data.side == null || data.side in ['Left', 'Right']) &&
              (!('notes' in data) || data.notes == null || data.notes is string) &&
              (!('machineSettings' in data) || data.machineSettings == null || data.machineSettings is map) &&
              (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp) &&

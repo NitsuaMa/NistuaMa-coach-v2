@@ -303,3 +303,87 @@ Analyze the MSF Reference Text, the specific Client Details, and explicitly cros
     throw new Error("Failed to parse Gemini output");
   }
 }
+
+export interface ExtractedMachineData {
+  name: string;
+  weight: number;
+  reps: number;
+  isTSC: boolean;
+}
+
+export interface ExtractedSession {
+  sessionNumber: number;
+  date: string;
+  trainer: string;
+  machines: ExtractedMachineData[];
+}
+
+export const CHART_OCR_SCHEMA = {
+  type: "array" as const,
+  items: {
+    type: "object" as const,
+    properties: {
+      sessionNumber: { type: "number" as const },
+      date: { type: "string" as const, description: "YYYY-MM-DD format" },
+      trainer: { type: "string" as const, description: "Trainer initials or name" },
+      machines: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            name: { type: "string" as const },
+            weight: { type: "number" as const },
+            reps: { type: "number" as const },
+            isTSC: { type: "boolean" as const }
+          },
+          required: ["name", "weight", "reps", "isTSC"]
+        }
+      }
+    },
+    required: ["sessionNumber", "date", "trainer", "machines"]
+  }
+};
+
+export async function processLegacyChart(
+  fileData: string,
+  mimeType: string
+): Promise<ExtractedSession[]> {
+  const ai = getGenaiClient();
+  
+  const systemInstruction = `You are a clinical data extraction engine. Analyze the provided image of a high-intensity training chart. The chart is a grid.
+Extract the data into a JSON array of sessions.
+Columns (Sessions): Look for the header row containing Session Number, Date, and Trainer Initials.
+Rows (Machines): The leftmost column contains the Machine Name. Ignore the machine settings (like seat height). 
+Special Instruction: Machines like "Torso Rotation" are performed twice (Left and Right). Ensure both are extracted as separate entries in the machines array if they appear as separate data points.
+Cells (Performance Data): Where a session column and machine row intersect, extract the performance data. The top number in the box is the \`weight\`. The bottom number is the \`reps\` or \`tsc\`. If the bottom number is greater than 20, classify it as Time Under Load / TSC, otherwise classify it as Reps.
+Ignore any circled numbers denoting the order of exercise.
+Return ONLY valid JSON matching the requested schema.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: [
+      {
+        parts: [
+          { inlineData: { data: fileData, mimeType } },
+          { text: "Analyze this training chart and extract the data." }
+        ]
+      }
+    ],
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: CHART_OCR_SCHEMA
+    }
+  });
+
+  if (!response.text) {
+    throw new Error("No data returned from OCR engine.");
+  }
+
+  try {
+    return JSON.parse(response.text) as ExtractedSession[];
+  } catch (e) {
+    console.error("OCR Parse Error:", response.text);
+    throw new Error("Failed to parse clinical chart data.");
+  }
+}

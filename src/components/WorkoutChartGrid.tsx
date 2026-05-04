@@ -48,13 +48,15 @@ interface WorkoutChartGridProps {
   clients: Client[];
   machines: Machine[];
   onBack: () => void;
+  user?: any;
 }
 
 export function WorkoutChartGrid({ 
   clientId, 
   clients, 
   machines, 
-  onBack 
+  onBack,
+  user
 }: WorkoutChartGridProps) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);
@@ -67,7 +69,7 @@ export function WorkoutChartGrid({
 
   // Real-time Data Fetching for this specific client
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || !user) return;
 
     // Last 11 Sessions
     const sessionsQ = query(
@@ -82,6 +84,8 @@ export function WorkoutChartGrid({
       const sessData = snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutSession));
       // Reverse to chronological for the grid (Left -> Right: Oldest -> Newest)
       setSessions(sessData.reverse());
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'sessions');
     });
 
     // Client Settings (Master Reference)
@@ -92,13 +96,15 @@ export function WorkoutChartGrid({
 
     const unsubscribeSettings = onSnapshot(settingsQ, (snap) => {
       setClientSettings(snap.docs.map(d => ({ id: d.id, ...d.data() } as ClientMachineSetting)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'clientMachineSettings');
     });
 
     return () => {
       unsubscribeSessions();
       unsubscribeSettings();
     };
-  }, [clientId]);
+  }, [clientId, user]);
 
   // Fetch logs independently of visible sessions to prevent layout-driven subscription churn
   useEffect(() => {

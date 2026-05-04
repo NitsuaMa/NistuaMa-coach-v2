@@ -33,7 +33,8 @@ import {
   TrendingUp,
   AlertCircle,
   Play,
-  History
+  History,
+  Scan
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MachineInsightsModal } from './MachineInsightsModal';
@@ -70,7 +71,8 @@ export function ClientProfileView({
   onDelete,
   onSelectReport,
   setView,
-  hasQuotaError
+  hasQuotaError,
+  user
 }: { 
   clientId: string | null, 
   clients: Client[], 
@@ -80,7 +82,8 @@ export function ClientProfileView({
   onDelete: (id: string) => void,
   onSelectReport: (id: string) => void,
   setView: (v: View) => void,
-  hasQuotaError?: boolean
+  hasQuotaError?: boolean,
+  user?: any
 }) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [allLogs, setAllLogs] = useState<ExerciseLog[]>([]);
@@ -124,9 +127,10 @@ export function ClientProfileView({
         lastName: client.lastName,
         email: client.email || '',
         phone: client.phone || '',
+        gender: client.gender || 'Male',
         height: client.height || '',
         weight: client.weight || '',
-        age: client.age || '',
+        age: client.age ?? null,
         occupation: client.occupation || '',
         isRetired: client.isRetired ?? false,
         clinicalProfile: client.clinicalProfile || [],
@@ -150,8 +154,31 @@ export function ClientProfileView({
     if (!clientId) return;
     setIsSavingInfo(true);
     try {
+      const sanitizedData = { ...infoForm };
+      
+      // Ensure age is a number or null, not an empty string
+      if (sanitizedData.age === '' || sanitizedData.age === undefined) {
+        delete sanitizedData.age;
+      } else {
+        const parsed = parseInt(sanitizedData.age as any, 10);
+        sanitizedData.age = isNaN(parsed) ? null : parsed;
+      }
+
+      // Ensure remainingSessions is a number
+      if (sanitizedData.remainingSessions !== undefined) {
+        const parsed = parseInt(sanitizedData.remainingSessions as any, 10);
+        sanitizedData.remainingSessions = isNaN(parsed) ? 0 : parsed;
+      }
+
+      // Cleanup other potentially empty strings to null or delete them if rules prefer
+      Object.keys(sanitizedData).forEach(key => {
+        if ((sanitizedData as any)[key] === undefined) {
+          delete (sanitizedData as any)[key];
+        }
+      });
+
       await updateDoc(doc(db, 'clients', clientId), {
-        ...infoForm,
+        ...sanitizedData,
         updatedAt: serverTimestamp()
       });
     } catch (error) {
@@ -377,7 +404,7 @@ export function ClientProfileView({
   }, [clientId]);
 
   useEffect(() => {
-    if (!clientId || hasQuotaError) return;
+    if (!clientId || hasQuotaError || !user) return;
     if (activeTab !== 'reports') return;
     
     const fetchReports = async () => {
@@ -399,7 +426,7 @@ export function ClientProfileView({
   }, [clientId]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || !user) return;
     const q = query(
       collection(db, 'schedules'),
       where('clientId', '==', clientId),
@@ -1042,12 +1069,22 @@ export function ClientProfileView({
           </div>
         </TabsContent>
 
-        <TabsContent value="history" className="h-[750px]">
+        <TabsContent value="history" className="h-[750px] relative">
+          <div className="absolute top-0 right-0 z-10 p-4">
+            <Button 
+              onClick={() => setView('chart-importer' as any)}
+              className="bg-slate-900 hover:bg-slate-800 text-[#F06C22] border border-[#F06C22]/30 font-black h-8 px-4 text-[9px] uppercase tracking-widest shadow-lg"
+            >
+              <Scan className="w-3 h-3 mr-2" />
+              Bulk Import (OCR)
+            </Button>
+          </div>
           {clientId && (
             <ClientHistoryCalendar 
               clientId={clientId} 
               machines={machines} 
               trainers={trainers} 
+              user={user}
             />
           )}
         </TabsContent>
@@ -1334,7 +1371,23 @@ export function ClientProfileView({
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Age</Label>
-                  <Input type="number" value={infoForm.age || ''} onChange={e => setInfoForm(f => ({ ...f, age: e.target.value ? parseInt(e.target.value) : '' }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
+                  <Input type="number" value={infoForm.age ?? ''} onChange={e => setInfoForm(f => ({ ...f, age: e.target.value ? parseInt(e.target.value) : null }))} className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Gender</Label>
+                  <Select 
+                    value={infoForm.gender || 'Male'} 
+                    onValueChange={v => setInfoForm(f => ({ ...f, gender: v as any }))}
+                  >
+                    <SelectTrigger className="h-12 rounded-2xl font-black px-4 bg-slate-900 border-slate-700 text-white focus-visible:ring-[#38BDF8]">
+                      <SelectValue placeholder="Select Gender" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-white rounded-xl">
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Height</Label>
@@ -1695,6 +1748,7 @@ export function ClientProfileView({
             clients={clients}
             machines={machines}
             onBack={() => setShowFullChart(false)}
+            user={user}
           />
         )}
       </AnimatePresence>

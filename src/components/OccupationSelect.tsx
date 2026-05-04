@@ -34,7 +34,7 @@ export function OccupationSelect({ value, onChange, disabled }: OccupationSelect
         <SelectValue placeholder={disabled ? "N/A" : "Select Client Occupation..."} />
       </SelectTrigger>
       <SelectContent className="bg-white border-slate-200 rounded-xl max-h-[300px] shadow-2xl">
-        {Object.entries(groupedOccupations).map(([category, occupations]) => (
+        {(Object.entries(groupedOccupations) as [string, OccupationEntry[]][]).map(([category, occupations]) => (
           <SelectGroup key={category} className="border-b border-slate-100 last:border-0 pb-1 mb-1 last:pb-0 last:mb-0">
             <SelectLabel className="font-black text-[10px] uppercase tracking-widest text-slate-500 py-2 px-3">
               {category}

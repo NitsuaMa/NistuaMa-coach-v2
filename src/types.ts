@@ -174,6 +174,7 @@ export interface ExerciseLog {
   isTSC?: boolean;
   repQuality?: number;
   timeSpent?: string;
+  side?: 'Left' | 'Right';
   notes?: string;
   machineSettings?: Record<string, string>; // Settings used for this specific set
   createdAt?: any;
@@ -309,4 +310,4 @@ export interface TrainerFocus {
   updatedAt: any;
 }
 
-export type View = 'trainers' | 'clients' | 'machines' | 'workouts' | 'history' | 'calendar' | 'trainer-hub' | 'dashboard' | 'profile' | 'chart' | 'trainer-profile' | 'progress-report' | 'consultation-wizard' | 'machine-knowledge' | 'client-directory';
+export type View = 'trainers' | 'clients' | 'machines' | 'workouts' | 'history' | 'calendar' | 'trainer-hub' | 'dashboard' | 'profile' | 'chart' | 'trainer-profile' | 'progress-report' | 'consultation-wizard' | 'machine-knowledge' | 'client-directory' | 'chart-importer';

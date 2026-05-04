@@ -1,447 +1,549 @@
-import React, { useState, useRef } from 'react';
-import { Client, Machine, WorkoutSession, ExerciseLog } from '../types';
-import { GoogleGenAI, Type } from '@google/genai';
-import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, X, Scan, CheckCircle2, ChevronRight, AlertTriangle, History } from 'lucide-react';
+import { 
+  Upload, 
+  X, 
+  Scan, 
+  CheckCircle2, 
+  AlertTriangle, 
+  History, 
+  FileText, 
+  ArrowRight,
+  Edit2,
+  Trash2,
+  Calendar,
+  User,
+  Activity,
+  Dumbbell,
+  Copy,
+  Plus
+} from 'lucide-react';
+import { Client, Machine, Trainer, WorkoutSession, ExerciseLog } from '../types';
+import { processLegacyChart, ExtractedSession } from '../services/geminiService';
+import { db } from '../firebase';
+import { collection, writeBatch, doc, serverTimestamp, getDocs, query, where, increment } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 interface ImporterProps {
   clients: Client[];
   machines: Machine[];
+  trainers: Trainer[];
+  initialClientId?: string;
   onComplete?: () => void;
 }
 
-// Ensure unique keys for preview editing
-interface PreviewLog {
-  id: string; // temporary id for react keys
-  machineName: string;
-  weight: string;
-  reps: string;
-  seconds: string;
-  isStaticHold: boolean;
+interface ValidationLog {
+  id: string;
+  name: string;
+  weight: number;
+  reps: number;
   isTSC: boolean;
-  repQuality: number;
+  machineId?: string;
+  isAnomalous?: boolean;
+  anomalyReason?: string;
 }
 
-interface PreviewSession {
-  id: string; // temporary id
-  date: string; // YYYY-MM-DD
-  trainerInitials: string;
-  logs: PreviewLog[];
+interface ValidationSession {
+  id: string;
+  sessionNumber: number;
+  date: string;
+  trainer: string;
+  trainerId?: string;
+  machines: ValidationLog[];
 }
 
-export function LegacyChartImporter({ clients, machines, onComplete }: ImporterProps) {
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
-  const [images, setImages] = useState<{ url: string; base64: string; mimeType: string }[]>([]);
+export function LegacyChartImporter({ clients, machines, trainers, initialClientId, onComplete }: ImporterProps) {
+  const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId || '');
+  const [files, setFiles] = useState<{ name: string; base64: string; mimeType: string; previewUrl: string }[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState('');
-  const [previewSessions, setPreviewSessions] = useState<PreviewSession[]>([]);
-  const [isInjecting, setIsInjecting] = useState(false);
+  const [validationSessions, setValidationSessions] = useState<ValidationSession[]>([]);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    processFiles(Array.from(e.dataTransfer.files));
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      processFiles(Array.from(e.target.files));
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement> | { target: { files: FileList | null } }) => {
+    const files = e.target.files;
+    if (files) {
+      (Array.from(files) as File[]).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64Content = (event.target?.result as string).split(',')[1];
+          setFiles(prev => [...prev, {
+            name: file.name,
+            base64: base64Content,
+            mimeType: file.type,
+            previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : ''
+          }]);
+        };
+        reader.readAsDataURL(file);
+      });
     }
   };
 
-  const processFiles = (files: File[]) => {
-    files.forEach(file => {
-      if (!file.type.startsWith('image/')) return;
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64Data = event.target?.result as string;
-        const base64Content = base64Data.split(',')[1];
-        setImages(prev => [...prev, {
-          url: URL.createObjectURL(file), // for preview
-          base64: base64Content,
-          mimeType: file.type
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleScan = async () => {
-    if (!selectedClientId) {
-      alert("Please select a client first.");
-      return;
-    }
-    if (images.length === 0) {
-      alert("Please upload at least one image of the chart.");
-      return;
-    }
+  const runOCR = async () => {
+    if (!selectedClientId || files.length === 0) return;
 
     setIsScanning(true);
-    setScanProgress('Initializing Vision AI...');
-    setPreviewSessions([]);
+    setScanProgress('Waking Vision Engine...');
+    setValidationSessions([]);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const parts: any[] = images.map(img => ({
-        inlineData: {
-          data: img.base64,
-          mimeType: img.mimeType
-        }
-      }));
+      const allExtracted: ExtractedSession[] = [];
 
-      parts.push({
-        text: `You are an expert transcriber digitized physical workout charts.
-Extract the workout data across all provided images.
-Merge it into a single correctly formatted JSON array of sessions.
-CRITICAL:
-1. Sort the sessions chronologically by date (oldest to newest).
-2. Filter out any duplicate sessions if the photos overlap.
-3. Extract each set's machine name, weight, reps, seconds (if applicable), and quality.
-4. "isStaticHold" is true if it was predominantly a timed hold (seconds).
-5. Ensure the structure cleanly fits the requested schema.`
-      });
+      for (const file of files) {
+        setScanProgress(`Analyzing ${file.name}...`);
+        const result = await processLegacyChart(file.base64, file.mimeType);
+        allExtracted.push(...result);
+      }
 
-      setScanProgress('Analyzing multi-page timeline...');
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
-        contents: { parts },
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING, description: "YYYY-MM-DD" },
-                trainerInitials: { type: Type.STRING },
-                logs: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      machineName: { type: Type.STRING },
-                      weight: { type: Type.STRING },
-                      reps: { type: Type.STRING },
-                      seconds: { type: Type.STRING },
-                      isStaticHold: { type: Type.BOOLEAN },
-                      isTSC: { type: Type.BOOLEAN },
-                      repQuality: { type: Type.NUMBER }
-                    },
-                    required: ["machineName"]
-                  }
-                }
-              },
-              required: ["date", "logs"]
+      // Map and identify anomalies
+      const mappedSessions: ValidationSession[] = allExtracted.map((s, sIdx) => {
+        // Resolve trainer
+        const trainerMatch = trainers.find(t => 
+          t.initials.toLowerCase() === s.trainer.toLowerCase() || 
+          t.fullName.toLowerCase().includes(s.trainer.toLowerCase())
+        );
+
+        return {
+          id: `v-sess-${sIdx}-${Date.now()}`,
+          sessionNumber: s.sessionNumber,
+          date: s.date,
+          trainer: s.trainer,
+          trainerId: trainerMatch?.id,
+          machines: s.machines.map((m, mIdx) => {
+            const machineMatch = machines.find(mach => 
+              mach.name.toLowerCase() === m.name.toLowerCase() ||
+              m.name.toLowerCase().includes(mach.name.toLowerCase())
+            );
+
+            // Anomaly Detection: Basic checks
+            let isAnomalous = false;
+            let anomalyReason = '';
+            if (m.weight > 500) {
+              isAnomalous = true;
+              anomalyReason = 'Extreme Weight Detected';
             }
-          }
-        }
+            if (m.reps > 30 && !m.isTSC) {
+              isAnomalous = true;
+              anomalyReason = 'High Reps (Non-TSC)';
+            }
+            if (!machineMatch) {
+              isAnomalous = true;
+              anomalyReason = 'Unknown Machine';
+            }
+
+            return {
+              id: `v-log-${sIdx}-${mIdx}-${Date.now()}`,
+              name: m.name,
+              weight: m.weight,
+              reps: m.reps,
+              isTSC: m.isTSC,
+              machineId: machineMatch?.id,
+              isAnomalous,
+              anomalyReason
+            };
+          })
+        };
       });
 
-      setScanProgress('Structuring response...');
-      const text = response.text || "[]";
-      let parsed = JSON.parse(text);
-
-      if (!Array.isArray(parsed)) parsed = [parsed];
-      
-      const hydratedSessions: PreviewSession[] = parsed.map((s: any, sIdx: number) => ({
-        id: `temp_s_${sIdx}_${Date.now()}`,
-        date: s.date || new Date().toISOString().split('T')[0],
-        trainerInitials: s.trainerInitials || 'AI',
-        logs: Array.isArray(s.logs) ? s.logs.map((l: any, lIdx: number) => ({
-          id: `temp_l_${sIdx}_${lIdx}_${Date.now()}`,
-          machineName: l.machineName || 'Unknown Machine',
-          weight: l.weight?.toString() || '',
-          reps: l.reps?.toString() || '',
-          seconds: l.seconds?.toString() || '',
-          isStaticHold: !!l.isStaticHold,
-          isTSC: !!l.isTSC,
-          repQuality: Number(l.repQuality) || 3
-        })) : []
-      }));
-
-      // Sort chronological
-      hydratedSessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      setPreviewSessions(hydratedSessions);
-
+      // Sort by date
+      mappedSessions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      setValidationSessions(mappedSessions);
+      setScanProgress('OCR Pipeline Complete');
     } catch (err) {
       console.error(err);
-      alert("Failed to extract data. Check console for details.");
+      setScanProgress('Engine Failure: Check Logs');
     } finally {
       setIsScanning(false);
-      setScanProgress('');
     }
   };
 
-  const updatePreviewLog = (sId: string, lId: string, field: keyof PreviewLog, value: any) => {
-    setPreviewSessions(prev => prev.map(s => {
-      if (s.id !== sId) return s;
+  const updateLogData = (sessionId: string, logId: string, field: string, value: any) => {
+    setValidationSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s;
       return {
         ...s,
-        logs: s.logs.map(l => {
-          if (l.id !== lId) return l;
+        machines: s.machines.map(l => {
+          if (l.id !== logId) return l;
           return { ...l, [field]: value };
         })
       };
     }));
   };
 
-  const handleInject = async () => {
-    if (!selectedClientId) return;
-    setIsInjecting(true);
+  const duplicateLog = (sessionId: string, logId: string) => {
+    setValidationSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s;
+      const logToDup = s.machines.find(l => l.id === logId);
+      if (!logToDup) return s;
+      
+      const newLog = { 
+        ...logToDup, 
+        id: `v-log-dup-${Date.now()}-${Math.random()}`,
+        name: logToDup.name.includes('(Set 2)') ? logToDup.name : `${logToDup.name} (Set 2)`
+      };
+      
+      return {
+        ...s,
+        machines: [...s.machines, newLog]
+      };
+    }));
+  };
+
+  const finalizeImport = async () => {
+    if (!selectedClientId || isFinalizing) return;
+    setIsFinalizing(true);
 
     try {
       const batch = writeBatch(db);
-
-      for (let i = 0; i < previewSessions.length; i++) {
-        const pSession = previewSessions[i];
-        
-        // Match machine names
-        const cleanLogs = pSession.logs.map(pl => {
-          // Attempt to find closest machine
-          const match = machines.find(m => m.name.toLowerCase() === pl.machineName.toLowerCase())
-            || machines.find(m => pl.machineName.toLowerCase().includes(m.name.toLowerCase()));
-          
-          return {
-            ...pl,
-            machineId: match ? match.id! : 'unknown_machine'
-          };
-        }).filter(l => l.machineId !== 'unknown_machine'); // Drop unknown for safety
-
-        if (cleanLogs.length === 0) continue;
-
-        const sessionRef = doc(collection(db, 'workoutSessions'));
-        batch.set(sessionRef, {
+      
+      // We need to fetch existing sessions to ensure sessionNumber doesn't conflict?
+      // Or just append. User said "completely reconstructing their performance history".
+      
+      for (const vSess of validationSessions) {
+        const sessionRef = doc(collection(db, 'sessions'));
+        const sessionData: Partial<WorkoutSession> = {
           clientId: selectedClientId,
-          date: pSession.date,
-          trainerInitials: pSession.trainerInitials,
-          sessionType: 'Workout',
-          sessionNumber: i + 1, // Will require reindexing if other sessions exist, but fine for legacy import
+          sessionType: 'Standard',
+          sessionNumber: vSess.sessionNumber,
+          date: vSess.date,
+          trainerInitials: vSess.trainer,
+          trainerId: vSess.trainerId || '',
           status: 'Completed',
-          legacy_filemaker_id: 'AI_IMPORT',
           createdAt: serverTimestamp(),
-          endTime: serverTimestamp() // Mark closed
-        });
+          endTime: serverTimestamp()
+        };
+        batch.set(sessionRef, sessionData);
 
-        for (const l of cleanLogs) {
+        for (const vLog of vSess.machines) {
+          if (!vLog.machineId) continue;
           const logRef = doc(collection(db, 'exerciseLogs'));
-          batch.set(logRef, {
+          const logData: Partial<ExerciseLog> = {
             sessionId: sessionRef.id,
             clientId: selectedClientId,
-            machineId: l.machineId,
-            weight: l.weight,
-            reps: l.reps,
-            seconds: l.seconds,
-            isStaticHold: l.isStaticHold,
-            isTSC: l.isTSC,
-            repQuality: l.repQuality,
+            machineId: vLog.machineId,
+            weight: String(vLog.weight),
+            reps: vLog.isTSC ? '' : String(vLog.reps),
+            seconds: vLog.isTSC ? String(vLog.reps) : '',
+            isTSC: vLog.isTSC,
+            isStaticHold: vLog.isTSC,
+            repQuality: 3,
             createdAt: serverTimestamp()
-          });
+          };
+          batch.set(logRef, logData);
         }
       }
 
+      // Update client session tally
+      const maxSessionNum = validationSessions.length > 0 
+        ? Math.max(...validationSessions.map(s => s.sessionNumber)) 
+        : 0;
+      
+      const clientRef = doc(db, 'clients', selectedClientId);
+      batch.update(clientRef, {
+        completedSessions: increment(validationSessions.length),
+        sessionCount: maxSessionNum, // Set to highest imported session number
+        updatedAt: serverTimestamp()
+      });
+
       await batch.commit();
-      
-      // Cleanup
-      setImages([]);
-      setPreviewSessions([]);
-      setSelectedClientId('');
       if (onComplete) onComplete();
-      
     } catch (err) {
       console.error(err);
-      alert("Failed to inject data.");
+      alert('Finalization failed. Check Firestore quotas.');
     } finally {
-      setIsInjecting(false);
+      setIsFinalizing(false);
     }
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col">
-        <h2 className="text-2xl font-black tracking-tight leading-tight text-white mb-1">Legacy Chart Importer</h2>
-        <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Vision AI Matrix for Historical Digitization</p>
+    <div className="w-full flex flex-col gap-6 p-4 sm:p-6 bg-slate-950 min-h-screen text-slate-100">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tighter uppercase italic text-white flex items-center gap-2">
+            <Scan className="w-8 h-8 text-[#F06C22]" />
+            OCR Legacy Pipeline
+          </h1>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+            Multimodal Chart Recognition Engine v3.1
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+            <SelectTrigger className="w-[240px] bg-slate-900 border-slate-800 text-white font-bold h-11">
+              <SelectValue placeholder="Select Target Client..." />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-slate-800 text-white">
+              {clients.map(c => (
+                <SelectItem key={c.id} value={c.id!} className="hover:bg-slate-800 focus:bg-slate-800">
+                  {c.firstName} {c.lastName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          {validationSessions.length > 0 && (
+            <Button 
+              onClick={finalizeImport}
+              disabled={isFinalizing}
+              className="bg-[#F06C22] hover:bg-[#F06C22]/90 text-white font-black px-6 h-11 tracking-widest uppercase text-xs"
+            >
+              {isFinalizing ? 'Committing...' : '[ Finalize & Import Data ]'}
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-1 space-y-6">
-          <Card className="border-slate-800 bg-[#0A2E46]/30">
-            <CardHeader className="pb-3 border-b border-slate-800/50">
-              <CardTitle className="text-sm font-black text-slate-200 uppercase tracking-widest">1. Target Client</CardTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left: Input/Upload */}
+        <div className="lg:col-span-4 space-y-4">
+          <Card className="bg-[#0A2E46]/30 border-slate-800 overflow-hidden">
+            <CardHeader className="bg-slate-900/50 py-3 border-b border-slate-800">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">
+                Data Source Upload
+              </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4">
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger className="bg-slate-900 border-slate-700">
-                  <SelectValue placeholder="Select Client..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => (
-                    <SelectItem key={c.id} value={c.id!}>{c.firstName} {c.lastName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
+            <CardContent className="pt-6">
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  handleFileSelect({ target: { files: e.dataTransfer.files } } as any);
+                }}
+                className="w-full aspect-video border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-xl flex flex-col items-center justify-center p-6 cursor-pointer hover:border-[#F06C22]/50 hover:bg-slate-800/30 transition-all group"
+              >
+                <input 
+                  type="file" 
+                  multiple 
+                  accept="image/*,application/pdf" 
+                  ref={fileInputRef}
+                  className="hidden" 
+                  onChange={handleFileSelect}
+                />
+                <Upload className="w-10 h-10 text-slate-600 group-hover:text-[#F06C22] mb-3 transition-colors" />
+                <p className="text-sm font-black text-slate-300 uppercase tracking-tighter">Drop Chart Images</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">JPG, PNG, or PDF supported</p>
+              </div>
 
-          <Card className="border-slate-800 bg-[#0A2E46]/30">
-            <CardHeader className="pb-3 border-b border-slate-800/50">
-              <CardTitle className="text-sm font-black text-slate-200 uppercase tracking-widest">2. Upload Photos</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-               <div 
-                  className="w-full min-h-32 border-2 border-dashed border-slate-600 bg-slate-900/50 rounded-xl flex flex-col items-center justify-center p-4 cursor-pointer hover:border-orange-500/50 hover:bg-slate-800/50 transition-colors group"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={handleFileDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <input 
-                    type="file" 
-                    multiple 
-                    accept="image/*" 
-                    className="hidden" 
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                  />
-                  <Upload className="w-8 h-8 text-slate-500 group-hover:text-orange-500 mb-2 transition-colors" />
-                  <p className="text-sm font-bold text-slate-400 text-center">Drag & Drop<br/>or Click to Browse</p>
-                  <p className="text-[10px] text-slate-500 mt-2 text-center uppercase tracking-wider">Multi-page supported</p>
-                </div>
-
-                {images.length > 0 && (
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    {images.map((img, idx) => (
-                      <div key={idx} className="relative aspect-[3/4] rounded-md overflow-hidden border border-slate-700 bg-slate-900">
-                        <img src={img.url} alt={`Upload ${idx}`} className="object-cover w-full h-full opacity-70" />
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
-                          className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full scale-75 hover:scale-100 transition-transform"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+              {files.length > 0 && (
+                <div className="mt-6 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Queue ({files.length})</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {files.map((file, idx) => (
+                      <div key={idx} className="relative group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden aspect-[4/3]">
+                        {file.previewUrl ? (
+                          <img src={file.previewUrl} className="w-full h-full object-cover opacity-60" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                            <FileText className="w-8 h-8 text-slate-600" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button onClick={() => removeFile(idx)} className="p-2 bg-red-600/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <div className="absolute bottom-1 left-1 right-1 px-1 py-0.5 bg-black/50 backdrop-blur-sm rounded text-[8px] font-bold truncate">
+                          {file.name}
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
+                  
+                  <Button 
+                    variant="outline"
+                    className="w-full border-slate-700 bg-slate-900 text-white font-bold h-12 mt-4 hover:bg-slate-800"
+                    onClick={runOCR}
+                    disabled={isScanning || !selectedClientId}
+                  >
+                    {isScanning ? (
+                      <Scan className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Scan className="w-4 h-4 mr-2" />
+                    )}
+                    {isScanning ? scanProgress : 'INITIALIZE OCR LOGIC'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          <Button 
-            className="w-full bg-[#F06C22] hover:bg-[#F06C22]/80 text-white font-black uppercase tracking-widest h-14"
-            disabled={images.length === 0 || !selectedClientId || isScanning}
-            onClick={handleScan}
-          >
-            {isScanning ? (
-              <span className="flex items-center gap-2">
-                <Scan className="w-5 h-5 animate-spin" />
-                Scanning...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <Scan className="w-5 h-5" />
-                Scan Charts
-              </span>
-            )}
-          </Button>
-          
-          {isScanning && (
-            <div className="text-center">
-              <p className="text-xs text-orange-400 font-bold animate-pulse">{scanProgress}</p>
-            </div>
-          )}
         </div>
 
-        <div className="lg:col-span-3">
-          {previewSessions.length === 0 ? (
-            <div className="h-full min-h-64 border-2 border-dashed border-slate-800 bg-slate-900/20 rounded-2xl flex flex-col items-center justify-center p-8">
-              <History className="w-16 h-16 text-slate-800 mb-4" />
-              <p className="text-slate-500 font-bold text-center">AI Data Grid</p>
-              <p className="text-xs text-slate-600 text-center mt-2 max-w-sm">Scan physical charts to generate a chronological timeline. You will be able to review and correct all numbers before injection.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-              <div className="border-b border-slate-800 bg-slate-900 p-4 flex justify-between items-center">
-                <div>
-                  <h3 className="font-black text-white text-lg">Timeline Preview Grid</h3>
-                  <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">
-                    {previewSessions.length} Sessions Extracted
-                  </p>
-                </div>
-                <Button 
-                  onClick={handleInject}
-                  disabled={isInjecting}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-black"
-                >
-                  {isInjecting ? 'Injecting...' : 'Confirm & Inject History'}
-                </Button>
+        {/* Right: Validation HUD */}
+        <div className="lg:col-span-8 flex flex-col">
+          <Card className="bg-[#0A2E46] border-slate-800 flex-1 flex flex-col min-h-[600px] shadow-2xl">
+            <CardHeader className="py-4 border-b border-slate-800 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-black uppercase tracking-widest text-[#F06C22]">
+                  Validation HUD
+                </CardTitle>
+                <CardDescription className="text-[10px] font-bold text-slate-400">
+                  Verify extracted patterns before database commit
+                </CardDescription>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-8">
-                {previewSessions.map((session, sIdx) => (
-                  <div key={session.id} className="space-y-2">
-                    <div className="flex items-center gap-4 border-b border-slate-800 pb-2">
-                      <div className="bg-slate-800 px-3 py-1 rounded text-xs font-black text-slate-300">
-                        {session.date}
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-bold uppercase">
-                        Trainer: {session.trainerInitials}
-                      </div>
+              {validationSessions.length > 0 && (
+                <div className="flex gap-4 items-center">
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-white uppercase">{validationSessions.length} Sessions</p>
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter">Verified Alignment</p>
+                  </div>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="p-0 overflow-hidden flex-1 relative">
+              <AnimatePresence mode="wait">
+                {validationSessions.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="h-full flex flex-col items-center justify-center p-12 text-center"
+                  >
+                    <div className="w-20 h-20 bg-slate-900/50 rounded-full flex items-center justify-center mb-6">
+                      <History className="w-10 h-10 text-slate-700" />
                     </div>
-
-                    <div className="grid gap-1">
-                      {session.logs.map((log) => (
-                        <div key={log.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-2 bg-slate-900/50 hover:bg-slate-800/50 rounded group">
-                          <div className="flex-1 min-w-[200px]">
-                            <Input 
-                              value={log.machineName} 
-                              onChange={(e) => updatePreviewLog(session.id, log.id, 'machineName', e.target.value)}
-                              className="h-7 text-xs bg-transparent border-b border-transparent focus:border-orange-500 focus:bg-slate-950 rounded-none px-1"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <div className="w-20">
-                              <label className="text-[8px] text-slate-600 font-bold uppercase tracking-widest px-1">Weight</label>
-                              <Input 
-                                value={log.weight} 
-                                onChange={(e) => updatePreviewLog(session.id, log.id, 'weight', e.target.value)}
-                                className="h-7 text-xs bg-transparent border-b border-slate-800 focus:border-orange-500 focus:bg-slate-950 rounded-none px-1 text-center font-bold"
+                    <h3 className="text-lg font-black text-slate-500 uppercase tracking-widest mb-2 italic">Idle - Waiting for Feed</h3>
+                    <p className="text-xs text-slate-600 max-w-xs leading-relaxed">
+                      Upload high-resolution scans of paper charts to initiate the multimodal clinical extraction pipeline.
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-4 space-y-6 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-slate-700"
+                  >
+                    {validationSessions.map((session) => (
+                      <div key={session.id} className="space-y-3">
+                        <div className="flex items-center gap-3 bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+                          <Badge className="bg-slate-800 text-white border-slate-700 font-black">
+                            S#{session.sessionNumber}
+                          </Badge>
+                          <div className="flex-1 flex items-center gap-4">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3 h-3 text-slate-500" />
+                              <input 
+                                type="date"
+                                value={session.date}
+                                onChange={e => setValidationSessions(prev => prev.map(s => s.id === session.id ? { ...s, date: e.target.value } : s))}
+                                className="bg-transparent border-none text-[10px] font-black text-[#F06C22] uppercase tracking-widest focus:ring-0"
                               />
                             </div>
-                            <div className="w-20">
-                              <label className="text-[8px] text-slate-600 font-bold uppercase tracking-widest px-1">Reps</label>
-                              <Input 
-                                value={log.reps} 
-                                onChange={(e) => updatePreviewLog(session.id, log.id, 'reps', e.target.value)}
-                                className="h-7 text-xs bg-transparent border-b border-slate-800 focus:border-orange-500 focus:bg-slate-950 rounded-none px-1 text-center font-bold"
-                              />
-                            </div>
-                            <div className="w-20">
-                              <label className="text-[8px] text-slate-600 font-bold uppercase tracking-widest px-1">Secs</label>
-                              <Input 
-                                value={log.seconds} 
-                                onChange={(e) => updatePreviewLog(session.id, log.id, 'seconds', e.target.value)}
-                                className="h-7 text-xs bg-transparent border-b border-slate-800 focus:border-orange-500 focus:bg-slate-950 rounded-none px-1 text-center font-bold text-emerald-400"
+                            <div className="flex items-center gap-1.5 border-l border-slate-800 pl-4">
+                              <User className="w-3 h-3 text-slate-500" />
+                              <span className="text-[10px] font-black text-slate-300 uppercase">Trainer:</span>
+                              <input 
+                                value={session.trainer}
+                                onChange={e => setValidationSessions(prev => prev.map(s => s.id === session.id ? { ...s, trainer: e.target.value } : s))}
+                                className="bg-transparent border-none text-[10px] font-black text-white uppercase focus:ring-0 w-16"
                               />
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {session.machines.map((log) => (
+                            <div 
+                              key={log.id} 
+                              className={cn(
+                                "p-3 rounded border bg-slate-900 shadow-lg relative group transition-all",
+                                log.isAnomalous ? "border-amber-500 bg-amber-500/10" : "border-slate-800 hover:border-slate-700"
+                              )}
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex-1 mr-2">
+                                  <input 
+                                    value={log.name} 
+                                    onChange={e => updateLogData(session.id, log.id, 'name', e.target.value)}
+                                    className="bg-transparent border-none text-[9px] font-black text-white uppercase tracking-tighter w-full focus:ring-0 p-0"
+                                  />
+                                </div>
+                                {log.isAnomalous && (
+                                  <div className="group/tip relative cursor-help">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                                    <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-amber-600 text-white text-[8px] font-bold rounded shadow-xl opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none z-10">
+                                      {log.anomalyReason}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1">
+                                  <label className="text-[7px] font-black text-slate-500 uppercase block mb-1">Weight</label>
+                                  <input 
+                                    type="number"
+                                    value={log.weight}
+                                    onChange={e => updateLogData(session.id, log.id, 'weight', parseInt(e.target.value) || 0)}
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs font-black text-white focus:border-[#F06C22] focus:ring-0"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[7px] font-black text-slate-500 uppercase block mb-1">
+                                    {log.isTSC ? 'Secs (TSC)' : 'Reps (Dyn)'}
+                                  </label>
+                                  <input 
+                                    type="number"
+                                    value={log.reps}
+                                    onChange={e => updateLogData(session.id, log.id, 'reps', parseInt(e.target.value) || 0)}
+                                    className={cn(
+                                      "w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs font-black focus:ring-0",
+                                      log.isTSC ? "text-emerald-400 focus:border-emerald-500" : "text-white focus:border-[#F06C22]"
+                                    )}
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 text-[7px] font-black text-slate-500 uppercase tracking-widest bg-slate-950/50 px-2 py-0.5 rounded border border-slate-800">
+                                  {log.isAnomalous ? 'Manual Check Req.' : 'Verified Match'}
+                                </div>
+                                <div className="flex gap-1">
+                                  <button 
+                                    onClick={() => duplicateLog(session.id, log.id)}
+                                    className="p-1 bg-slate-800 text-slate-400 hover:text-[#F06C22] hover:bg-[#F06C22]/10 rounded transition-colors group/dup"
+                                    title="Duplicate Entry (e.g. Torso Rotation L/R)"
+                                  >
+                                    <Copy size={10} />
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      setValidationSessions(prev => prev.map(s => {
+                                        if (s.id !== session.id) return s;
+                                        return {
+                                          ...s,
+                                          machines: s.machines.filter(l => l.id !== log.id)
+                                        };
+                                      }))
+                                    }}
+                                    className="p-1 bg-slate-800 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
