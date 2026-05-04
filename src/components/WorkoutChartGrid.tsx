@@ -24,7 +24,8 @@ import {
   limit, 
   setDoc,
   doc,
-  serverTimestamp 
+  serverTimestamp,
+  getDocs
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { Card, CardContent } from '@/components/ui/card';
@@ -110,15 +111,14 @@ export function WorkoutChartGrid({
     const logsQ = query(
       collection(db, 'exerciseLogs'),
       where('clientId', '==', clientId),
-      where('createdAt', '>=', sixtyDaysAgo)
+      where('createdAt', '>=', sixtyDaysAgo),
+      limit(150)
     );
 
-    const unsubscribeLogs = onSnapshot(logsQ, (snap) => {
+    getDocs(logsQ).then((snap) => {
       const logsData = snap.docs.map(d => ({ id: d.id, ...d.data() } as ExerciseLog));
       setExerciseLogs(logsData);
     });
-
-    return () => unsubscribeLogs();
   }, [clientId]);
 
   const handleUpdateSettings = async () => {

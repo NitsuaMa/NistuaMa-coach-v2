@@ -671,8 +671,11 @@ export default function App() {
         sessionStorage.setItem('msf_seeded_check', 'true');
         hasSeededRef.current = true;
       } catch (error: any) {
-        if (error.message?.toLowerCase().includes('quota')) setHasQuotaError(true);
-        console.error("Failed to seed:", error);
+        if (error.message?.toLowerCase().includes('quota')) {
+          setHasQuotaError(true);
+        } else {
+          console.error("Failed to seed:", error);
+        }
       }
     };
     
@@ -690,13 +693,17 @@ export default function App() {
       const lastCleanup = localStorage.getItem('last_unassigned_cleanup');
       if (lastCleanup === todayString) return;
 
+      // Set it immediately to prevent infinite retries if it fails
+      localStorage.setItem('last_unassigned_cleanup', todayString);
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       try {
         const q = query(
           collection(db, 'sessions'),
-          where('isUnassigned', '==', true)
+          where('isUnassigned', '==', true),
+          limit(25)
         );
         
         const snap = await getDocs(q);
@@ -728,10 +735,12 @@ export default function App() {
           });
           
         await Promise.all(deletePromises);
-        localStorage.setItem('last_unassigned_cleanup', todayString);
       } catch (error: any) {
-        if (error.message?.toLowerCase().includes('quota')) setHasQuotaError(true);
-        console.error("Error cleaning up sessions:", error);
+        if (error.message?.toLowerCase().includes('quota')) {
+          setHasQuotaError(true);
+        } else {
+          console.error("Error cleaning up sessions:", error);
+        }
       }
     };
     cleanup();
@@ -4827,14 +4836,14 @@ function WorkoutTrackerView({
         collection(db, 'sessions'), 
         where('clientId', '==', clientId),
         orderBy('createdAt', 'desc'),
-        limit(10)
+        limit(5)
       );
 
       const notesQuery = query(
         collection(db, 'sessionNotes'),
         where('clientId', '==', clientId),
         orderBy('createdAt', 'desc'),
-        limit(20)
+        limit(5)
       );
 
       const unsubscribeSessions = onSnapshot(sessionsQuery, async (snapshot) => {
@@ -4940,7 +4949,7 @@ function WorkoutTrackerView({
                 collection(db, 'exerciseLogs'),
                 where('clientId', '==', clientId),
                 orderBy('createdAt', 'desc'),
-                limit(100)
+                limit(30)
               );
               
               const snap = await getDocs(logsQ);

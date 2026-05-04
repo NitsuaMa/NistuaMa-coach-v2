@@ -613,6 +613,16 @@ export function ClientProfileView({
                    {client.packageTier === '18-Month' ? '18-Month VIP' : client.packageTier === '12-Month' ? '12-Month Tier' : client.packageTier === '6-Month' ? '6-Month Tier' : 'Prospect'}
                  </div>
                )}
+               {client.occupation && (
+                 <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border bg-amber-500/10 text-amber-500 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                   {client.occupation}
+                 </div>
+               )}
+               {client.isRetired && (
+                 <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border bg-purple-500/10 text-purple-400 border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+                   RETIRED
+                 </div>
+               )}
                {false ? (
                  <button 
                    onClick={() => setActiveTab("details")}

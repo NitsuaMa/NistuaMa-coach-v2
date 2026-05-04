@@ -132,6 +132,13 @@ export async function masterSync(targetTrainerId?: string, hardReset: boolean = 
 
           const summary = typeof ev.summary === 'object' ? (ev.summary as any).val : (ev.summary || '');
           const description = typeof ev.description === 'object' ? (ev.description as any).val : (ev.description || '');
+
+          const isCancelled = 
+            (ev.status && typeof ev.status === 'string' && ev.status.toUpperCase() === 'CANCELLED') ||
+            summary.toLowerCase().includes('cancel') ||
+            summary.toLowerCase().includes('cancelled') ||
+            description.toLowerCase().includes('cancel');
+
           const clientName = extractClientName(summary, description);
           const clientId = clientMap[normalizeName(clientName)] || null;
           const serviceName = summary.includes('(') ? summary.split('(')[0].trim() : (ev.location || 'Training Session');
@@ -146,7 +153,7 @@ export async function masterSync(targetTrainerId?: string, hardReset: boolean = 
               trainerId: trainer.id,
               startTime: Timestamp.fromDate(new Date(ev.start)),
               endTime: Timestamp.fromDate(new Date(ev.end)),
-              status: 'Scheduled' as const,
+              status: isCancelled ? 'Cancelled' as const : 'Scheduled' as const,
               serviceName,
               source: 'Subscription' as const,
               ical_uid: uid,
@@ -162,13 +169,14 @@ export async function masterSync(targetTrainerId?: string, hardReset: boolean = 
             } else {
               const current = existingRecord.data;
               const hasChanged = 
+                current.status !== docData.status ||
                 current.clientName !== docData.clientName ||
                 current.clientId !== docData.clientId ||
                 current.serviceName !== docData.serviceName ||
                 current.startTime?.toDate()?.getTime() !== docData.startTime.toDate().getTime() ||
                 current.endTime?.toDate()?.getTime() !== docData.endTime.toDate().getTime();
 
-              if (hasChanged && current.status === 'Scheduled') {
+              if (hasChanged) {
                 console.log(`[Sync-${syncId}] Updating record for ${clientName} - details changed.`);
                 await updateDoc(doc(db, 'schedules', existingRecord.id), docData);
               }
