@@ -19,7 +19,7 @@ import {
   Plus
 } from 'lucide-react';
 import { Client, Machine, Trainer, WorkoutSession, ExerciseLog } from '../types';
-import { processLegacyChart, ExtractedSession } from '../services/geminiService';
+import { processLegacyChart, ExtractedMachineRow } from '../services/geminiService';
 import { db } from '../firebase';
 import { collection, writeBatch, doc, serverTimestamp, getDocs, query, where, increment } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,7 @@ interface ValidationSession {
 
 export function LegacyChartImporter({ clients, machines, trainers, initialClientId, onComplete }: ImporterProps) {
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId || '');
+  const [expectedSessions, setExpectedSessions] = useState<number>(10);
   const [files, setFiles] = useState<{ name: string; base64: string; mimeType: string; previewUrl: string }[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState('');
@@ -92,148 +93,107 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
   };
 
   const runOCR = async () => {
-    if (!selectedClientId || files.length === 0) return;
+    if (!selectedClientId || files.length === 0 || !expectedSessions) return;
 
     setIsScanning(true);
     setScanProgress('Waking Vision Engine...');
     setValidationSessions([]);
 
     try {
-      const allExtracted: ExtractedSession[] = [];
+      const allRows: ExtractedMachineRow[] = [];
 
       for (const file of files) {
         setScanProgress(`Analyzing ${file.name}...`);
-        const result = await processLegacyChart(file.base64, file.mimeType);
-        allExtracted.push(...result);
+        const result = await processLegacyChart(file.base64, file.mimeType, expectedSessions);
+        allRows.push(...result);
       }
 
-      // Map and identify anomalies with DETERMINISTIC POST-PROCESSING
-      let mappedSessions: ValidationSession[] = allExtracted.map((s, sIdx) => {
-        // Resolve trainer
-        const trainerMatch = trainers.find(t => 
-          t.initials.toLowerCase() === s.trainer.toLowerCase() || 
-          t.fullName.toLowerCase().includes(s.trainer.toLowerCase())
-        );
+      // INVERSION LOGIC: Convert machine rows to chronological sessions
+      const sessionsMap: Record<number, ValidationSession> = {};
 
-        // Filter out empty rows (Spatial Reasoning Fallback)
-        const activePerformances = s.machines.filter(m => {
-          const hasWeight = m.weight && m.weight > 0;
-          const hasReps = m.reps !== null && m.reps !== undefined && String(m.reps).trim() !== '';
-          return hasWeight || hasReps;
-        });
+      allRows.forEach(row => {
+        row.performances.forEach(perf => {
+          if (!sessionsMap[perf.sessionIndex]) {
+            sessionsMap[perf.sessionIndex] = {
+              id: `v-sess-${perf.sessionIndex}-${Date.now()}`,
+              sessionNumber: perf.sessionIndex,
+              date: '', // Manual entry or attempt to extract? Prompt says Column 1 is Name, Column 2 is Settings, Columns 3+ are sessions. Header has Date.
+              trainer: '',
+              machines: []
+            };
+          }
 
-        return {
-          id: `v-sess-${sIdx}-${Date.now()}`,
-          sessionNumber: s.sessionNumber,
-          date: s.date,
-          trainer: s.trainer,
-          trainerId: trainerMatch?.id,
-          machines: activePerformances.map((m, mIdx) => {
-            const machineMatch = machines.find(mach => 
-              mach.name.toLowerCase() === m.name.toLowerCase() ||
-              m.name.toLowerCase().includes(mach.name.toLowerCase())
-            );
+          // Deterministic Static Hold Logic
+          let isStaticHold = false;
+          let timeUnderLoad = 0;
+          let repsVal: any = perf.reps;
 
-            // Deterministic Logic Layer
-            let isStaticHold = m.isStaticHold;
-            let timeUnderLoad = m.timeUnderLoad;
-            let reps = m.reps;
-
-            // Rule: reps > 20 is always a static hold
-            if (typeof reps === 'number' && reps > 20) {
+          if (typeof repsVal === 'number' && repsVal > 20) {
+            isStaticHold = true;
+            timeUnderLoad = repsVal;
+            repsVal = 0;
+          } else if (typeof repsVal === 'string') {
+            const up = repsVal.toUpperCase();
+            if (up.includes('SH') || up.includes('SEC')) {
               isStaticHold = true;
-              timeUnderLoad = reps;
-              reps = 0;
-            } else if (typeof reps === 'string' && (reps.toUpperCase().includes('SH') || reps.toUpperCase().includes('SEC'))) {
-              isStaticHold = true;
-              const numericMatch = reps.match(/\d+/);
+              const numericMatch = repsVal.match(/\d+/);
               if (numericMatch) {
                 timeUnderLoad = parseInt(numericMatch[0]);
               }
-              reps = 0;
+              repsVal = 0;
+            } else {
+              repsVal = parseInt(repsVal) || 0;
             }
+          }
 
-            // Initial Anomaly Detection: Basic checks
-            let isAnomalous = false;
-            let anomalyReason = '';
-            
-            // Transcription Gap Detection (Amber Border)
-            const hasWeight = m.weight > 0;
-            const hasRepsOrTime = reps > 0 || (isStaticHold && (timeUnderLoad || 0) > 0);
-            
-            if (hasWeight && !hasRepsOrTime) {
-              isAnomalous = true;
-              anomalyReason = 'Missing Reps/Time';
-            } else if (!hasWeight && hasRepsOrTime) {
-              isAnomalous = true;
-              anomalyReason = 'Missing Weight';
-            }
+          const machineMatch = machines.find(mach => 
+            mach.name.toLowerCase() === row.machineName.toLowerCase() ||
+            row.machineName.toLowerCase().includes(mach.name.toLowerCase())
+          );
 
-            if (m.weight > 500) {
-              isAnomalous = true;
-              anomalyReason = 'Extreme Weight Detected';
-            }
-            if (!machineMatch) {
-              isAnomalous = true;
-              anomalyReason = 'Unknown Machine';
-            }
+          // Anomaly detection
+          let isAnomalous = false;
+          let anomalyReason = '';
+          const hasWeight = perf.weight > 0;
+          const hasRepsOrTime = (repsVal || 0) > 0 || (isStaticHold && timeUnderLoad > 0);
 
-            return {
-              id: `v-log-${sIdx}-${mIdx}-${Date.now()}`,
-              name: m.name,
-              settings: m.settings,
-              weight: m.weight,
-              reps: reps,
-              isStaticHold,
-              timeUnderLoad,
-              machineId: machineMatch?.id,
-              isAnomalous,
-              anomalyReason
-            };
-          })
-        };
+          if (hasWeight && !hasRepsOrTime) {
+            isAnomalous = true;
+            anomalyReason = 'Missing Reps/Time';
+          } else if (!hasWeight && hasRepsOrTime) {
+            isAnomalous = true;
+            anomalyReason = 'Missing Weight';
+          }
+
+          if (perf.weight > 500) {
+            isAnomalous = true;
+            anomalyReason = 'Extreme Weight Detected';
+          }
+          if (!machineMatch) {
+            isAnomalous = true;
+            anomalyReason = 'Unknown Machine';
+          }
+
+          sessionsMap[perf.sessionIndex].machines.push({
+            id: `v-log-${perf.sessionIndex}-${row.machineName}-${Date.now()}`,
+            name: row.machineName,
+            settings: row.settings,
+            weight: perf.weight,
+            reps: repsVal,
+            isStaticHold,
+            timeUnderLoad,
+            machineId: machineMatch?.id,
+            isAnomalous,
+            anomalyReason
+          });
+        });
       });
 
-      // Sort by date before cross-session analysis
-      mappedSessions.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
-
-      // Second pass: Weight Anomaly Detection (Comparison with previous sessions)
-      mappedSessions = mappedSessions.map((session, sIdx) => {
-        if (sIdx === 0) return session; // No previous session to compare to
-
-        return {
-          ...session,
-          machines: session.machines.map(log => {
-            if (!log.machineId) return log;
-
-            // Find this machine in previous sessions
-            let prevWeight = -1;
-            for (let i = sIdx - 1; i >= 0; i--) {
-              const prevLog = mappedSessions[i].machines.find(m => m.machineId === log.machineId);
-              if (prevLog && prevLog.weight > 0) {
-                prevWeight = prevLog.weight;
-                break;
-              }
-            }
-
-            if (prevWeight !== -1) {
-              const weightDiff = Math.abs(log.weight - prevWeight);
-              if (weightDiff > 10) {
-                return {
-                  ...log,
-                  isAnomalous: true,
-                  anomalyReason: log.anomalyReason 
-                    ? `${log.anomalyReason} | Weight Jump: ${weightDiff}lb` 
-                    : `Weight Jump: ${weightDiff}lb`
-                };
-              }
-            }
-
-            return log;
-          })
-        };
-      });
-
+      let mappedSessions = Object.values(sessionsMap);
+      
+      // Attempt to resolve Date and Trainer from the sessions if the model captured it as a "machine" row (common glitch)
+      // or just leave it for manual entry as the HUD handles it.
+      
       setValidationSessions(mappedSessions);
       setScanProgress('OCR Pipeline Complete');
     } catch (err) {
@@ -393,6 +353,23 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
+              <div className="mb-6 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Expected Sessions to Extract</label>
+                  <div className="flex items-center gap-4 bg-slate-900 border border-slate-700 rounded-xl p-3">
+                    <Input 
+                      type="number"
+                      value={expectedSessions}
+                      onChange={(e) => setExpectedSessions(parseInt(e.target.value) || 0)}
+                      className="w-24 bg-slate-800 border-slate-700 text-center font-black text-lg focus:ring-[#F06C22] h-10"
+                    />
+                    <p className="text-[10px] text-slate-400 font-medium leading-tight">
+                      Bounding cross-grid search space to maximize extraction speed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div 
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={e => e.preventDefault()}
@@ -416,44 +393,43 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
               </div>
 
               {files.length > 0 && (
-                <div className="mt-6 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Queue ({files.length})</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {files.map((file, idx) => (
-                      <div key={idx} className="relative group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden aspect-[4/3]">
-                        {file.previewUrl ? (
-                          <img src={file.previewUrl} className="w-full h-full object-cover opacity-60" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                            <FileText className="w-8 h-8 text-slate-600" />
+                  <div className="mt-6 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Queue ({files.length})</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {files.map((file, idx) => (
+                        <div key={idx} className="relative group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden aspect-[4/3]">
+                          {file.previewUrl ? (
+                            <img src={file.previewUrl} className="w-full h-full object-cover opacity-60" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                              <FileText className="w-8 h-8 text-slate-600" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button onClick={() => removeFile(idx)} className="p-2 bg-red-600/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all">
+                              <Trash2 size={16} />
+                            </button>
                           </div>
-                        )}
-                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <button onClick={() => removeFile(idx)} className="p-2 bg-red-600/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all">
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="absolute bottom-1 left-1 right-1 px-1 py-0.5 bg-black/50 backdrop-blur-sm rounded text-[8px] font-bold truncate">
+                            {file.name}
+                          </div>
                         </div>
-                        <div className="absolute bottom-1 left-1 right-1 px-1 py-0.5 bg-black/50 backdrop-blur-sm rounded text-[8px] font-bold truncate">
-                          {file.name}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    
+                    <Button 
+                      variant="outline"
+                      className={cn(
+                        "w-full border-slate-700 text-white font-black h-12 mt-4 tracking-widest uppercase text-xs transition-all",
+                        expectedSessions > 0 && selectedClientId ? "bg-[#0A2E46] hover:bg-[#F06C22] hover:text-white" : "bg-slate-900/50 opacity-50 cursor-not-allowed"
+                      )}
+                      onClick={runOCR}
+                      disabled={isScanning || !selectedClientId || expectedSessions <= 0}
+                    >
+                      <Scan className={cn("w-4 h-4 mr-2", isScanning && "animate-spin")} />
+                      {isScanning ? 'SCANNING GRID...' : 'START CLINICAL EXTRACTION'}
+                    </Button>
                   </div>
-                  
-                  <Button 
-                    variant="outline"
-                    className="w-full border-slate-700 bg-slate-900 text-white font-bold h-12 mt-4 hover:bg-slate-800"
-                    onClick={runOCR}
-                    disabled={isScanning || !selectedClientId}
-                  >
-                    {isScanning ? (
-                      <Scan className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Scan className="w-4 h-4 mr-2" />
-                    )}
-                    {isScanning ? scanProgress : 'INITIALIZE OCR LOGIC'}
-                  </Button>
-                </div>
               )}
             </CardContent>
           </Card>
@@ -473,8 +449,12 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
               </div>
               {validationSessions.length > 0 && (
                 <div className="flex gap-4 items-center">
+                  <div className="text-right px-4 border-r border-slate-800">
+                    <p className="text-[10px] font-black text-white uppercase">Expected Sessions: {expectedSessions}</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Trainer Bounding Box</p>
+                  </div>
                   <div className="text-right">
-                    <p className="text-[10px] font-black text-white uppercase">{validationSessions.length} Sessions</p>
+                    <p className="text-[10px] font-black text-[#F06C22] uppercase">Extracted Found: {validationSessions.length}</p>
                     <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter">Verified Alignment</p>
                   </div>
                 </div>
@@ -489,13 +469,35 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                     exit={{ opacity: 0 }}
                     className="h-full flex flex-col items-center justify-center p-12 text-center"
                   >
-                    <div className="w-20 h-20 bg-slate-900/50 rounded-full flex items-center justify-center mb-6">
-                      <History className="w-10 h-10 text-slate-700" />
-                    </div>
-                    <h3 className="text-lg font-black text-slate-500 uppercase tracking-widest mb-2 italic">Idle - Waiting for Feed</h3>
-                    <p className="text-xs text-slate-600 max-w-xs leading-relaxed">
-                      Upload high-resolution scans of paper charts to initiate the multimodal clinical extraction pipeline.
-                    </p>
+                    {isScanning ? (
+                      <div className="flex flex-col items-center space-y-6">
+                        <div className="relative">
+                          <div className="w-24 h-24 rounded-full border-4 border-[#0A2E46] border-t-[#F06C22] animate-spin"></div>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Scan className="w-10 h-10 text-[#F06C22]" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-black text-white uppercase tracking-widest animate-pulse">Analyzing Grid Intersections</h3>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest max-w-xs mx-auto">
+                            Performing row-by-row clinical extraction. This may take 30-60 seconds depending on data density.
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="bg-[#0A2E46] text-[#F06C22] border-[#F06C22]/30 px-4 py-1">
+                          {scanProgress}
+                        </Badge>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-20 h-20 bg-slate-900/50 rounded-full flex items-center justify-center mb-6">
+                          <History className="w-10 h-10 text-slate-700" />
+                        </div>
+                        <h3 className="text-lg font-black text-slate-500 uppercase tracking-widest mb-2 italic">Idle - Waiting for Feed</h3>
+                        <p className="text-xs text-slate-600 max-w-xs leading-relaxed">
+                          Enter target session count and upload high-resolution scans to initiate the multimodal clinical extraction pipeline.
+                        </p>
+                      </>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div 
@@ -503,6 +505,25 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                     animate={{ opacity: 1 }}
                     className="p-4 space-y-6 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-slate-700"
                   >
+                    {/* Extraction Summary Panel */}
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-4">
+                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3">Machine Extraction Frequency</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(
+                          validationSessions.reduce((acc, sess) => {
+                            sess.machines.forEach(m => {
+                              acc[m.name] = (acc[m.name] || 0) + 1;
+                            });
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map(([name, count]) => (
+                          <Badge key={name} variant="secondary" className="bg-slate-800 text-slate-300 text-[9px] font-bold px-2 py-1 rounded-md border border-slate-700">
+                            {name}: {count} logs
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
                     {validationSessions.map((session) => (
                       <div key={session.id} className="space-y-3">
                         <div className="flex items-center gap-3 bg-slate-900/80 p-3 rounded-lg border border-slate-800">
@@ -510,6 +531,9 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                             S#{session.sessionNumber}
                           </Badge>
                           <div className="flex-1 flex items-center gap-4">
+                            <div className="flex items-center gap-1.5 px-4 border-r border-slate-800">
+                               <p className="text-[10px] font-black text-[#F06C22] uppercase">Machines Logged: {session.machines.length}</p>
+                            </div>
                             <div className="flex items-center gap-1.5">
                               <Calendar className={cn("w-3 h-3 transition-colors", !session.date ? "text-red-500 animate-pulse" : "text-slate-500")} />
                               <input 

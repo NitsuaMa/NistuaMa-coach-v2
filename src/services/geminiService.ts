@@ -304,77 +304,61 @@ Analyze the MSF Reference Text, the specific Client Details, and explicitly cros
   }
 }
 
-export interface ExtractedMachineData {
-  name: string;
-  settings?: string;
+export interface ExtractedPerformance {
+  sessionIndex: number;
   weight: number;
-  reps: any;
-  isStaticHold: boolean;
-  timeUnderLoad?: number | null;
+  reps: string | number;
 }
 
-export interface ExtractedSession {
-  sessionNumber: number;
-  date: string;
-  trainer: string;
-  machines: ExtractedMachineData[];
+export interface ExtractedMachineRow {
+  machineName: string;
+  settings: string;
+  performances: ExtractedPerformance[];
 }
 
 export const CHART_OCR_SCHEMA = {
-  type: "object" as const,
-  properties: {
-    sessions: {
-      type: "array" as const,
-      items: {
-        type: "object" as const,
-        properties: {
-          sessionNumber: { type: "number" as const },
-          date: { type: "string" as const },
-          trainerInitials: { type: "string" as const },
-          performances: {
-            type: "array" as const,
-            items: {
-              type: "object" as const,
-              properties: {
-                machineName: { type: "string" as const },
-                settings: { type: "string" as const },
-                weight: { type: "number" as const },
-                reps: { type: "number" as const },
-                isStaticHold: { type: "boolean" as const },
-                timeUnderLoad: { type: "number" as const, nullable: true }
-              },
-              required: ["machineName", "settings", "weight", "reps", "isStaticHold"]
-            }
-          }
-        },
-        required: ["sessionNumber", "date", "trainerInitials", "performances"]
+  type: "array" as const,
+  items: {
+    type: "object" as const,
+    properties: {
+      machineName: { type: "string" as const },
+      settings: { type: "string" as const },
+      performances: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            sessionIndex: { type: "number" as const },
+            weight: { type: "number" as const },
+            reps: { type: "string" as const }
+          },
+          required: ["sessionIndex", "weight", "reps"]
+        }
       }
-    }
-  },
-  required: ["sessions"]
+    },
+    required: ["machineName", "settings", "performances"]
+  }
 };
 
 export async function processLegacyChart(
   fileData: string,
-  mimeType: string
-): Promise<ExtractedSession[]> {
+  mimeType: string,
+  expectedSessions: number
+): Promise<ExtractedMachineRow[]> {
   const ai = getGenaiClient();
   
-  const systemInstruction = `You are a high-precision clinical OCR engine specializing in physical high-intensity training charts. The image provided is a strict grid layout.
+  const systemInstruction = `You are a high-precision clinical OCR engine specializing in physical high-intensity training charts. 
+The image provided is a strict grid layout. The user has indicated there are EXACTLY ${expectedSessions} sessions recorded in the columns.
 
-**Column 1:** The Machine Name (There are up to 20 rows).
-**Column 2 (or adjacent to Name):** Machine Settings (e.g., Seat numbers, pin placements).
-**Columns 3+ (Moving Right):** Chronological training sessions.
-**Header Row:** Contains Session Number, Date, and Trainer Initials.
-**Grid Intersections:** Where a session column meets a machine row, there is a box. The top number is the 'weight'. The bottom number is the 'reps'.
+The chart has up to 20 rows of machines. 
 
-Your mission is to scan EVERY intersection. If a box has writing in it, you MUST record it, even if it is the only time that machine was used in the entire chart.
+**CRITICAL CONSTRAINT:** The trainer has verified there are EXACTLY ${expectedSessions} training sessions on this chart. You must extract exactly ${expectedSessions} session columns. Do not scan endlessly to the right. Once you hit session ${expectedSessions}, stop extracting and return the JSON.
 
-**Extraction Rules:**
-1. Extract the Machine Name and its corresponding Settings.
-2. Extract the Weight.
-3. Extract the Reps.
-4. **STATIC HOLD RULE:** If the reps text says 'SH', or if the numeric value for reps is greater than 20, you MUST set the boolean 'isStaticHold' to true, and record that number as the 'timeUnderLoad'. Otherwise, 'isStaticHold' is false.
+**Process ROW BY ROW, not column by column.**
+For each Machine Row:
+1. Identify the Machine Name and Settings (Column 1 & 2). Ignore machine settings like seat number in the name if they are in column 2.
+2. Scan across the ${expectedSessions} session columns.
+3. Only record the performance if a box is filled. Extract the top number as 'weight' and bottom number as 'reps'.
 
 Return ONLY valid JSON matching the requested schema.`;
 
@@ -384,7 +368,7 @@ Return ONLY valid JSON matching the requested schema.`;
       {
         parts: [
           { inlineData: { data: fileData, mimeType } },
-          { text: "Analyze this training chart and extract the data based on the provided specific instructions." }
+          { text: `Analyze this training chart and extract exactly ${expectedSessions} sessions using a row-by-row strategy.` }
         ]
       }
     ],
@@ -400,20 +384,7 @@ Return ONLY valid JSON matching the requested schema.`;
   }
 
   try {
-    const raw = JSON.parse(response.text);
-    return (raw.sessions || []).map((s: any) => ({
-      sessionNumber: s.sessionNumber || 0,
-      date: s.date || "",
-      trainer: s.trainerInitials || "",
-      machines: (s.performances || []).map((p: any) => ({
-        name: p.machineName,
-        settings: p.settings,
-        weight: p.weight,
-        reps: p.reps,
-        isStaticHold: p.isStaticHold,
-        timeUnderLoad: p.timeUnderLoad
-      }))
-    }));
+    return JSON.parse(response.text) as ExtractedMachineRow[];
   } catch (e) {
     console.error("OCR Parse Error:", response.text);
     throw new Error("Failed to parse clinical chart data.");
