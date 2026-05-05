@@ -182,7 +182,7 @@ TASK:
 Analyze the MSF Reference Text. Generate a step-by-step setup guide for the trainer to get the client safely into the ${machineName}. Ensure any specific limitations mentioned in the Client Details and Clinical Profile are addressed using rules found in the Reference Text. Specifically check against the Machine Known Contraindications. Return ONLY the requested JSON object.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       systemInstruction: AI_SETUP_PROMPT,
@@ -229,7 +229,7 @@ TASK:
 Analyze the provided MSF Reference Text for the ${machineName}. Generate a structured coaching guide that a trainer can read while the client is actively performing the exercise. Focus strictly on the execution of the movement, the pacing, turnaround rules, and specific verbal cues. Return ONLY the requested JSON object.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       systemInstruction: AI_EXECUTION_PROMPT,
@@ -283,7 +283,7 @@ TASK:
 Analyze the MSF Reference Text, the specific Client Details, and explicitly cross-reference the Client Clinical Profile against the Machine Known Contraindications. Generate a clinical strategy and progression guide for the trainer. If the client's condition requires a Static Hold (SH) or Timed Static Contraction (TSC), detail the exact setup. If the exercise is completely contraindicated, provide the approved substitutions. Return ONLY the requested JSON object.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       systemInstruction: AI_CLINICAL_PROMPT,
@@ -341,34 +341,35 @@ export const CHART_OCR_SCHEMA = {
 };
 
 export async function processLegacyChart(
-  fileData: string,
-  mimeType: string,
+  images: { base64: string; mimeType: string }[],
   expectedSessions: number
 ): Promise<ExtractedMachineRow[]> {
   const ai = getGenaiClient();
   
-  const systemInstruction = `You are a high-precision clinical OCR engine specializing in physical high-intensity training charts. 
-The image provided is a strict grid layout. The user has indicated there are EXACTLY ${expectedSessions} sessions recorded in the columns.
+  const systemInstruction = `You are a high-precision clinical data extraction engine. You are receiving an array of images representing a continuous physical training chart for a single client.
+CRITICAL VISUAL ANCHOR: Look for the blue bar/header row running horizontally across the top of the grid. The numbers inside or directly under this blue bar represent the chronological Session Numbers.
 
-The chart has up to 20 rows of machines. 
+Your mission is to read across ALL provided images and stitch the timeline together.
+1. Identify the Machine Name (Row Header).
+2. Follow that machine's row across the columns. Use the blue bar to determine which session number that column belongs to.
+3. The top number in a cell is weight. The bottom number is reps (or timeUnderLoad if > 20 or "SH").
+4. Consolidate the data. If 'Leg Press' appears on Image 1 (Sessions 1-5) and Image 2 (Sessions 6-10), combine them into a single 'Leg Press' object with 10 performances.
 
-**CRITICAL CONSTRAINT:** The trainer has verified there are EXACTLY ${expectedSessions} training sessions on this chart. You must extract exactly ${expectedSessions} session columns. Do not scan endlessly to the right. Once you hit session ${expectedSessions}, stop extracting and return the JSON.
-
-**Process ROW BY ROW, not column by column.**
-For each Machine Row:
-1. Identify the Machine Name and Settings (Column 1 & 2). Ignore machine settings like seat number in the name if they are in column 2.
-2. Scan across the ${expectedSessions} session columns.
-3. Only record the performance if a box is filled. Extract the top number as 'weight' and bottom number as 'reps'.
+Expected Sessions: ${expectedSessions}.
 
 Return ONLY valid JSON matching the requested schema.`;
 
+  const imageParts = images.map(img => ({
+    inlineData: { data: img.base64, mimeType: img.mimeType }
+  }));
+
   const response = await ai.models.generateContent({
-    model: 'gemini-1.5-pro',
+    model: 'gemini-3.1-pro-preview',
     contents: [
       {
         parts: [
-          { inlineData: { data: fileData, mimeType } },
-          { text: `Analyze this training chart and extract exactly ${expectedSessions} sessions using a row-by-row strategy.` }
+          ...imageParts,
+          { text: `Analyze these training chart images and extract data for exactly ${expectedSessions} sessions into a consolidated row-by-row structure.` }
         ]
       }
     ],

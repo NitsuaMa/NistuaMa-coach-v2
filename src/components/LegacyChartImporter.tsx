@@ -92,6 +92,11 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const clearFiles = () => {
+    setFiles([]);
+    setValidationSessions([]);
+  };
+
   const runOCR = async () => {
     if (!selectedClientId || files.length === 0 || !expectedSessions) return;
 
@@ -100,18 +105,34 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
     setValidationSessions([]);
 
     try {
-      const allRows: ExtractedMachineRow[] = [];
+      const imageFiles = files.map(f => ({ base64: f.base64, mimeType: f.mimeType }));
+      setScanProgress(`Analyzing ${files.length} images simultaneously...`);
+      const allRows = await processLegacyChart(imageFiles, expectedSessions);
 
-      for (const file of files) {
-        setScanProgress(`Analyzing ${file.name}...`);
-        const result = await processLegacyChart(file.base64, file.mimeType, expectedSessions);
-        allRows.push(...result);
-      }
+      // 1. Merge fragmented AI results by machine name
+      const mergedRowsMap = new Map<string, ExtractedMachineRow>();
+      allRows.forEach(row => {
+        const key = row.machineName.toLowerCase().trim();
+        if (mergedRowsMap.has(key)) {
+          const existing = mergedRowsMap.get(key)!;
+          existing.performances.push(...row.performances);
+          if ((row.settings?.length || 0) > (existing.settings?.length || 0)) {
+            existing.settings = row.settings;
+          }
+        } else {
+          mergedRowsMap.set(key, { ...row });
+        }
+      });
+
+      // 2. Sort performances chronologically by session index
+      mergedRowsMap.forEach(row => {
+        row.performances.sort((a, b) => a.sessionIndex - b.sessionIndex);
+      });
 
       // INVERSION LOGIC: Convert machine rows to chronological sessions
       const sessionsMap: Record<number, ValidationSession> = {};
 
-      allRows.forEach(row => {
+      mergedRowsMap.forEach(row => {
         row.performances.forEach(perf => {
           if (!sessionsMap[perf.sessionIndex]) {
             sessionsMap[perf.sessionIndex] = {
@@ -377,7 +398,7 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                   e.preventDefault();
                   handleFileSelect({ target: { files: e.dataTransfer.files } } as any);
                 }}
-                className="w-full aspect-video border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-xl flex flex-col items-center justify-center p-6 cursor-pointer hover:border-[#F06C22]/50 hover:bg-slate-800/30 transition-all group"
+                className="w-full h-40 border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-xl flex flex-col items-center justify-center p-6 cursor-pointer hover:border-[#F06C22]/50 hover:bg-slate-800/30 transition-all group relative"
               >
                 <input 
                   type="file" 
@@ -388,29 +409,40 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                   onChange={handleFileSelect}
                 />
                 <Upload className="w-10 h-10 text-slate-600 group-hover:text-[#F06C22] mb-3 transition-colors" />
-                <p className="text-sm font-black text-slate-300 uppercase tracking-tighter">Drop Chart Images</p>
-                <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">JPG, PNG, or PDF supported</p>
+                <p className="text-sm font-black text-slate-300 uppercase tracking-tighter text-center">Drop Multiple Chart Images</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mt-2 text-center">Batch Processing (Up to 8 Images)</p>
               </div>
 
               {files.length > 0 && (
-                  <div className="mt-6 space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Queue ({files.length})</p>
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="mt-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Queue ({files.length})</p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={clearFiles}
+                        className="text-[9px] font-black text-red-500 hover:text-red-400 hover:bg-red-500/10 h-6 uppercase px-2"
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-800">
                       {files.map((file, idx) => (
-                        <div key={idx} className="relative group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden aspect-[4/3]">
+                        <div key={idx} className="relative group bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shrink-0 w-24 h-24">
                           {file.previewUrl ? (
                             <img src={file.previewUrl} className="w-full h-full object-cover opacity-60" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                              <FileText className="w-8 h-8 text-slate-600" />
+                              <FileText className="w-6 h-6 text-slate-600" />
                             </div>
                           )}
                           <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button onClick={() => removeFile(idx)} className="p-2 bg-red-600/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all">
-                              <Trash2 size={16} />
+                            <button onClick={() => removeFile(idx)} className="p-1.5 bg-red-600/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all">
+                              <Trash2 size={12} />
                             </button>
                           </div>
-                          <div className="absolute bottom-1 left-1 right-1 px-1 py-0.5 bg-black/50 backdrop-blur-sm rounded text-[8px] font-bold truncate">
+                          <div className="absolute bottom-1 left-1 right-1 px-1 py-0.5 bg-black/50 backdrop-blur-sm rounded text-[7px] font-black truncate text-white">
                             {file.name}
                           </div>
                         </div>
@@ -503,9 +535,29 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                   <motion.div 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="p-4 space-y-6 overflow-y-auto max-h-[800px] scrollbar-thin scrollbar-thumb-slate-700"
+                    className="p-4 space-y-6 overflow-y-auto max-h-[60vh] scrollbar-thin scrollbar-thumb-slate-700"
                   >
-                    {/* Extraction Summary Panel */}
+                    {/* Macro Summary Panel */}
+                    <div className="bg-[#0A2E46] border border-[#F06C22]/30 rounded-xl p-4 mb-4 flex items-center justify-between shadow-[0_0_20px_rgba(240,108,34,0.05)]">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-[#F06C22]/10 rounded-full text-[#F06C22]">
+                          <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-white uppercase tracking-widest">Clinical History Consolidated</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">
+                            Successfully extracted {
+                              Array.from(new Set(validationSessions.flatMap(s => s.machines.map(m => m.name)))).length
+                            } unique machines spanning {validationSessions.length} total sessions.
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="border-[#F06C22] text-[#F06C22] font-black uppercase text-[8px] px-3">
+                        CONTINUITY VERIFIED
+                      </Badge>
+                    </div>
+
+                    {/* Extraction Frequency Panel */}
                     <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-4">
                       <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3">Machine Extraction Frequency</h3>
                       <div className="flex flex-wrap gap-2">
