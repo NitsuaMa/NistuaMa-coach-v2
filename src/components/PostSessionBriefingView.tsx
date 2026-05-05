@@ -114,7 +114,7 @@ export function PostSessionBriefingView({
           <div className="bg-slate-800 border border-slate-700/50 rounded-2xl p-4 flex flex-col justify-center relative overflow-hidden shadow-lg">
             <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 relative z-10">Today's Tonnage</span>
             <span className="text-2xl sm:text-3xl font-black text-white tracking-tighter mt-1 relative z-10 truncate">
-              {totalTonnage.toLocaleString()}<span className="text-sm text-slate-500 ml-1">lbs</span>
+              {(isNaN(totalTonnage) ? 0 : totalTonnage).toLocaleString()}<span className="text-sm text-slate-500 ml-1">lbs</span>
             </span>
           </div>
 
@@ -145,7 +145,7 @@ export function PostSessionBriefingView({
               <Dumbbell className="w-3 h-3" /> Lifetime Volume
             </span>
             <span className="text-2xl sm:text-3xl font-black text-[#F06C22] tracking-tighter mt-1 relative z-10 truncate">
-              {lifetimeTonnage.toLocaleString()}<span className="text-sm opacity-50 ml-1">lbs</span>
+              {(isNaN(lifetimeTonnage) ? 0 : lifetimeTonnage).toLocaleString()}<span className="text-sm opacity-50 ml-1">lbs</span>
             </span>
           </div>
 
@@ -155,7 +155,7 @@ export function PostSessionBriefingView({
               <Activity className="w-3 h-3" /> Lifetime Reps
             </span>
             <span className="text-2xl sm:text-3xl font-black text-[#F06C22] tracking-tighter mt-1 relative z-10 truncate">
-              {lifetimeReps.toLocaleString()}
+              {(isNaN(lifetimeReps) ? 0 : lifetimeReps).toLocaleString()}
             </span>
           </div>
         </div>

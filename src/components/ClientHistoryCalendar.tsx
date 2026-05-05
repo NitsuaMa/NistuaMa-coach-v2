@@ -289,7 +289,7 @@ export function ClientHistoryCalendar({
             </div>
             <div>
               <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">
-                {viewType === 'calendar' ? viewDate.toLocaleString('default', { month: 'long' }) : 'Client History'}
+                {viewType === 'calendar' ? (viewDate instanceof Date && !isNaN(viewDate.getTime()) ? viewDate.toLocaleString('default', { month: 'long' }) : 'Invalid Date') : 'Client History'}
               </h2>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-[#68717A] mt-1">
                 {viewType === 'calendar' ? viewDate.getFullYear() : `${sessions.length} Sessions Total`}
@@ -418,8 +418,8 @@ export function ClientHistoryCalendar({
                    className="flex items-center gap-6 p-6 rounded-[32px] bg-slate-800 border border-slate-700 cursor-pointer hover:border-white/30 transition-all hover:bg-slate-800/80"
                  >
                    <div className="flex flex-col items-center justify-center min-w-[80px]">
-                      <span className="text-3xl font-black text-white">{sDate.getDate()}</span>
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{sDate.toLocaleDateString('default', { month: 'short' })} '{sDate.getFullYear().toString().substring(2)}</span>
+                      <span className="text-3xl font-black text-white">{sDate instanceof Date && !isNaN(sDate.getTime()) ? sDate.getDate() : '--'}</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{sDate instanceof Date && !isNaN(sDate.getTime()) ? sDate.toLocaleDateString('default', { month: 'short' }) + " '" + sDate.getFullYear().toString().substring(2) : 'Invalid'}</span>
                    </div>
                    
                    <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700">
@@ -456,7 +456,10 @@ export function ClientHistoryCalendar({
                 <div>
                   <h2 className="text-xl font-black uppercase text-white tracking-widest flex items-center gap-2">
                     <span className="text-[#38BDF8]">
-                      {new Date(selectedSession.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                      {(() => {
+                        const d = new Date(selectedSession.date + 'T12:00:00');
+                        return !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Invalid Date';
+                      })()}
                     </span>
                   </h2>
                   <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-2">

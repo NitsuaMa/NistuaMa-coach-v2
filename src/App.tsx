@@ -4405,7 +4405,7 @@ function MachinesView({ machines, clients, onOpenInfo }: { machines: Machine[], 
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-border/40">
                     <div className="text-left">
-                      <p className="text-[10px] font-bold text-secondary leading-none">{stats?.totalVolume ? stats.totalVolume.toLocaleString() : '--'} <span className="text-[7px] font-medium opacity-60">lbs</span></p>
+                      <p className="text-[10px] font-bold text-secondary leading-none">{!isNaN(stats?.totalVolume) ? stats.totalVolume.toLocaleString() : '--'} <span className="text-[7px] font-medium opacity-60">lbs</span></p>
                       <p className="text-[7px] font-medium text-secondary/60 uppercase mt-0.5">Vol</p>
                     </div>
                     <div className="text-center">

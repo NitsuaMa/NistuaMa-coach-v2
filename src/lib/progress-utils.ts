@@ -32,7 +32,9 @@ export async function calculateHighlightedMovements(clientId: string, machineIds
       limit(1)
     );
     const firstLogSnap = await getDocs(firstLogQuery);
-    const firstWeight = parseFloat(firstLogSnap.docs[0]?.data()?.weight || '0');
+    const firstLogData = firstLogSnap.docs[0]?.data();
+    const firstWeightRaw = parseFloat(firstLogData?.weight || '0');
+    const firstWeight = isNaN(firstWeightRaw) ? 0 : firstWeightRaw;
 
     // Get Recent Log
     const recentLogQuery = query(
@@ -44,11 +46,19 @@ export async function calculateHighlightedMovements(clientId: string, machineIds
     );
     const recentLogSnap = await getDocs(recentLogQuery);
     const recentData = recentLogSnap.docs[0]?.data();
-    const currentWeight = parseFloat(recentData?.weight || '0');
+    const currentWeightRaw = parseFloat(recentData?.weight || '0');
+    const currentWeight = isNaN(currentWeightRaw) ? 0 : currentWeightRaw;
     const isStaticHold = recentData?.isStaticHold;
-    const currentReps = isStaticHold ? parseFloat(recentData?.seconds || '0') : parseFloat(recentData?.reps || '0');
+    const rawReps = isStaticHold ? parseFloat(recentData?.seconds || '0') : parseFloat(recentData?.reps || '0');
+    const currentReps = isNaN(rawReps) ? 0 : rawReps;
     const currentQuality = recentData?.quality || 'N/A';
-    const percentageIncrease = firstWeight > 0 ? Math.round(((currentWeight - firstWeight) / firstWeight) * 100) : 0;
+    
+    // Safety check for percentage increase
+    let percentageIncrease = 0;
+    if (firstWeight > 0 && !isNaN(currentWeight)) {
+      percentageIncrease = Math.round(((currentWeight - firstWeight) / firstWeight) * 100);
+    }
+    if (isNaN(percentageIncrease)) percentageIncrease = 0;
 
     highlightedMovements.push({
       machineId,

@@ -144,62 +144,49 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
       setScanProgress(`Analyzing ${files.length} images simultaneously...`);
       const ocrResult = await processLegacyChart(imageFiles, expectedSessions);
 
-      // 1. Initialize sessions from extracted headers
+      // Reconstructed Merge Logic
       const sessionsMap: Record<number, ValidationSession> = {};
-      
+
+      // 1. Map over headers first to establish sessions
       ocrResult.sessionHeaders.forEach(header => {
         const sNum = header.sessionNumber;
-        if (!sessionsMap[sNum]) {
-          sessionsMap[sNum] = {
-            id: `v-sess-${sNum}-${Date.now()}-${Math.random()}`,
-            sessionNumber: sNum,
-            date: header.date || '',
-            trainer: header.trainer || '',
-            machines: []
-          };
-        }
+        
+        // Find matching trainer initials in our database
+        const trainerMatch = trainers.find(t => 
+          t.initials.toLowerCase() === (header.trainer || '').toLowerCase()
+        );
+
+        sessionsMap[sNum] = {
+          id: `v-sess-${sNum}-${Date.now()}-${Math.random()}`,
+          sessionNumber: sNum,
+          date: header.date || '',
+          trainer: header.trainer || 'Legacy',
+          trainerId: trainerMatch?.id || 'legacy-trainer',
+          machines: []
+        };
       });
 
-      // 2. Process and merge performances
+      // 2. Stitch performances to headers
       ocrResult.performances.forEach(perf => {
         const sNum = perf.sessionNumber;
         
-        // Ensure session exists even if header was missed for this specific column
+        // Ensure session exists even if header was missed
         if (!sessionsMap[sNum]) {
           sessionsMap[sNum] = {
             id: `v-sess-${sNum}-${Date.now()}-${Math.random()}`,
             sessionNumber: sNum,
             date: '',
-            trainer: '',
+            trainer: 'Legacy',
+            trainerId: 'legacy-trainer',
             machines: []
           };
         }
 
-        // Deterministic Static Hold Logic (Re-validation layer)
-        let isStaticHold = false;
-        let timeUnderLoad = 0;
-        let repsVal: any = perf.reps;
-
-        if (perf.isStaticHold === true || (typeof repsVal === 'number' && repsVal > 20)) {
-          isStaticHold = true;
-          timeUnderLoad = Number(repsVal) || 0;
-          repsVal = 0;
-        } else if (typeof repsVal === 'string') {
-          const up = repsVal.toUpperCase();
-          if (up.includes('SH') || up.includes('SEC') || parseInt(repsVal) > 20) {
-            isStaticHold = true;
-            const numericMatch = repsVal.match(/\d+/);
-            if (numericMatch) {
-              timeUnderLoad = parseInt(numericMatch[0]);
-            } else {
-              timeUnderLoad = parseInt(repsVal) || 0;
-            }
-            repsVal = 0;
-          } else {
-            repsVal = parseInt(repsVal) || 0;
-          }
-        }
-
+        // Deterministic Static Hold Logic
+        const isSH = perf.isStaticHold || 
+                     Number(perf.reps) > 20 || 
+                     String(perf.reps || '').toUpperCase().includes('SH');
+        
         const rawMachineName = perf.machineName;
         const normalizedName = normalizeMachineName(rawMachineName);
 
@@ -208,47 +195,24 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
           normalizedName.toLowerCase().includes(mach.name.toLowerCase())
         );
 
-        // Anomaly detection
-        let isAnomalous = false;
-        let anomalyReason = '';
-        const hasWeight = perf.weight > 0;
-        const hasRepsOrTime = (repsVal || 0) > 0 || (isStaticHold && timeUnderLoad > 0);
-
-        if (hasWeight && !hasRepsOrTime) {
-          isAnomalous = true;
-          anomalyReason = 'Missing Reps/Time';
-        } else if (!hasWeight && hasRepsOrTime) {
-          isAnomalous = true;
-          anomalyReason = 'Missing Weight';
-        }
-
-        if (perf.weight > 500) {
-          isAnomalous = true;
-          anomalyReason = 'Extreme Weight Detected';
-        }
-        if (!machineMatch) {
-          isAnomalous = true;
-          anomalyReason = `Unknown Machine: ${normalizedName}`;
-        }
-
+        // Map into validation format
         sessionsMap[sNum].machines.push({
           id: `v-log-${sNum}-${perf.machineName}-${Date.now()}-${Math.random()}`,
           name: normalizedName,
           rawName: rawMachineName,
           settings: perf.settings,
-          weight: perf.weight,
-          reps: repsVal,
-          isStaticHold,
-          timeUnderLoad,
+          weight: Number(perf.weight) || 0,
+          reps: isSH ? 0 : Number(perf.reps) || 0,
+          isStaticHold: isSH,
+          timeUnderLoad: isSH ? (Number(perf.reps) || 90) : 0,
           machineId: machineMatch?.id,
-          isAnomalous,
-          anomalyReason
+          isAnomalous: !machineMatch || (Number(perf.weight) === 0 && !isSH),
+          anomalyReason: !machineMatch ? `Unknown Machine: ${normalizedName}` : 'Missing Data'
         });
       });
 
-      // 3. Convert map to sorted array
+      // 3. Convert to sorted array
       let mappedSessions = Object.values(sessionsMap).sort((a, b) => a.sessionNumber - b.sessionNumber);
-      
       setValidationSessions(mappedSessions);
       setScanProgress('OCR Pipeline Complete');
     } catch (err) {
@@ -298,18 +262,25 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
     try {
       const batch = writeBatch(db);
       
-      // We need to fetch existing sessions to ensure sessionNumber doesn't conflict?
-      // Or just append. User said "completely reconstructing their performance history".
-      
+      // 1. Process Sessions & Logs
       for (const vSess of validationSessions) {
         const sessionRef = doc(collection(db, 'sessions'));
-        const sessionData: Partial<WorkoutSession> = {
+        
+        // Standardize Date (MM/DD to YYYY-MM-DD)
+        let formattedDate = vSess.date;
+        if (vSess.date && vSess.date.includes('/')) {
+          const [m, d] = vSess.date.split('/');
+          const year = new Date().getFullYear(); // Assume current year for legacy charts if not specified
+          formattedDate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+
+        const sessionData: WorkoutSession = {
           clientId: selectedClientId,
           sessionType: 'Standard',
           sessionNumber: vSess.sessionNumber,
-          date: vSess.date,
+          date: formattedDate || new Date().toISOString().split('T')[0],
           trainerInitials: vSess.trainer,
-          trainerId: vSess.trainerId || '',
+          trainerId: vSess.trainerId || 'legacy-trainer',
           status: 'Completed',
           createdAt: serverTimestamp(),
           endTime: serverTimestamp()
@@ -319,7 +290,7 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
         for (const vLog of vSess.machines) {
           if (!vLog.machineId) continue;
           const logRef = doc(collection(db, 'exerciseLogs'));
-          const logData: Partial<ExerciseLog> = {
+          const logData: ExerciseLog = {
             sessionId: sessionRef.id,
             clientId: selectedClientId,
             machineId: vLog.machineId,
@@ -329,14 +300,15 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
             isTSC: vLog.isStaticHold,
             isStaticHold: vLog.isStaticHold,
             machineSettings: vLog.settings ? { "Seat": vLog.settings } : {},
-            repQuality: 3,
-            createdAt: serverTimestamp()
+            repQuality: 3, // CRITICAL: Hardcoded Medium/Yellow quality for legacy imports
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
           };
           batch.set(logRef, logData);
         }
       }
 
-      // Update client session tally
+      // 2. Update client session count and profile
       const maxSessionNum = validationSessions.length > 0 
         ? Math.max(...validationSessions.map(s => s.sessionNumber)) 
         : 0;
@@ -670,7 +642,7 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                                   ? "border-blue-500 bg-blue-500/10 shadow-[0_0_15px_rgba(59,130,246,0.1)]" 
                                   : log.isAnomalous 
                                     ? "border-amber-500 bg-amber-500/10" 
-                                    : "border-slate-800 bg-slate-900/50 hover:border-slate-700"
+                                    : "border-[#F06C22]/50 bg-[#F06C22]/5 hover:border-[#F06C22]" // Quality 3 styling
                               )}
                             >
                               <div className="flex flex-col mb-2">

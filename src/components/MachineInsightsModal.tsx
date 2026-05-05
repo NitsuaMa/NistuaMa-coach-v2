@@ -271,7 +271,7 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
                     <CardContent className="p-4 flex flex-col justify-center items-center h-full">
                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1 text-center">Total Reps</span>
                        <div className="flex items-baseline gap-1">
-                         <span className="text-2xl font-black text-[#38BDF8]">{totalReps.toLocaleString()}</span>
+                         <span className="text-2xl font-black text-[#38BDF8]">{(!isNaN(totalReps) ? totalReps : 0).toLocaleString()}</span>
                        </div>
                     </CardContent>
                  </Card>
@@ -280,7 +280,7 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
                     <CardContent className="p-4 flex flex-col justify-center items-center h-full">
                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1 text-center">Total Volume</span>
                        <div className="flex items-baseline gap-1">
-                         <span className="text-2xl font-black text-[#38BDF8]">{totalVolume.toLocaleString()}</span>
+                         <span className="text-2xl font-black text-[#38BDF8]">{(!isNaN(totalVolume) ? totalVolume : 0).toLocaleString()}</span>
                          <span className="text-[10px] font-bold text-slate-500 uppercase ml-1">Lbs</span>
                        </div>
                     </CardContent>
@@ -346,12 +346,13 @@ export function MachineInsightsModal({ client, machine, onClose }: Props) {
                          })}
                          {logs.length > 0 && (() => {
                            const targetLog = logs[logs.length - 1];
-                           const targetWeight = targetLog.repQuality === 3 ? Number(targetLog.weight || 0) + 5 : targetLog.weight;
+                           const currentWeightNum = Number(targetLog.weight || 0);
+                            const targetWeight = targetLog.repQuality === 3 ? (isNaN(currentWeightNum) ? 0 : currentWeightNum + 5) : targetLog.weight;
                            return (
                              <td className="p-4 text-center bg-[#115E8D]/10 align-middle">
                                <div className="flex flex-col items-center">
                                  <span className="font-black text-xl text-[#38BDF8]">
-                                   {targetWeight}
+                                   {isNaN(targetWeight as any) ? '--' : targetWeight}
                                  </span>
                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">LBS</span>
                                </div>

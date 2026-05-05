@@ -299,17 +299,20 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
     icon: any,
     talkingPoints?: { id: string, text: string, status: string }[]
   }) => {
-    const scaleValue = Math.round(score / 20) || 1; 
+    // NaN Guard for score
+    const safeScore = isNaN(score) ? 0 : score;
+    const scaleValue = Math.round(safeScore / 20) || 0; 
     
-    // Dynamic color logic based on scale 1-5
+    // Dynamic color logic based on scale 0-5
     const getScaleColor = (val: number) => {
       if (val === 5) return "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]";
       if (val >= 3) return "bg-[#F06C22] shadow-[0_0_10px_rgba(240,108,34,0.2)]";
-      return "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
+      if (val > 0) return "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
+      return "bg-zinc-800";
     };
 
     const activeColorClass = getScaleColor(scaleValue);
-    const scoreColorClass = scaleValue === 5 ? "text-emerald-500" : scaleValue >= 3 ? "text-[#F06C22]" : "text-red-500";
+    const scoreColorClass = scaleValue === 5 ? "text-emerald-500" : scaleValue >= 3 ? "text-[#F06C22]" : scaleValue > 0 ? "text-red-500" : "text-zinc-500";
     
     return (
       <div className="bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex flex-col h-full print:bg-white print:border-slate-100 shadow-xl print:shadow-none print:break-inside-avoid">
@@ -328,7 +331,7 @@ export function ClientProgressReportView({ client, trainer, machines, onBack, ex
             <span className={cn(
               "text-[10px] font-black italic leading-none mb-1",
               scoreColorClass
-            )}>{scaleValue} / 5</span>
+            )}>{isNaN(scaleValue) ? 0 : scaleValue} / 5</span>
             <div className="flex gap-0.5 scale-indicator">
               {[1, 2, 3, 4, 5].map((step) => (
                 <div 

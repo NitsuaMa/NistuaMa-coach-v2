@@ -1341,8 +1341,11 @@ export function ClientProfileView({
                               });
 
                               if (count === 0) return null;
-                              const avgMins = Math.floor(totalDiffMs / count / 60000);
-                              const avgSecs = Math.round((totalDiffMs / count % 60000) / 1000);
+                              const averageMs = totalDiffMs / count;
+                              if (isNaN(averageMs)) return null;
+                              
+                              const avgMins = Math.floor(averageMs / 60000);
+                              const avgSecs = Math.round((averageMs % 60000) / 1000);
 
                               return (
                                 <div key={m.id} className="p-4 rounded-2xl bg-muted/10 border border-muted flex items-center justify-between">
