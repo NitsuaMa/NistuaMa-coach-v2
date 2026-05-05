@@ -40,6 +40,7 @@ interface ImporterProps {
 interface ValidationLog {
   id: string;
   name: string;
+  rawName?: string;
   settings?: string;
   weight: number;
   reps: any;
@@ -58,6 +59,40 @@ interface ValidationSession {
   trainerId?: string;
   machines: ValidationLog[];
 }
+
+const legacyMachineMap: Record<string, string> = {
+  "cx": "4 Way Neck",
+  "hip add": "Hip Adduction",
+  "hip abd": "Hip Abduction",
+  "leg curl": "Leg Curl",
+  "leg ext": "Leg Extension",
+  "leg ext.": "Leg Extension",
+  "leg press": "Leg Press",
+  "pull down": "Pull Down",
+  "chest press": "Chest Press",
+  "comp row": "Compound Row",
+  "comp. row": "Compound Row",
+  "overhead": "Overhead Press",
+  "pull over": "Seated Pull Over",
+  "seated dip": "Seated Dip",
+  "tricep ext": "Tricep Extension",
+  "tricep ext.": "Tricep Extension",
+  "bicep": "Biceps",
+  "chest fly": "Chest/Pec Fly",
+  "lateral raise": "Lateral Raise",
+  "lumbar": "Lumbar Extension",
+  "torso rotation": "Torso Rotation",
+  "abs": "Seated Abdominals"
+};
+
+const normalizeMachineName = (rawName: string): string => {
+  const clean = rawName.toLowerCase().trim();
+  if (legacyMachineMap[clean]) {
+    return legacyMachineMap[clean];
+  }
+  // Fallback: capitalize properly
+  return rawName.charAt(0).toUpperCase() + rawName.slice(1);
+};
 
 export function LegacyChartImporter({ clients, machines, trainers, initialClientId, onComplete }: ImporterProps) {
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId || '');
@@ -165,9 +200,12 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
           }
         }
 
+        const rawMachineName = perf.machineName;
+        const normalizedName = normalizeMachineName(rawMachineName);
+
         const machineMatch = machines.find(mach => 
-          mach.name.toLowerCase() === perf.machineName.toLowerCase() ||
-          perf.machineName.toLowerCase().includes(mach.name.toLowerCase())
+          mach.name.toLowerCase() === normalizedName.toLowerCase() ||
+          normalizedName.toLowerCase().includes(mach.name.toLowerCase())
         );
 
         // Anomaly detection
@@ -190,12 +228,13 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
         }
         if (!machineMatch) {
           isAnomalous = true;
-          anomalyReason = 'Unknown Machine';
+          anomalyReason = `Unknown Machine: ${normalizedName}`;
         }
 
         sessionsMap[sNum].machines.push({
           id: `v-log-${sNum}-${perf.machineName}-${Date.now()}-${Math.random()}`,
-          name: perf.machineName,
+          name: normalizedName,
+          rawName: rawMachineName,
           settings: perf.settings,
           weight: perf.weight,
           reps: repsVal,
@@ -640,8 +679,13 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                                     <input 
                                       value={log.name} 
                                       onChange={e => updateLogData(session.id, log.id, 'name', e.target.value)}
-                                      className="bg-transparent border-none text-[8px] font-black text-white uppercase tracking-tighter w-full focus:ring-0 p-0 truncate"
+                                      className="bg-transparent border-none text-[9px] font-black text-white uppercase tracking-tighter w-full focus:ring-0 p-0 truncate"
                                     />
+                                    {log.rawName && log.rawName.toLowerCase() !== log.name.toLowerCase() && (
+                                      <p className="text-[7px] text-slate-500 font-bold uppercase truncate -mt-0.5">
+                                        Raw: {log.rawName}
+                                      </p>
+                                    )}
                                   </div>
                                   {log.isAnomalous && (
                                     <div className="group/tip relative cursor-help">

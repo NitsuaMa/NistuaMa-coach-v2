@@ -377,7 +377,7 @@ The chart has two distinct parts: The Header Row and the Data Grid.
 
 **PASS 2: EXTRACT THE PERFORMANCES (GRID)**
 *Now, process the machine rows.*
-*1. Identify the Machine Name (Column 1) and Settings (Column 2).*
+*1. Identify the Machine Name (Column 1) and Settings (Column 2). Extract the Machine Name EXACTLY as it is written on the page, even if it is abbreviated (e.g., 'cx', 'comp. Row'). Do not attempt to guess or expand the abbreviation.*
 *2. Read across the row. When you find a box with data, identify which Session Number column it belongs to.*
 *3. The top number is the weight. The bottom number is the reps.*
 *4. STATIC HOLD RULE: If the bottom text says 'SH', or if the bottom number is > 20, set isStaticHold to true.*
