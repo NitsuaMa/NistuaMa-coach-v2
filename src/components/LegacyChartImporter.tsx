@@ -19,7 +19,7 @@ import {
   Plus
 } from 'lucide-react';
 import { Client, Machine, Trainer, WorkoutSession, ExerciseLog } from '../types';
-import { processLegacyChart, ExtractedMachineRow } from '../services/geminiService';
+import { processLegacyChart } from '../services/geminiService';
 import { db } from '../firebase';
 import { collection, writeBatch, doc, serverTimestamp, getDocs, query, where, increment } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -107,113 +107,108 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
     try {
       const imageFiles = files.map(f => ({ base64: f.base64, mimeType: f.mimeType }));
       setScanProgress(`Analyzing ${files.length} images simultaneously...`);
-      const allRows = await processLegacyChart(imageFiles, expectedSessions);
+      const ocrResult = await processLegacyChart(imageFiles, expectedSessions);
 
-      // 1. Merge fragmented AI results by machine name
-      const mergedRowsMap = new Map<string, ExtractedMachineRow>();
-      allRows.forEach(row => {
-        const key = row.machineName.toLowerCase().trim();
-        if (mergedRowsMap.has(key)) {
-          const existing = mergedRowsMap.get(key)!;
-          existing.performances.push(...row.performances);
-          if ((row.settings?.length || 0) > (existing.settings?.length || 0)) {
-            existing.settings = row.settings;
-          }
-        } else {
-          mergedRowsMap.set(key, { ...row });
+      // 1. Initialize sessions from extracted headers
+      const sessionsMap: Record<number, ValidationSession> = {};
+      
+      ocrResult.sessionHeaders.forEach(header => {
+        const sNum = header.sessionNumber;
+        if (!sessionsMap[sNum]) {
+          sessionsMap[sNum] = {
+            id: `v-sess-${sNum}-${Date.now()}-${Math.random()}`,
+            sessionNumber: sNum,
+            date: header.date || '',
+            trainer: header.trainer || '',
+            machines: []
+          };
         }
       });
 
-      // 2. Sort performances chronologically by session index
-      mergedRowsMap.forEach(row => {
-        row.performances.sort((a, b) => a.sessionIndex - b.sessionIndex);
-      });
+      // 2. Process and merge performances
+      ocrResult.performances.forEach(perf => {
+        const sNum = perf.sessionNumber;
+        
+        // Ensure session exists even if header was missed for this specific column
+        if (!sessionsMap[sNum]) {
+          sessionsMap[sNum] = {
+            id: `v-sess-${sNum}-${Date.now()}-${Math.random()}`,
+            sessionNumber: sNum,
+            date: '',
+            trainer: '',
+            machines: []
+          };
+        }
 
-      // INVERSION LOGIC: Convert machine rows to chronological sessions
-      const sessionsMap: Record<number, ValidationSession> = {};
+        // Deterministic Static Hold Logic (Re-validation layer)
+        let isStaticHold = false;
+        let timeUnderLoad = 0;
+        let repsVal: any = perf.reps;
 
-      mergedRowsMap.forEach(row => {
-        row.performances.forEach(perf => {
-          if (!sessionsMap[perf.sessionIndex]) {
-            sessionsMap[perf.sessionIndex] = {
-              id: `v-sess-${perf.sessionIndex}-${Date.now()}`,
-              sessionNumber: perf.sessionIndex,
-              date: '', // Manual entry or attempt to extract? Prompt says Column 1 is Name, Column 2 is Settings, Columns 3+ are sessions. Header has Date.
-              trainer: '',
-              machines: []
-            };
-          }
-
-          // Deterministic Static Hold Logic
-          let isStaticHold = false;
-          let timeUnderLoad = 0;
-          let repsVal: any = perf.reps;
-
-          if (typeof repsVal === 'number' && repsVal > 20) {
+        if (perf.isStaticHold === true || (typeof repsVal === 'number' && repsVal > 20)) {
+          isStaticHold = true;
+          timeUnderLoad = Number(repsVal) || 0;
+          repsVal = 0;
+        } else if (typeof repsVal === 'string') {
+          const up = repsVal.toUpperCase();
+          if (up.includes('SH') || up.includes('SEC') || parseInt(repsVal) > 20) {
             isStaticHold = true;
-            timeUnderLoad = repsVal;
-            repsVal = 0;
-          } else if (typeof repsVal === 'string') {
-            const up = repsVal.toUpperCase();
-            if (up.includes('SH') || up.includes('SEC')) {
-              isStaticHold = true;
-              const numericMatch = repsVal.match(/\d+/);
-              if (numericMatch) {
-                timeUnderLoad = parseInt(numericMatch[0]);
-              }
-              repsVal = 0;
+            const numericMatch = repsVal.match(/\d+/);
+            if (numericMatch) {
+              timeUnderLoad = parseInt(numericMatch[0]);
             } else {
-              repsVal = parseInt(repsVal) || 0;
+              timeUnderLoad = parseInt(repsVal) || 0;
             }
+            repsVal = 0;
+          } else {
+            repsVal = parseInt(repsVal) || 0;
           }
+        }
 
-          const machineMatch = machines.find(mach => 
-            mach.name.toLowerCase() === row.machineName.toLowerCase() ||
-            row.machineName.toLowerCase().includes(mach.name.toLowerCase())
-          );
+        const machineMatch = machines.find(mach => 
+          mach.name.toLowerCase() === perf.machineName.toLowerCase() ||
+          perf.machineName.toLowerCase().includes(mach.name.toLowerCase())
+        );
 
-          // Anomaly detection
-          let isAnomalous = false;
-          let anomalyReason = '';
-          const hasWeight = perf.weight > 0;
-          const hasRepsOrTime = (repsVal || 0) > 0 || (isStaticHold && timeUnderLoad > 0);
+        // Anomaly detection
+        let isAnomalous = false;
+        let anomalyReason = '';
+        const hasWeight = perf.weight > 0;
+        const hasRepsOrTime = (repsVal || 0) > 0 || (isStaticHold && timeUnderLoad > 0);
 
-          if (hasWeight && !hasRepsOrTime) {
-            isAnomalous = true;
-            anomalyReason = 'Missing Reps/Time';
-          } else if (!hasWeight && hasRepsOrTime) {
-            isAnomalous = true;
-            anomalyReason = 'Missing Weight';
-          }
+        if (hasWeight && !hasRepsOrTime) {
+          isAnomalous = true;
+          anomalyReason = 'Missing Reps/Time';
+        } else if (!hasWeight && hasRepsOrTime) {
+          isAnomalous = true;
+          anomalyReason = 'Missing Weight';
+        }
 
-          if (perf.weight > 500) {
-            isAnomalous = true;
-            anomalyReason = 'Extreme Weight Detected';
-          }
-          if (!machineMatch) {
-            isAnomalous = true;
-            anomalyReason = 'Unknown Machine';
-          }
+        if (perf.weight > 500) {
+          isAnomalous = true;
+          anomalyReason = 'Extreme Weight Detected';
+        }
+        if (!machineMatch) {
+          isAnomalous = true;
+          anomalyReason = 'Unknown Machine';
+        }
 
-          sessionsMap[perf.sessionIndex].machines.push({
-            id: `v-log-${perf.sessionIndex}-${row.machineName}-${Date.now()}`,
-            name: row.machineName,
-            settings: row.settings,
-            weight: perf.weight,
-            reps: repsVal,
-            isStaticHold,
-            timeUnderLoad,
-            machineId: machineMatch?.id,
-            isAnomalous,
-            anomalyReason
-          });
+        sessionsMap[sNum].machines.push({
+          id: `v-log-${sNum}-${perf.machineName}-${Date.now()}-${Math.random()}`,
+          name: perf.machineName,
+          settings: perf.settings,
+          weight: perf.weight,
+          reps: repsVal,
+          isStaticHold,
+          timeUnderLoad,
+          machineId: machineMatch?.id,
+          isAnomalous,
+          anomalyReason
         });
       });
 
-      let mappedSessions = Object.values(sessionsMap);
-      
-      // Attempt to resolve Date and Trainer from the sessions if the model captured it as a "machine" row (common glitch)
-      // or just leave it for manual entry as the HUD handles it.
+      // 3. Convert map to sorted array
+      let mappedSessions = Object.values(sessionsMap).sort((a, b) => a.sessionNumber - b.sessionNumber);
       
       setValidationSessions(mappedSessions);
       setScanProgress('OCR Pipeline Complete');
@@ -578,8 +573,14 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
 
                     {validationSessions.map((session) => (
                       <div key={session.id} className="space-y-3">
-                        <div className="flex items-center gap-3 bg-slate-900/80 p-3 rounded-lg border border-slate-800">
-                          <Badge className="bg-slate-800 text-white border-slate-700 font-black">
+                        <div className={cn(
+                          "flex items-center gap-3 bg-slate-900/80 p-3 rounded-lg border transition-all",
+                          (!session.date || !session.trainer) ? "border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]" : "border-slate-800"
+                        )}>
+                          <Badge className={cn(
+                            "font-black border-transparent",
+                            (!session.date || !session.trainer) ? "bg-amber-600 text-white" : "bg-slate-800 text-white border-slate-700"
+                          )}>
                             S#{session.sessionNumber}
                           </Badge>
                           <div className="flex-1 flex items-center gap-4">
@@ -587,27 +588,37 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                                <p className="text-[10px] font-black text-[#F06C22] uppercase">Machines Logged: {session.machines.length}</p>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <Calendar className={cn("w-3 h-3 transition-colors", !session.date ? "text-red-500 animate-pulse" : "text-slate-500")} />
+                              <Calendar className={cn("w-3 h-3 transition-colors", !session.date ? "text-amber-500 animate-pulse" : "text-slate-500")} />
                               <input 
-                                type="date"
+                                type="text"
+                                placeholder="YYYY-MM-DD"
                                 value={session.date}
                                 onChange={e => setValidationSessions(prev => prev.map(s => s.id === session.id ? { ...s, date: e.target.value } : s))}
                                 className={cn(
-                                  "bg-transparent border transition-all text-[10px] font-black uppercase tracking-widest focus:ring-0 px-2 py-1 rounded",
-                                  !session.date ? "border-red-500 text-red-500 bg-red-500/10" : "border-transparent text-[#F06C22]"
+                                  "bg-transparent border transition-all text-[10px] font-black uppercase tracking-widest focus:ring-0 px-2 py-1 rounded w-24",
+                                  !session.date ? "border-amber-500 text-amber-500 bg-amber-500/10" : "border-transparent text-[#F06C22]"
                                 )}
                               />
                             </div>
                             <div className="flex items-center gap-1.5 border-l border-slate-800 pl-4">
-                              <User className="w-3 h-3 text-slate-500" />
+                              <User className={cn("w-3 h-3 transition-colors", !session.trainer ? "text-amber-500 animate-pulse" : "text-slate-500")} />
                               <span className="text-[10px] font-black text-slate-300 uppercase">Trainer:</span>
                               <input 
                                 value={session.trainer}
+                                placeholder="INI"
                                 onChange={e => setValidationSessions(prev => prev.map(s => s.id === session.id ? { ...s, trainer: e.target.value } : s))}
-                                className="bg-transparent border-none text-[10px] font-black text-white uppercase focus:ring-0 w-16"
+                                className={cn(
+                                  "bg-transparent border transition-all text-[10px] font-black uppercase focus:ring-0 w-16 px-2 py-1 rounded",
+                                  !session.trainer ? "border-amber-500 text-amber-500 bg-amber-500/10" : "border-transparent text-white"
+                                )}
                               />
                             </div>
                           </div>
+                          {(!session.date || !session.trainer) && (
+                            <Badge variant="outline" className="text-[8px] font-black text-amber-500 border-amber-500/30 animate-pulse">
+                              MISSING HEADER DATA
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-1.5">

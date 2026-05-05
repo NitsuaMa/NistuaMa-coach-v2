@@ -304,56 +304,83 @@ Analyze the MSF Reference Text, the specific Client Details, and explicitly cros
   }
 }
 
-export interface ExtractedPerformance {
-  sessionIndex: number;
-  weight: number;
-  reps: string | number;
+export interface ExtractedSessionHeader {
+  sessionNumber: number;
+  date: string;
+  trainer: string;
 }
 
-export interface ExtractedMachineRow {
+export interface ExtractedPerformance {
+  sessionNumber: number;
   machineName: string;
   settings: string;
+  weight: number;
+  reps: string | number;
+  isStaticHold?: boolean;
+}
+
+export interface OCRResult {
+  sessionHeaders: ExtractedSessionHeader[];
   performances: ExtractedPerformance[];
 }
 
 export const CHART_OCR_SCHEMA = {
-  type: "array" as const,
-  items: {
-    type: "object" as const,
-    properties: {
-      machineName: { type: "string" as const },
-      settings: { type: "string" as const },
-      performances: {
-        type: "array" as const,
-        items: {
-          type: "object" as const,
-          properties: {
-            sessionIndex: { type: "number" as const },
-            weight: { type: "number" as const },
-            reps: { type: "string" as const }
-          },
-          required: ["sessionIndex", "weight", "reps"]
-        }
+  type: "object" as const,
+  properties: {
+    sessionHeaders: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          sessionNumber: { type: "number" as const },
+          date: { type: "string" as const },
+          trainer: { type: "string" as const }
+        },
+        required: ["sessionNumber", "date", "trainer"]
       }
     },
-    required: ["machineName", "settings", "performances"]
-  }
+    performances: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          sessionNumber: { type: "number" as const },
+          machineName: { type: "string" as const },
+          settings: { type: "string" as const },
+          weight: { type: "number" as const },
+          reps: { type: "string" as const },
+          isStaticHold: { type: "boolean" as const }
+        },
+        required: ["sessionNumber", "machineName", "settings", "weight", "reps"]
+      }
+    }
+  },
+  required: ["sessionHeaders", "performances"]
 };
 
 export async function processLegacyChart(
   images: { base64: string; mimeType: string }[],
   expectedSessions: number
-): Promise<ExtractedMachineRow[]> {
+): Promise<OCRResult> {
   const ai = getGenaiClient();
   
-  const systemInstruction = `You are a high-precision clinical data extraction engine. You are receiving an array of images representing a continuous physical training chart for a single client.
-CRITICAL VISUAL ANCHOR: Look for the blue bar/header row running horizontally across the top of the grid. The numbers inside or directly under this blue bar represent the chronological Session Numbers.
+  const systemInstruction = `You are a high-precision clinical data extraction AI. You are receiving an array of images representing a continuous physical training chart for a single client.
 
-Your mission is to read across ALL provided images and stitch the timeline together.
-1. Identify the Machine Name (Row Header).
-2. Follow that machine's row across the columns. Use the blue bar to determine which session number that column belongs to.
-3. The top number in a cell is weight. The bottom number is reps (or timeUnderLoad if > 20 or "SH").
-4. Consolidate the data. If 'Leg Press' appears on Image 1 (Sessions 1-5) and Image 2 (Sessions 6-10), combine them into a single 'Leg Press' object with 10 performances.
+The chart has two distinct parts: The Header Row and the Data Grid.
+
+**PASS 1: EXTRACT THE TIMELINE (HEADERS)**
+*Look at the very top of the grid. There is a blue horizontal bar.*
+*1. Inside the blue bar is the Session Number.*
+*2. Immediately below the Session Number is the Date (e.g., 5/12).*
+*3. Immediately below the Date are the Trainer Initials (e.g., AJ, CB).*
+*Extract EVERY column header into the sessionHeaders array.*
+
+**PASS 2: EXTRACT THE PERFORMANCES (GRID)**
+*Now, process the machine rows.*
+*1. Identify the Machine Name (Column 1) and Settings (Column 2).*
+*2. Read across the row. When you find a box with data, identify which Session Number column it belongs to.*
+*3. The top number is the weight. The bottom number is the reps.*
+*4. STATIC HOLD RULE: If the bottom text says 'SH', or if the bottom number is > 20, set isStaticHold to true.*
 
 Expected Sessions: ${expectedSessions}.
 
@@ -385,7 +412,7 @@ Return ONLY valid JSON matching the requested schema.`;
   }
 
   try {
-    return JSON.parse(response.text) as ExtractedMachineRow[];
+    return JSON.parse(response.text) as OCRResult;
   } catch (e) {
     console.error("OCR Parse Error:", response.text);
     throw new Error("Failed to parse clinical chart data.");
