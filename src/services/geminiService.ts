@@ -306,11 +306,11 @@ Analyze the MSF Reference Text, the specific Client Details, and explicitly cros
 
 export interface ExtractedMachineData {
   name: string;
+  settings?: string;
   weight: number;
-  reps: number | null;
-  repsLeft?: number;
-  repsRight?: number;
-  isTSC: boolean;
+  reps: any;
+  isStaticHold: boolean;
+  timeUnderLoad?: number | null;
 }
 
 export interface ExtractedSession {
@@ -321,31 +321,37 @@ export interface ExtractedSession {
 }
 
 export const CHART_OCR_SCHEMA = {
-  type: "array" as const,
-  items: {
-    type: "object" as const,
-    properties: {
-      sessionNumber: { type: "number" as const },
-      date: { type: "string" as const, description: "YYYY-MM-DD format" },
-      trainer: { type: "string" as const, description: "Trainer initials or name" },
-      machines: {
-        type: "array" as const,
-        items: {
-          type: "object" as const,
-          properties: {
-            name: { type: "string" as const },
-            weight: { type: "number" as const },
-            reps: { type: "number" as const, description: "Reps or seconds (if TSC). Null if bilateral decimal notation is used." },
-            repsLeft: { type: "number" as const, description: "Extracted from integer part of decimal (e.g. 10.12 -> 10)" },
-            repsRight: { type: "number" as const, description: "Extracted from decimal part (e.g. 10.12 -> 12)" },
-            isTSC: { type: "boolean" as const }
-          },
-          required: ["name", "weight", "isTSC"]
-        }
+  type: "object" as const,
+  properties: {
+    sessions: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          sessionNumber: { type: "number" as const },
+          date: { type: "string" as const },
+          trainerInitials: { type: "string" as const },
+          performances: {
+            type: "array" as const,
+            items: {
+              type: "object" as const,
+              properties: {
+                machineName: { type: "string" as const },
+                settings: { type: "string" as const },
+                weight: { type: "number" as const },
+                reps: { type: "number" as const },
+                isStaticHold: { type: "boolean" as const },
+                timeUnderLoad: { type: "number" as const, nullable: true }
+              },
+              required: ["machineName", "settings", "weight", "reps", "isStaticHold"]
+            }
+          }
+        },
+        required: ["sessionNumber", "date", "trainerInitials", "performances"]
       }
-    },
-    required: ["sessionNumber", "date", "trainer", "machines"]
-  }
+    }
+  },
+  required: ["sessions"]
 };
 
 export async function processLegacyChart(
@@ -354,22 +360,23 @@ export async function processLegacyChart(
 ): Promise<ExtractedSession[]> {
   const ai = getGenaiClient();
   
-  const systemInstruction = `You are a clinical data extraction engine. Analyze the provided image of a high-intensity training chart. The chart is a grid.
-Extract the data into a JSON array of sessions using THESE STRICT RULES:
+  const systemInstruction = `You are a high-precision clinical OCR engine specializing in physical high-intensity training charts. The image provided is a strict grid layout.
 
-1. Columns (Sessions): Look for the header row containing Session Number, Date, and Trainer Initials.
-2. Rows (Machines): The leftmost column contains the Machine Name. Ignore machine settings (like seat height).
-3. Cells (Performance Data): The top number is 'weight'. The bottom number is 'reps' or performance metric.
+**Column 1:** The Machine Name (There are up to 20 rows).
+**Column 2 (or adjacent to Name):** Machine Settings (e.g., Seat numbers, pin placements).
+**Columns 3+ (Moving Right):** Chronological training sessions.
+**Header Row:** Contains Session Number, Date, and Trainer Initials.
+**Grid Intersections:** Where a session column meets a machine row, there is a box. The top number is the 'weight'. The bottom number is the 'reps'.
 
-4. TSC Logic: If the bottom number is exceptionally high (e.g., > 20), or marked with 's' or 'sec', it is a Timed Static Contraction. Set isTSC: true and map numeric value to 'reps' (acting as seconds).
+Your mission is to scan EVERY intersection. If a box has writing in it, you MUST record it, even if it is the only time that machine was used in the entire chart.
 
-5. Bilateral Decimal Logic (e.g. Torso Rotation): If the bottom number contains a decimal (e.g., 10.12), it represents bilateral repetitions.
-   - You MUST split this mathematically: The integer is repsLeft (10), the decimal digits are repsRight (12).
-   - Map these to 'repsLeft' and 'repsRight'.
-   - Set 'reps' to null in this specific case.
+**Extraction Rules:**
+1. Extract the Machine Name and its corresponding Settings.
+2. Extract the Weight.
+3. Extract the Reps.
+4. **STATIC HOLD RULE:** If the reps text says 'SH', or if the numeric value for reps is greater than 20, you MUST set the boolean 'isStaticHold' to true, and record that number as the 'timeUnderLoad'. Otherwise, 'isStaticHold' is false.
 
-6. Consistency: Ensure both sides are extracted correctly for machines like Torso Rotation.
-7. Return ONLY valid JSON matching the requested schema.`;
+Return ONLY valid JSON matching the requested schema.`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-1.5-pro',
@@ -377,7 +384,7 @@ Extract the data into a JSON array of sessions using THESE STRICT RULES:
       {
         parts: [
           { inlineData: { data: fileData, mimeType } },
-          { text: "Analyze this training chart and extract the data." }
+          { text: "Analyze this training chart and extract the data based on the provided specific instructions." }
         ]
       }
     ],
@@ -393,7 +400,20 @@ Extract the data into a JSON array of sessions using THESE STRICT RULES:
   }
 
   try {
-    return JSON.parse(response.text) as ExtractedSession[];
+    const raw = JSON.parse(response.text);
+    return (raw.sessions || []).map((s: any) => ({
+      sessionNumber: s.sessionNumber || 0,
+      date: s.date || "",
+      trainer: s.trainerInitials || "",
+      machines: (s.performances || []).map((p: any) => ({
+        name: p.machineName,
+        settings: p.settings,
+        weight: p.weight,
+        reps: p.reps,
+        isStaticHold: p.isStaticHold,
+        timeUnderLoad: p.timeUnderLoad
+      }))
+    }));
   } catch (e) {
     console.error("OCR Parse Error:", response.text);
     throw new Error("Failed to parse clinical chart data.");

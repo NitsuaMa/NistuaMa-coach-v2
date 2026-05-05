@@ -40,11 +40,11 @@ interface ImporterProps {
 interface ValidationLog {
   id: string;
   name: string;
+  settings?: string;
   weight: number;
-  reps: number | null;
-  repsLeft?: number;
-  repsRight?: number;
-  isTSC: boolean;
+  reps: any;
+  isStaticHold: boolean;
+  timeUnderLoad?: number | null;
   machineId?: string;
   isAnomalous?: boolean;
   anomalyReason?: string;
@@ -107,7 +107,7 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
         allExtracted.push(...result);
       }
 
-      // Map and identify anomalies
+      // Map and identify anomalies with DETERMINISTIC POST-PROCESSING
       let mappedSessions: ValidationSession[] = allExtracted.map((s, sIdx) => {
         // Resolve trainer
         const trainerMatch = trainers.find(t => 
@@ -115,33 +115,63 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
           t.fullName.toLowerCase().includes(s.trainer.toLowerCase())
         );
 
+        // Filter out empty rows (Spatial Reasoning Fallback)
+        const activePerformances = s.machines.filter(m => {
+          const hasWeight = m.weight && m.weight > 0;
+          const hasReps = m.reps !== null && m.reps !== undefined && String(m.reps).trim() !== '';
+          return hasWeight || hasReps;
+        });
+
         return {
           id: `v-sess-${sIdx}-${Date.now()}`,
           sessionNumber: s.sessionNumber,
           date: s.date,
           trainer: s.trainer,
           trainerId: trainerMatch?.id,
-          machines: s.machines.map((m, mIdx) => {
+          machines: activePerformances.map((m, mIdx) => {
             const machineMatch = machines.find(mach => 
               mach.name.toLowerCase() === m.name.toLowerCase() ||
               m.name.toLowerCase().includes(mach.name.toLowerCase())
             );
 
+            // Deterministic Logic Layer
+            let isStaticHold = m.isStaticHold;
+            let timeUnderLoad = m.timeUnderLoad;
+            let reps = m.reps;
+
+            // Rule: reps > 20 is always a static hold
+            if (typeof reps === 'number' && reps > 20) {
+              isStaticHold = true;
+              timeUnderLoad = reps;
+              reps = 0;
+            } else if (typeof reps === 'string' && (reps.toUpperCase().includes('SH') || reps.toUpperCase().includes('SEC'))) {
+              isStaticHold = true;
+              const numericMatch = reps.match(/\d+/);
+              if (numericMatch) {
+                timeUnderLoad = parseInt(numericMatch[0]);
+              }
+              reps = 0;
+            }
+
             // Initial Anomaly Detection: Basic checks
             let isAnomalous = false;
             let anomalyReason = '';
+            
+            // Transcription Gap Detection (Amber Border)
+            const hasWeight = m.weight > 0;
+            const hasRepsOrTime = reps > 0 || (isStaticHold && (timeUnderLoad || 0) > 0);
+            
+            if (hasWeight && !hasRepsOrTime) {
+              isAnomalous = true;
+              anomalyReason = 'Missing Reps/Time';
+            } else if (!hasWeight && hasRepsOrTime) {
+              isAnomalous = true;
+              anomalyReason = 'Missing Weight';
+            }
+
             if (m.weight > 500) {
               isAnomalous = true;
               anomalyReason = 'Extreme Weight Detected';
-            }
-            // Flag if both weight AND reps are 0/null
-            if ((!m.weight || m.weight === 0) && (!m.reps || m.reps === 0) && !m.repsLeft && !m.repsRight) {
-              isAnomalous = true;
-              anomalyReason = 'Missing Performance Data';
-            }
-            if (m.reps !== null && m.reps > 40 && !m.isTSC) {
-              isAnomalous = true;
-              anomalyReason = 'High Reps (Non-TSC)';
             }
             if (!machineMatch) {
               isAnomalous = true;
@@ -151,11 +181,11 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
             return {
               id: `v-log-${sIdx}-${mIdx}-${Date.now()}`,
               name: m.name,
+              settings: m.settings,
               weight: m.weight,
-              reps: m.reps,
-              repsLeft: m.repsLeft,
-              repsRight: m.repsRight,
-              isTSC: m.isTSC,
+              reps: reps,
+              isStaticHold,
+              timeUnderLoad,
               machineId: machineMatch?.id,
               isAnomalous,
               anomalyReason
@@ -279,12 +309,11 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
             clientId: selectedClientId,
             machineId: vLog.machineId,
             weight: String(vLog.weight),
-            reps: vLog.isTSC ? '' : String(vLog.reps || ''),
-            repsLeft: vLog.repsLeft,
-            repsRight: vLog.repsRight,
-            seconds: vLog.isTSC ? String(vLog.reps || '') : '',
-            isTSC: vLog.isTSC,
-            isStaticHold: vLog.isTSC,
+            reps: vLog.isStaticHold ? '' : String(vLog.reps || ''),
+            seconds: vLog.isStaticHold ? String(vLog.timeUnderLoad || '') : '',
+            isTSC: vLog.isStaticHold,
+            isStaticHold: vLog.isStaticHold,
+            machineSettings: vLog.settings ? { "Seat": vLog.settings } : {},
             repQuality: 3,
             createdAt: serverTimestamp()
           };
@@ -505,82 +534,88 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-1.5">
                           {session.machines.map((log) => (
                             <div 
                               key={log.id} 
                               className={cn(
-                                "p-3 rounded border bg-slate-900 shadow-lg relative group transition-all",
-                                log.isAnomalous ? "border-amber-500 bg-amber-500/10" : "border-slate-800 hover:border-slate-700"
+                                "p-2 rounded border shadow-lg relative group transition-all",
+                                log.isStaticHold 
+                                  ? "border-blue-500 bg-blue-500/10 shadow-[0_0_15px_rgba(59,130,246,0.1)]" 
+                                  : log.isAnomalous 
+                                    ? "border-amber-500 bg-amber-500/10" 
+                                    : "border-slate-800 bg-slate-900/50 hover:border-slate-700"
                               )}
                             >
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex-1 mr-2">
-                                  <input 
-                                    value={log.name} 
-                                    onChange={e => updateLogData(session.id, log.id, 'name', e.target.value)}
-                                    className="bg-transparent border-none text-[9px] font-black text-white uppercase tracking-tighter w-full focus:ring-0 p-0"
-                                  />
-                                </div>
-                                {log.isAnomalous && (
-                                  <div className="group/tip relative cursor-help">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                                    <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-amber-600 text-white text-[8px] font-bold rounded shadow-xl opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none z-10">
-                                      {log.anomalyReason}
-                                    </div>
+                              <div className="flex flex-col mb-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1 mr-1">
+                                    <input 
+                                      value={log.name} 
+                                      onChange={e => updateLogData(session.id, log.id, 'name', e.target.value)}
+                                      className="bg-transparent border-none text-[8px] font-black text-white uppercase tracking-tighter w-full focus:ring-0 p-0 truncate"
+                                    />
                                   </div>
-                                )}
+                                  {log.isAnomalous && (
+                                    <div className="group/tip relative cursor-help">
+                                      <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                      <div className="absolute bottom-full right-0 mb-2 w-40 p-2 bg-amber-600 text-white text-[7px] font-bold rounded shadow-xl opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none z-10">
+                                        {log.anomalyReason}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <Badge variant="outline" className="text-[6px] font-bold py-0 h-3 border-slate-700 text-slate-500 bg-slate-800/50">
+                                    {log.settings || 'NO SETTINGS'}
+                                  </Badge>
+                                  {log.isStaticHold && (
+                                    <Badge className="text-[6px] font-black py-0 h-3 bg-blue-500 text-white uppercase">
+                                      TUL/SH
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-3">
-                                <div className="flex-1">
-                                  <label className="text-[7px] font-black text-slate-500 uppercase block mb-1">Weight</label>
+                              <div className="grid grid-cols-2 gap-1.5 mb-2">
+                                <div>
+                                  <label className="text-[6px] font-black text-slate-500 uppercase block mb-0.5">LBS</label>
                                   <input 
                                     type="number"
                                     value={log.weight}
                                     onChange={e => updateLogData(session.id, log.id, 'weight', parseInt(e.target.value) || 0)}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs font-black text-white focus:border-[#F06C22] focus:ring-0"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-[10px] font-black text-white focus:border-[#F06C22] focus:ring-0 h-7"
                                   />
                                 </div>
-                                <div className="flex-1">
-                                  <label className="text-[7px] font-black text-slate-500 uppercase block mb-1">
-                                    {log.isTSC ? 'Secs (TSC)' : 'Reps (Dyn)'}
+                                <div>
+                                  <label className={cn(
+                                    "text-[6px] font-black uppercase block mb-0.5",
+                                    log.isStaticHold ? "text-blue-400" : "text-slate-500"
+                                  )}>
+                                    {log.isStaticHold ? 'SEC' : 'REPS'}
                                   </label>
-                                  <div className="space-y-1">
-                                    <input 
-                                      type="number"
-                                      value={log.reps ?? 0}
-                                      onChange={e => updateLogData(session.id, log.id, 'reps', parseInt(e.target.value) || 0)}
-                                      className={cn(
-                                        "w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs font-black focus:ring-0",
-                                        log.isTSC ? "text-emerald-400 focus:border-emerald-500" : "text-white focus:border-[#F06C22]"
-                                      )}
-                                    />
-                                    {log.isTSC && (
-                                      <Badge variant="outline" className="text-[8px] font-black bg-emerald-500/10 text-emerald-500 border-emerald-500/30 px-1 py-0 h-4">
-                                        TSC PROTOCOL (90s)
-                                      </Badge>
+                                  <input 
+                                    type="number"
+                                    value={log.isStaticHold ? (log.timeUnderLoad ?? 0) : (log.reps ?? 0)}
+                                    onChange={e => updateLogData(session.id, log.id, log.isStaticHold ? 'timeUnderLoad' : 'reps', parseInt(e.target.value) || 0)}
+                                    className={cn(
+                                      "w-full bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-[10px] font-black focus:ring-0 h-7",
+                                      log.isStaticHold ? "text-blue-400 border-blue-500/30" : "text-white focus:border-[#F06C22]"
                                     )}
-                                    {log.repsLeft !== undefined && log.repsRight !== undefined && (
-                                      <div className="text-[9px] font-black text-slate-400 mt-1 uppercase border-t border-slate-800 pt-1">
-                                        L: {log.repsLeft} | R: {log.repsRight}
-                                      </div>
-                                    )}
-                                  </div>
+                                  />
                                 </div>
                               </div>
                               
-                              <div className="flex items-center gap-3">
-                                <div className="flex-1 text-[7px] font-black text-slate-500 uppercase tracking-widest bg-slate-950/50 px-2 py-0.5 rounded border border-slate-800">
-                                  {log.isAnomalous ? 'Manual Check Req.' : 'Verified Match'}
+                              <div className="flex items-center justify-between gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="text-[6px] font-black text-slate-600 uppercase tracking-widest truncate">
+                                  {log.isStaticHold ? 'STAT_MODE' : 'DYN_MODE'}
                                 </div>
                                 <div className="flex gap-1">
                                   <button 
                                     onClick={() => duplicateLog(session.id, log.id)}
-                                    className="p-1 bg-slate-800 text-slate-400 hover:text-[#F06C22] hover:bg-[#F06C22]/10 rounded transition-colors group/dup"
-                                    title="Duplicate Entry (e.g. Torso Rotation L/R)"
+                                    className="p-1 bg-slate-800 text-slate-400 hover:text-[#F06C22] hover:bg-[#F06C22]/10 rounded transition-colors"
                                   >
-                                    <Copy size={10} />
+                                    <Copy size={8} />
                                   </button>
                                   <button 
                                     onClick={() => {
@@ -594,7 +629,7 @@ export function LegacyChartImporter({ clients, machines, trainers, initialClient
                                     }}
                                     className="p-1 bg-slate-800 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
                                   >
-                                    <Trash2 size={10} />
+                                    <Trash2 size={8} />
                                   </button>
                                 </div>
                               </div>
